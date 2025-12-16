@@ -405,6 +405,17 @@ Decode a PNG file to raw RGBA pixel data.
 
 # Returns
 Raw RGBA pixel data (4 bytes per pixel).
+
+# Limitations
+This is a minimal decoder optimized for PNG files produced by this module's encoder.
+It supports:
+- 8-bit depth only
+- RGBA (color type 6), RGB (color type 2), and Grayscale (color type 0)
+- Store-only DEFLATE compression (no Huffman encoding)
+- All filter types (None, Sub, Up, Average, Paeth)
+
+For PNG files with Huffman-compressed data (most real-world PNGs), the decoder
+will return partial or incorrect results. Use a full PNG library for general PNG decoding.
 """
 function decode_png(filename::String)::Vector{UInt8}
     data = read(filename)
@@ -415,6 +426,8 @@ end
     decode_png_data(data::Vector{UInt8}) -> Vector{UInt8}
 
 Decode PNG data to raw RGBA pixels.
+
+See `decode_png` for limitations of this minimal decoder.
 """
 function decode_png_data(data::Vector{UInt8})::Vector{UInt8}
     io = IOBuffer(data)
@@ -485,7 +498,8 @@ function decode_png_data(data::Vector{UInt8})::Vector{UInt8}
             
             # Apply defilter based on filter type
             # 0 = None, 1 = Sub, 2 = Up, 3 = Average, 4 = Paeth
-            a = x >= bytes_per_pixel ? current_row[end - bytes_per_pixel + 1] : UInt8(0)
+            # 'a' is the pixel bytes_per_pixel positions to the left (at index x + 1 - bytes_per_pixel)
+            a = x >= bytes_per_pixel ? current_row[x + 1 - bytes_per_pixel] : UInt8(0)
             b = prev_row[x + 1]
             c = x >= bytes_per_pixel ? prev_row[x + 1 - bytes_per_pixel] : UInt8(0)
             

@@ -1229,7 +1229,7 @@ end
         
         @test doc.success == true
         @test isempty(doc.errors)
-        @test DOPBrowser.ContentMM.Primitives.node_count(doc.nodes) >= 2  # Root + Stack + Rect
+        @test DOPBrowser.ContentMM.Primitives.node_count(doc.nodes) >= 3  # Root + Stack + Rect
     end
     
     @testset "Property Parsing" begin

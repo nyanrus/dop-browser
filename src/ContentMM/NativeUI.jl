@@ -676,8 +676,13 @@ function save_diff_image(ctx::UIContext, reference_path::String, output_path::St
     rendered = render_to_buffer(ctx, width=width, height=height)
     reference = load_reference_image(reference_path)
     
-    if reference === nothing || length(rendered) != length(reference)
-        @warn "Cannot create diff image: sizes don't match"
+    if reference === nothing
+        @warn "Cannot create diff image: reference image not found or could not be loaded" path=reference_path
+        return
+    end
+    
+    if length(rendered) != length(reference)
+        @warn "Cannot create diff image: rendered and reference buffer sizes differ" rendered_size=length(rendered) reference_size=length(reference)
         return
     end
     
