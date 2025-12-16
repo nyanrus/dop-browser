@@ -1136,9 +1136,9 @@ end
     @testset "DOMCSSOM Module" begin
         domcssom = DOPBrowser.DOMCSSOM
         
-        # Create string pool
+        # Create string pool (now from HTMLParser)
         pool = domcssom.StringPool()
-        @test pool isa domcssom.StringInterner.StringPool
+        @test pool isa DOPBrowser.HTMLParser.StringInterner.StringPool
         
         # Create DOM table
         dom = domcssom.DOMTable(pool)

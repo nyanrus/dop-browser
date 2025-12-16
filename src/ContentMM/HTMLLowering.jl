@@ -48,9 +48,9 @@ using ..Properties: PropertyTable, Direction, Pack, Align, Color, Inset, Offset,
 using ..SourceMap: SourceMapTable, SourceLocation, SourceType, add_mapping!,
                    SOURCE_HTML_ELEMENT, SOURCE_HTML_TEXT, SOURCE_CSS_INLINE, SOURCE_CSS_RULE,
                    resize_sourcemap!, add_css_contribution!
-using ...StringInterner: StringPool, intern!, get_string
-using ...NodeTable: DOMTable, NodeKind, NODE_ELEMENT, NODE_TEXT, node_count as dom_node_count
-using ...CSSParser: CSSStyles, parse_inline_style, parse_color as css_parse_color, parse_length,
+using ...HTMLParser.StringInterner: StringPool, intern!, get_string
+using ...DOMCSSOM.NodeTable: DOMTable, NodeKind, NODE_ELEMENT, NODE_TEXT, node_count as dom_node_count
+using ...CSSParserModule.CSSCore: CSSStyles, parse_inline_style, parse_color as css_parse_color, parse_length,
                     POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
                     OVERFLOW_HIDDEN, DISPLAY_NONE, DISPLAY_BLOCK, DISPLAY_INLINE
 

@@ -36,7 +36,7 @@ This browser implements the Content-- v6.0 specification:
 module DOPBrowser
 
 # =============================================================================
-# New Modular Architecture
+# Modular Architecture
 # =============================================================================
 # The browser engine is organized into the following modules:
 # 1. HTMLParser - HTML tokenization and string interning
@@ -49,38 +49,10 @@ module DOPBrowser
 # 8. Renderer - GPU rendering and PNG export
 # 9. EventLoop - Browser main event loop
 
-# =============================================================================
-# Legacy Core Modules (for backward compatibility)
-# These are the original flat modules that Core.jl depends on
-# =============================================================================
-
-# Core modules (legacy - still used by Core.jl)
-include("StringInterner.jl")
-include("TokenTape.jl")
-include("NodeTable.jl")
-include("StyleArchetypes.jl")
-include("LayoutArrays.jl")
-include("RenderBuffer.jl")
-include("CSSParser.jl")
-include("Core.jl")
-
-# Content-- IR modules
-include("ContentMM/ContentMM.jl")
-
-# Network layer
-include("Network/Network.jl")
-
-# Rendering pipeline
-include("Renderer/Renderer.jl")
-
-# =============================================================================
-# Include New Module Structure (for new modular access)
-# =============================================================================
-
 # HTML Parser module (StringInterner + TokenTape)
 include("HTMLParser/HTMLParser.jl")
 
-# CSS Parser module (new modular version)
+# CSS Parser module
 include("CSSParser/CSSParserModule.jl")
 
 # Layout module (LayoutArrays)
@@ -95,23 +67,40 @@ include("Compiler/Compiler.jl")
 # Event Loop module
 include("EventLoop/EventLoop.jl")
 
+# Content-- IR modules
+include("ContentMM/ContentMM.jl")
+
+# Network layer
+include("Network/Network.jl")
+
+# Core browser context (uses the modular components)
+include("Core.jl")
+
+# Rendering pipeline
+include("Renderer/Renderer.jl")
+
 # =============================================================================
-# Re-exports from Legacy Submodules (Backward Compatibility)
+# Re-exports from Modular Submodules
 # =============================================================================
 
-# Re-exports from submodules
-using .StringInterner: StringPool, intern!, get_string, get_id
-using .TokenTape: TokenType, Token, Tokenizer, tokenize!, reset!, get_tokens
-using .NodeTable: NodeKind, DOMTable, add_node!, get_parent, get_first_child, get_next_sibling, get_tag, set_parent!, set_first_child!, set_next_sibling!, node_count,
+# Re-exports from HTMLParser
+using .HTMLParser: StringPool, intern!, get_string, get_id
+using .HTMLParser: TokenType, Token, Tokenizer, tokenize!, reset!, get_tokens
+
+# Re-exports from DOMCSSOM
+using .DOMCSSOM: NodeKind, DOMTable, add_node!, get_parent, get_first_child, get_next_sibling, get_tag, set_parent!, set_first_child!, set_next_sibling!, node_count,
                   NODE_ELEMENT, NODE_TEXT, NODE_COMMENT, NODE_DOCUMENT, NODE_DOCTYPE,
                   get_id_attr, get_class_attr, get_style_attr, set_attributes!
-using .StyleArchetypes: StyleProperty, Archetype, ArchetypeTable, get_or_create_archetype!, apply_archetype!, get_archetype, archetype_count
-using .LayoutArrays: LayoutData, resize_layout!, set_bounds!, get_bounds, set_position!, get_position, compute_layout!,
+using .DOMCSSOM: StyleProperty, Archetype, ArchetypeTable, get_or_create_archetype!, apply_archetype!, get_archetype, archetype_count
+using .DOMCSSOM: RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, emit_stroke!, clear!, get_commands, command_count
+
+# Re-exports from Layout
+using .Layout: LayoutData, resize_layout!, set_bounds!, get_bounds, set_position!, get_position, compute_layout!,
                     set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!,
                     set_background_color!, get_background_color, set_borders!, has_border
-using .RenderBuffer: RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, emit_stroke!, clear!, get_commands, command_count
-# CSSParser is the legacy module included from CSSParser.jl
-using .CSSParser: CSSStyles, parse_inline_style, parse_color, parse_length,
+
+# Re-exports from CSSParserModule
+using .CSSParserModule: CSSStyles, parse_inline_style, parse_color, parse_length,
                   POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
                   OVERFLOW_VISIBLE, OVERFLOW_HIDDEN,
                   DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE,
@@ -153,11 +142,7 @@ export Network
 using .Renderer
 export Renderer
 
-# =============================================================================
-# New Module Exports
-# =============================================================================
-
-# Export new modules for direct access
+# Export modules for direct access
 export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
 
 # ============================================================================

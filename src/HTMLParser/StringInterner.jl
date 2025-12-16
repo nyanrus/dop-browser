@@ -8,11 +8,9 @@ Strings are stored once and referenced by UInt32 IDs, enabling:
 - Reduced memory footprint through deduplication
 - Cache-friendly sequential access patterns
 
-NOTE: This module is duplicated in HTMLParser, DOMCSSOM, and the root src/ directory.
-This duplication is intentional to allow each module to be self-contained and avoid
-circular dependencies. The implementations are identical and any changes should be
-synchronized across all copies. Future refactoring may consolidate these into a
-shared base module.
+This is the canonical StringInterner implementation used throughout DOPBrowser.
+Other modules that need string interning (e.g., DOMCSSOM) import this module
+rather than maintaining their own copies.
 """
 module StringInterner
 
