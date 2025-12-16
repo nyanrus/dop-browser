@@ -139,8 +139,10 @@ function compile!(ctx::CompilerContext, source_nodes::NodeTable,
 end
 
 # ============================================================================
-# Property fields to copy during compilation (subset of PROPERTY_FIELDS)
-# Using metadata enables loop-based copying instead of repetitive code
+# Property fields to copy during compilation
+# NOTE: This is a SUBSET of PROPERTY_FIELDS - only includes properties
+# that need to be copied from source to compiled output. Grid-specific and 
+# scroll-specific properties are handled separately in their respective contexts.
 # ============================================================================
 const COMPILE_PROPERTY_FIELDS = [
     :direction, :pack, :align, :width, :height,

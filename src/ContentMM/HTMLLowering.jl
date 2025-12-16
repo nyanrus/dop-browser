@@ -735,8 +735,10 @@ function create_lowered_node(cm_type::NodeType, dom_id::UInt32, parent_cm_id::UI
 end
 
 # ============================================================================
-# Metadata for shared fields between LoweredNode and PropertyTable
-# This enables loop-based copying during apply_properties!
+# Shared fields between LoweredNode and PropertyTable for apply_properties!
+# NOTE: This is a SUBSET of PROPERTY_FIELDS that are copied during lowering.
+# LoweredNode contains additional CSS-specific fields (borders, positioning)
+# that are handled by the layout system separately.
 # ============================================================================
 const LOWERED_TO_PROPERTY_FIELDS = [
     :direction, :pack, :align, :width, :height,

@@ -30,6 +30,11 @@ export FLAT_STYLE_FIELDS
 # Metadata-driven FlatStyle fields definition
 # Format: (name::Symbol, type::DataType, default_value)
 # This metadata enables loop-based operations instead of repetitive code
+#
+# NOTE: This is intentionally a SUBSET of the full PROPERTY_FIELDS in Properties.jl.
+# FlatStyle represents the flattened style output used for layout, while PropertyTable
+# contains all dynamic layout properties including per-node overrides like scroll state.
+# The field order MUST match the FlatStyle struct definition exactly.
 # ============================================================================
 const FLAT_STYLE_FIELDS = [
     # Layout
