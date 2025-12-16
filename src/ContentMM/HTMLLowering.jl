@@ -1,26 +1,40 @@
 """
     HTMLLowering
 
-Converts HTML & CSS to Content-- primitives.
+Converts HTML & CSS (source language) to Content-- primitives (target language).
 
-## Lowering Rules
-| HTML/CSS | Content-- | Notes |
-|----------|-----------|-------|
-| div, section, article | Stack(Direction: Down) | Block container |
-| span, a, em, strong | Span | Inline text |
-| p, h1-h6 | Paragraph | Text block |
-| table | Grid | 2D layout |
-| img | Rect + Image texture | Image display |
-| position: static | Normal flow in Stack | Default |
-| position: relative | Stack with Offset | Relative offset |
-| position: absolute | Absolute in parent | Out of flow |
-| display: flex | Stack(Direction based on flex-direction) | Flex container |
-| display: grid | Grid | Grid layout |
-| display: none | Remove from tree | Hidden |
-| overflow: hidden | Scroll(ClipOnly: true) | Clipping |
-| background-color | Rect.Fill | Background |
-| margin | Offset | Outside spacing |
-| padding | Inset | Inside spacing |
+## Design Principle
+
+The rendering engine should understand ONLY Content--, not HTML/CSS.
+This module performs the complete lowering with:
+1. Pre-calculated layout values
+2. Flattened CSS cascade (no runtime style lookup)
+3. Source mapping for debugging
+
+## Mathematical Mapping (HTML/CSS → Content--)
+
+| HTML/CSS | Content-- | Mathematical Transformation |
+|----------|-----------|----------------------------|
+| div, section | Stack(Direction: Down) | Container with vertical flow |
+| span, a | Span | Inline text unit |
+| p, h1-h6 | Paragraph | Text block with line breaking |
+| table | Grid | 2D Cartesian layout |
+| position: static | flow_type = FLOW_NORMAL | Standard document flow |
+| position: relative | flow_type = FLOW_RELATIVE | offset from flow position |
+| position: absolute | flow_type = FLOW_ABSOLUTE | positioned relative to containing block |
+| margin | offset | Space outside: Offset(top, right, bottom, left) |
+| padding | inset | Space inside: Inset(top, right, bottom, left) |
+| width/height | size | Size(width, height) in pixels |
+| background-color | fill | Color(r, g, b, a) |
+| border | stroke | Stroke(width, style, color) |
+
+## Coordinate System
+
+Content-- uses device pixel coordinates:
+- Origin (0, 0): Top-left of viewport
+- X-axis: Increases rightward
+- Y-axis: Increases downward
+- All values: Float32 in device pixels
 """
 module HTMLLowering
 
@@ -31,6 +45,9 @@ using ..Properties: PropertyTable, Direction, Pack, Align, Color, Inset, Offset,
                     PACK_START, PACK_END, PACK_CENTER, PACK_BETWEEN, PACK_AROUND, PACK_EVENLY,
                     ALIGN_START, ALIGN_END, ALIGN_CENTER, ALIGN_STRETCH,
                     resize_properties!, parse_color, color_to_rgba
+using ..SourceMap: SourceMapTable, SourceLocation, SourceType, add_mapping!,
+                   SOURCE_HTML_ELEMENT, SOURCE_HTML_TEXT, SOURCE_CSS_INLINE, SOURCE_CSS_RULE,
+                   resize_sourcemap!, add_css_contribution!
 using ...StringInterner: StringPool, intern!, get_string
 using ...NodeTable: DOMTable, NodeKind, NODE_ELEMENT, NODE_TEXT, node_count as dom_node_count
 using ...CSSParser: CSSStyles, parse_inline_style, parse_color as css_parse_color, parse_length,
@@ -42,39 +59,106 @@ export HTMLLoweringContext, lower_html_to_content!, LoweredNode
 """
     LoweredNode
 
-A lowered node combining Content-- type with computed styles.
+A lowered node combining Content-- type with pre-computed styles.
+
+## Mathematical Model
+
+All layout values are pre-calculated in device pixels (Float32).
+The rendering engine only needs to read these values, no CSS computation.
+
+### Box Model
+
+    +--------------------------------------------------+
+    |                    offset_top                    |
+    |   +------------------------------------------+   |
+    |   |              stroke_top                  |   |
+    | o |   +----------------------------------+   | o |
+    | f | s |           inset_top              | s | f |
+    | f | t |   +------------------------+     | t | f |
+    | s | r |   |                        |     | r | s |
+    | e | o | i |      CONTENT BOX       | i | o | e |
+    | t | k | n |      (children)        | n | k | t |
+    |   | e | s |                        | s | e |   |
+    | l |   | e |                        | e |   | r |
+    | e | l | t |                        | t | r | i |
+    | f | e |   +------------------------+   | i | g |
+    | t | f |           inset_bottom         | g | h |
+    |   | t +----------------------------------+ h | t |
+    |   |              stroke_bottom           | t |   |
+    |   +------------------------------------------+   |
+    |                    offset_bottom                 |
+    +--------------------------------------------------+
+
+Where:
+- offset = margin (space outside the node)
+- stroke = border (visual boundary)
+- inset = padding (space inside the node)
+- content box = where children are placed
 """
 mutable struct LoweredNode
-    cm_type::NodeType           # Content-- node type
+    # Content-- node type
+    cm_type::NodeType
+    
+    # Source tracking (for debugging)
     dom_id::UInt32              # Original DOM node ID
     parent_id::UInt32           # Parent Content-- node ID
     
-    # Box model (computed from CSS)
+    # Box model (pre-computed in pixels)
     x::Float32
     y::Float32
     width::Float32
     height::Float32
     
-    # Inset (padding)
+    # Inset (padding) - space inside the node
     inset_top::Float32
     inset_right::Float32
     inset_bottom::Float32
     inset_left::Float32
     
-    # Offset (margin)
+    # Offset (margin) - space outside the node
     offset_top::Float32
     offset_right::Float32
     offset_bottom::Float32
     offset_left::Float32
     
-    # Fill color
+    # Fill color (background)
     fill_r::UInt8
     fill_g::UInt8
     fill_b::UInt8
     fill_a::UInt8
     has_fill::Bool
     
-    # Layout
+    # Stroke (border) - width per side
+    stroke_top_width::Float32
+    stroke_right_width::Float32
+    stroke_bottom_width::Float32
+    stroke_left_width::Float32
+    
+    # Stroke color per side
+    stroke_top_r::UInt8
+    stroke_top_g::UInt8
+    stroke_top_b::UInt8
+    stroke_top_a::UInt8
+    stroke_right_r::UInt8
+    stroke_right_g::UInt8
+    stroke_right_b::UInt8
+    stroke_right_a::UInt8
+    stroke_bottom_r::UInt8
+    stroke_bottom_g::UInt8
+    stroke_bottom_b::UInt8
+    stroke_bottom_a::UInt8
+    stroke_left_r::UInt8
+    stroke_left_g::UInt8
+    stroke_left_b::UInt8
+    stroke_left_a::UInt8
+    
+    # Stroke style per side (0=none, 1=solid, 2=dotted, 3=dashed)
+    stroke_top_style::UInt8
+    stroke_right_style::UInt8
+    stroke_bottom_style::UInt8
+    stroke_left_style::UInt8
+    
+    # Layout (flex/stack properties)
     direction::Direction
     pack::Pack
     align::Align
@@ -103,25 +187,36 @@ end
 """
     HTMLLoweringContext
 
-Context for lowering HTML/CSS to Content--.
+Context for lowering HTML/CSS (source) to Content-- (target).
+
+The context maintains:
+1. Input: DOM tree and string pool from HTML parsing
+2. Output: Content-- node tree with pre-computed values
+3. SourceMap: Bidirectional mapping for debugging
+
+After lowering, the rendering engine can process the Content-- output
+without any knowledge of HTML or CSS.
 """
 mutable struct HTMLLoweringContext
-    # Input
+    # Input (source language)
     dom::DOMTable
     strings::StringPool
     
     # CSS from style blocks
     style_rules::Dict{String, CSSStyles}  # selector -> styles
     
-    # Output
+    # Output (target language - Content--)
     nodes::Vector{LoweredNode}
     cm_nodes::CMNodeTable
     cm_props::PropertyTable
     
+    # Source mapping (for debugging/devtools)
+    sourcemap::SourceMapTable
+    
     # Mapping
     dom_to_cm::Dict{UInt32, UInt32}  # DOM ID -> Content-- ID
     
-    # Viewport
+    # Viewport (for percentage calculations)
     viewport_width::Float32
     viewport_height::Float32
     
@@ -134,6 +229,7 @@ mutable struct HTMLLoweringContext
             LoweredNode[],
             CMNodeTable(),
             PropertyTable(),
+            SourceMapTable(),
             Dict{UInt32, UInt32}(),
             viewport_width, viewport_height
         )
@@ -143,7 +239,12 @@ end
 """
     lower_html_to_content!(ctx::HTMLLoweringContext) -> CMNodeTable
 
-Lower the DOM tree to Content-- primitives.
+Lower the DOM tree (source: HTML/CSS) to Content-- primitives (target).
+
+After this function, the Content-- node tree contains all pre-computed
+values. The rendering engine can process it without any HTML/CSS knowledge.
+
+Returns the Content-- node table.
 """
 function lower_html_to_content!(ctx::HTMLLoweringContext)::CMNodeTable
     n = dom_node_count(ctx.dom)
@@ -159,8 +260,10 @@ function lower_html_to_content!(ctx::HTMLLoweringContext)::CMNodeTable
         lower_node!(ctx, UInt32(i))
     end
     
-    # Resize properties to match node count
-    resize_properties!(ctx.cm_props, cm_node_count(ctx.cm_nodes))
+    # Resize properties and sourcemap to match node count
+    cm_count = cm_node_count(ctx.cm_nodes)
+    resize_properties!(ctx.cm_props, cm_count)
+    resize_sourcemap!(ctx.sourcemap, cm_count)
     
     # Apply computed properties
     apply_properties!(ctx)
@@ -263,6 +366,7 @@ end
     lower_element!(ctx::HTMLLoweringContext, dom_id::UInt32)
 
 Lower an element node to Content--.
+Creates source mapping for debugging.
 """
 function lower_element!(ctx::HTMLLoweringContext, dom_id::UInt32)
     tag_id = ctx.dom.tags[dom_id]
@@ -290,15 +394,28 @@ function lower_element!(ctx::HTMLLoweringContext, dom_id::UInt32)
     cm_id = create_node!(ctx.cm_nodes, cm_type, parent=parent_cm_id)
     ctx.dom_to_cm[dom_id] = cm_id
     
-    # Create lowered node record
+    # Create lowered node record with all pre-computed values
     node = create_lowered_node(cm_type, dom_id, parent_cm_id, styles, tag_name)
     push!(ctx.nodes, node)
+    
+    # Add source mapping
+    # TODO: Track actual source line/column during HTML parsing for proper source mapping.
+    # Currently using DOM ID as a placeholder index. In a full implementation,
+    # the HTML parser would record (line, column) for each element start tag.
+    source_loc = SourceLocation(
+        source_type = SOURCE_HTML_ELEMENT,
+        line = UInt32(dom_id),  # Placeholder: should be actual source line
+        column = UInt32(1),     # Placeholder: should be actual source column
+        file_id = UInt32(0)
+    )
+    add_mapping!(ctx.sourcemap, cm_id, source_loc)
 end
 
 """
     lower_text!(ctx::HTMLLoweringContext, dom_id::UInt32)
 
 Lower a text node to Content--.
+Creates source mapping for debugging.
 """
 function lower_text!(ctx::HTMLLoweringContext, dom_id::UInt32)
     text_id = ctx.dom.text_content[dom_id]
@@ -325,6 +442,15 @@ function lower_text!(ctx::HTMLLoweringContext, dom_id::UInt32)
     node = create_lowered_node(NODE_SPAN, dom_id, parent_cm_id, styles, "")
     node.text_content = text
     push!(ctx.nodes, node)
+    
+    # Add source mapping
+    source_loc = SourceLocation(
+        source_type = SOURCE_HTML_TEXT,
+        line = UInt32(dom_id),
+        column = UInt32(1),
+        file_id = UInt32(0)
+    )
+    add_mapping!(ctx.sourcemap, cm_id, source_loc)
 end
 
 """
@@ -575,30 +701,64 @@ end
                         styles::CSSStyles, tag_name::String) -> LoweredNode
 
 Create a LoweredNode from computed styles.
+
+This function performs the final CSS-to-Content-- lowering:
+- margin → offset (outside spacing)
+- padding → inset (inside spacing)
+- border → stroke (visual boundary)
+- background-color → fill (background color)
+- position/display → layout type
+
+All values are pre-computed in device pixels.
 """
 function create_lowered_node(cm_type::NodeType, dom_id::UInt32, parent_cm_id::UInt32,
                              styles::CSSStyles, tag_name::String)::LoweredNode
     return LoweredNode(
         cm_type, dom_id, parent_cm_id,
-        0.0f0, 0.0f0,                              # x, y
+        0.0f0, 0.0f0,                              # x, y (computed later)
         styles.width, styles.height,               # width, height
-        styles.padding_top, styles.padding_right,  # inset
+        # Inset (padding)
+        styles.padding_top, styles.padding_right,
         styles.padding_bottom, styles.padding_left,
-        styles.margin_top, styles.margin_right,    # offset
+        # Offset (margin)
+        styles.margin_top, styles.margin_right,
         styles.margin_bottom, styles.margin_left,
-        styles.background_r, styles.background_g,  # fill
+        # Fill color
+        styles.background_r, styles.background_g,
         styles.background_b, styles.background_a,
         styles.has_background,
-        DIRECTION_DOWN, PACK_START, ALIGN_STRETCH, # layout
-        styles.position,                           # position
-        styles.top, styles.right,                  # css offsets
+        # Stroke widths (border)
+        styles.border_top_width, styles.border_right_width,
+        styles.border_bottom_width, styles.border_left_width,
+        # Stroke top color
+        styles.border_top_r, styles.border_top_g,
+        styles.border_top_b, styles.border_top_a,
+        # Stroke right color
+        styles.border_right_r, styles.border_right_g,
+        styles.border_right_b, styles.border_right_a,
+        # Stroke bottom color
+        styles.border_bottom_r, styles.border_bottom_g,
+        styles.border_bottom_b, styles.border_bottom_a,
+        # Stroke left color
+        styles.border_left_r, styles.border_left_g,
+        styles.border_left_b, styles.border_left_a,
+        # Stroke styles
+        styles.border_top_style, styles.border_right_style,
+        styles.border_bottom_style, styles.border_left_style,
+        # Layout
+        DIRECTION_DOWN, PACK_START, ALIGN_STRETCH,
+        # Position
+        styles.position,
+        styles.top, styles.right,
         styles.bottom, styles.left,
         styles.top_auto, styles.right_auto,
         styles.bottom_auto, styles.left_auto,
-        styles.display, styles.visibility,         # display
+        # Display
+        styles.display, styles.visibility,
         styles.overflow == OVERFLOW_HIDDEN,
         styles.z_index,
-        ""                                         # text_content
+        # Text
+        ""
     )
 end
 
