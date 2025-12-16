@@ -4,6 +4,17 @@ A **Data-Oriented Programming (DOP)** browser engine base implementation in Juli
 
 This project provides a render-friendly Intermediate Representation (IR) that replaces traditional DOM & CSSOM with cache-efficient, SIMD-friendly data structures.
 
+## Acid2 Test Support
+
+DOPBrowser now includes **enhanced CSS 2.1 support** for processing the real Acid2 test from webstandards.org. The browser includes:
+- Advanced selector matching (attribute selectors, combinators, multiple classes)
+- Comprehensive border properties (per-side width, style, color)
+- Float and clear properties (parsing complete)
+- Min/max width/height constraints
+- Extended unit support (px, %, em, mm)
+
+See [docs/ACID2_SUPPORT.md](docs/ACID2_SUPPORT.md) for detailed information about Acid2 compliance.
+
 ## Key Design Principles
 
 - **Structure of Arrays (SoA)**: DOM treated as flat arrays, not object trees
