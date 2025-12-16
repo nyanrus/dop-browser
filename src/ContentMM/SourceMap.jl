@@ -145,23 +145,23 @@ Resize source map arrays for new nodes.
 function resize_sourcemap!(table::SourceMapTable, new_size::Int)
     old_size = length(table.source_types)
     
-    resize!(table.source_types, new_size)
-    resize!(table.lines, new_size)
-    resize!(table.columns, new_size)
-    resize!(table.end_lines, new_size)
-    resize!(table.end_columns, new_size)
-    resize!(table.file_ids, new_size)
-    resize!(table.selector_ids, new_size)
+    # Resize all arrays
+    fields_defaults = [
+        (table.source_types, SOURCE_UNKNOWN),
+        (table.lines, UInt32(0)),
+        (table.columns, UInt32(0)),
+        (table.end_lines, UInt32(0)),
+        (table.end_columns, UInt32(0)),
+        (table.file_ids, UInt32(0)),
+        (table.selector_ids, UInt32(0))
+    ]
     
-    # Initialize new entries
-    for i in (old_size + 1):new_size
-        table.source_types[i] = SOURCE_UNKNOWN
-        table.lines[i] = UInt32(0)
-        table.columns[i] = UInt32(0)
-        table.end_lines[i] = UInt32(0)
-        table.end_columns[i] = UInt32(0)
-        table.file_ids[i] = UInt32(0)
-        table.selector_ids[i] = UInt32(0)
+    for (field, default) in fields_defaults
+        resize!(field, new_size)
+        # Initialize new entries
+        for i in (old_size + 1):new_size
+            field[i] = default
+        end
     end
 end
 
@@ -176,14 +176,11 @@ function add_mapping!(table::SourceMapTable, node_id::UInt32, location::SourceLo
         resize_sourcemap!(table, Int(node_id))
     end
     
-    # Set primary location
-    table.source_types[node_id] = location.source_type
-    table.lines[node_id] = location.line
-    table.columns[node_id] = location.column
-    table.end_lines[node_id] = location.end_line
-    table.end_columns[node_id] = location.end_column
-    table.file_ids[node_id] = location.file_id
-    table.selector_ids[node_id] = location.selector_id
+    # Set primary location using field names from SourceLocation
+    for field in [:source_type, :line, :column, :end_line, :end_column, :file_id, :selector_id]
+        table_field = field == :source_type ? :source_types : Symbol(field, :s)
+        getfield(table, table_field)[node_id] = getfield(location, field)
+    end
     
     # Add to reverse mapping
     key = (location.file_id, location.line)
