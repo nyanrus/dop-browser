@@ -814,6 +814,12 @@ function merge_styles!(target::CSSStyles, source::CSSStyles)
         target.background_a = source.background_a
         target.has_background = true
     end
+    
+    # Content property
+    if source.has_content
+        target.content = source.content
+        target.has_content = true
+    end
 end
 
 """

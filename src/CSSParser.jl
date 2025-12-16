@@ -154,6 +154,10 @@ mutable struct CSSStyles
     color_a::UInt8
     has_background::Bool
     
+    # Content property for pseudo-elements
+    content::String
+    has_content::Bool
+    
     function CSSStyles()
         new(
             POSITION_STATIC,
@@ -179,7 +183,9 @@ mutable struct CSSStyles
             16.0f0, true, 16.0f0,  # line-height (normal), font-size
             0xff, 0xff, 0xff, 0x00,  # transparent background
             0x00, 0x00, 0x00, 0xff,  # black text
-            false  # no background
+            false,  # no background
+            "",     # content
+            false   # has_content
         )
     end
 end
@@ -740,6 +746,24 @@ function apply_property!(styles::CSSStyles, prop::AbstractString, val::AbstractS
                 # Pure size value
                 (px, _) = parse_length(part)
                 styles.font_size = px
+            end
+        end
+        
+    elseif prop == "content"
+        # Parse content property - extract string value from quotes
+        content_val = strip(val)
+        if content_val == "none" || content_val == "normal"
+            styles.has_content = false
+            styles.content = ""
+        else
+            # Extract content from quotes (single or double)
+            m = match(r"^['\"](.*)['\"]\s*$", content_val)
+            if m !== nothing
+                styles.content = m.captures[1]
+                styles.has_content = true
+            elseif content_val == "''" || content_val == "\"\""
+                styles.content = ""
+                styles.has_content = true
             end
         end
     end
