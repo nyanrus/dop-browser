@@ -68,7 +68,10 @@ using .RenderBuffer: RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_
 using .CSSParser: CSSStyles, parse_inline_style, parse_color, parse_length,
                   POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
                   OVERFLOW_VISIBLE, OVERFLOW_HIDDEN,
-                  DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE
+                  DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE,
+                  FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT,
+                  CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH,
+                  BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED
 
 export StringPool, intern!, get_string, get_id
 export TokenType, Token, Tokenizer, tokenize!, reset!, get_tokens
@@ -83,7 +86,10 @@ export RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, clear!
 export CSSStyles, parse_inline_style, parse_color, parse_length,
        POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
        OVERFLOW_VISIBLE, OVERFLOW_HIDDEN,
-       DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE
+       DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE,
+       FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT,
+       CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH,
+       BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED
 
 # Core API
 using .Core: BrowserContext, create_context, parse_html!, apply_styles!, compute_layouts!, generate_render_commands!, process_document!
