@@ -80,6 +80,43 @@ This browser implements the **Content-- v6.0 specification**, a design-first, da
 | margin | `Offset` | Space outside the node |
 | width/height | `Size` | Dimensions with range syntax |
 
+### Input Methods
+
+Content-- supports two input methods:
+
+1. **HTML & CSS**: Traditional web authoring, lowered to Content--
+2. **Content-- Text Format**: Human-readable native format for direct authoring
+
+```julia
+# Text format example
+Stack(Direction: Down, Fill: #FFFFFF) {
+    Rect(Size: (200, 100), Fill: #FF0000);
+    Paragraph { Span(Text: "Hello World"); }
+}
+```
+
+### Native UI Library
+
+Use Content-- as a standalone UI library:
+
+```julia
+using DOPBrowser.ContentMM.NativeUI
+
+# Create UI from text format
+ui = create_ui(\"\"\"
+    Stack(Direction: Down, Fill: #FFFFFF) {
+        Rect(Size: (100, 50), Fill: #FF0000);
+    }
+\"\"\")
+
+# Render to PNG
+render_to_png!(ui, "output.png", width=800, height=600)
+
+# Pixel comparison testing
+result = compare_pixels(ui, "reference.png", width=800, height=600)
+@test result.match == true
+```
+
 ## Core Modules
 
 ### StringInterner
@@ -125,6 +162,12 @@ Event bindings, variable injection (var()), and environment switches.
 
 ### ContentMM.Runtime
 WASM-compatible runtime with sticky positioning resolver and virtual JS interface.
+
+### ContentMM.TextParser
+Parser for human-readable Content-- text format. Converts text syntax to Content-- primitives.
+
+### ContentMM.NativeUI
+Native UI library interface with programmatic builder API and pixel comparison testing.
 
 ## Network Layer
 

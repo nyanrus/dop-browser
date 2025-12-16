@@ -293,6 +293,158 @@ Stack {
 }
 ```
 
+## Input Methods
+
+Content-- supports two input methods, each suited for different use cases:
+
+### 1. HTML & CSS (Source Language)
+
+The traditional web authoring format. HTML and CSS are lowered to Content-- through the `HTMLLowering` module.
+
+```julia
+using DOPBrowser
+
+browser = Browser(width=UInt32(800), height=UInt32(600))
+load_html!(browser, """
+<div style="width: 200px; height: 200px; background-color: red;"></div>
+""")
+render_to_png!(browser, "output.png")
+```
+
+### 2. Content-- Text Format (Native)
+
+A human-readable text format for direct Content-- authoring. Ideal for:
+- Native application UIs
+- Design system prototyping
+- Unit testing UI components
+
+#### Syntax
+
+```
+NodeType(Prop1: Value1, Prop2: Value2) {
+    ChildNode(...) { ... }
+}
+```
+
+#### Example
+
+```
+Stack(Direction: Down, Fill: #FFFFFF, Inset: 20) {
+    Rect(Size: (200, 100), Fill: #FF0000);
+    Stack(Direction: Right, Gap: 10) {
+        Rect(Size: (50, 50), Fill: #00FF00);
+        Rect(Size: (50, 50), Fill: #0000FF);
+    }
+    Paragraph {
+        Span(Text: "Hello World");
+    }
+}
+```
+
+#### Node Types
+
+| Node Type | Description |
+|-----------|-------------|
+| `Stack` | Flex container with Direction, Pack, Align |
+| `Grid` | 2D Cartesian layout with Cols, Rows |
+| `Scroll` | Viewport with overflow scrolling |
+| `Rect` | Simple colored rectangle |
+| `Paragraph` | Text block container |
+| `Span` | Inline text with optional styling |
+| `Link` | Interactive link element |
+
+#### Properties
+
+| Property | Values | Description |
+|----------|--------|-------------|
+| `Direction` | Down, Up, Right, Left | Flow direction |
+| `Pack` | Start, End, Center, Between, Around, Evenly | Main axis distribution |
+| `Align` | Start, End, Center, Stretch, Baseline | Cross axis alignment |
+| `Size` | `(width, height)` or single value | Dimensions in pixels |
+| `Width` | number | Width in pixels |
+| `Height` | number | Height in pixels |
+| `Inset` | `(top, right, bottom, left)` or single value | Padding (inside spacing) |
+| `Offset` | `(top, right, bottom, left)` or single value | Margin (outside spacing) |
+| `Fill` | `#RRGGBB` or named color | Background color |
+| `Gap` | `(row, column)` or single value | Spacing between children |
+| `Text` | `"string"` | Text content for Span |
+| `Cols` | number | Grid columns |
+| `Rows` | number | Grid rows |
+| `Round` | number | Border radius |
+
+#### Usage in Julia
+
+```julia
+using DOPBrowser.ContentMM.NativeUI
+
+# Create UI from text
+ui = create_ui(\"\"\"
+    Stack(Direction: Down, Fill: #FFFFFF) {
+        Rect(Size: (200, 100), Fill: #FF0000);
+    }
+\"\"\")
+
+# Render to PNG
+render_to_png!(ui, "output.png", width=800, height=600)
+
+# Or get raw pixel buffer
+buffer = render_to_buffer(ui, width=800, height=600)
+```
+
+## Native UI Library
+
+The `NativeUI` module provides a high-level API for using Content-- in native applications.
+
+### Programmatic Builder API
+
+```julia
+using DOPBrowser.ContentMM.NativeUI
+
+builder = UIBuilder()
+with_stack!(builder, direction=:down, fill="#FFFFFF") do
+    rect!(builder, width=200.0f0, height=100.0f0, fill="#FF0000")
+    with_paragraph!(builder) do
+        span!(builder, text="Hello World")
+    end
+end
+
+ctx = get_context(builder)
+render_to_png!(ctx, "output.png", width=800, height=600)
+```
+
+### Pixel Comparison Testing
+
+For visual regression testing:
+
+```julia
+using DOPBrowser.ContentMM.NativeUI
+
+ui = create_ui("Rect(Size: (100, 100), Fill: #FF0000)")
+
+# Compare with reference image
+result = compare_pixels(ui, "reference.png", width=800, height=600, tolerance=0)
+
+if result.match
+    println("Images match!")
+else
+    println("Mismatch: $(result.diff_count) pixels differ")
+    println("Match ratio: $(result.match_ratio)")
+    
+    # Save diff visualization
+    save_diff_image(ui, "reference.png", "diff.png", width=800, height=600)
+end
+```
+
+#### PixelComparisonResult
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `match` | Bool | True if images match within tolerance |
+| `match_ratio` | Float64 | Ratio of matching pixels (0.0 to 1.0) |
+| `diff_count` | Int | Number of differing pixels |
+| `total_pixels` | Int | Total number of pixels |
+| `max_diff` | Int | Maximum difference in any color channel |
+
 ## Future Directions
 
 1. **Binary format**: Serialize Content-- to `.cmm` files for faster loading
