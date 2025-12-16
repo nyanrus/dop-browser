@@ -1081,3 +1081,133 @@ end
     end
 
 end
+
+# ============================================================================
+# New Modular Architecture Tests
+# ============================================================================
+
+@testset "Modular Architecture" begin
+    
+    @testset "HTMLParser Module" begin
+        # Test that HTMLParser module is accessible and works
+        html_parser = DOPBrowser.HTMLParser
+        
+        # Create a string pool using the module
+        pool = html_parser.StringPool()
+        
+        # Test interning
+        id1 = html_parser.intern!(pool, "hello")
+        id2 = html_parser.intern!(pool, "hello")
+        @test id1 == id2
+        
+        # Test tokenizer
+        tokenizer = html_parser.Tokenizer(pool)
+        tokens = html_parser.tokenize!(tokenizer, "<div>Test</div>")
+        @test length(tokens) > 0
+    end
+    
+    @testset "CSSParserModule" begin
+        # Test that CSSParserModule is accessible
+        css_mod = DOPBrowser.CSSParserModule
+        
+        # Test color parsing via the CSSCore submodule
+        color = css_mod.parse_color("#ff0000")
+        @test color == (0xff, 0x00, 0x00, 0xff)
+        
+        # Test length parsing
+        (px, auto) = css_mod.parse_length("100px")
+        @test px == 100.0f0
+        @test auto == false
+    end
+    
+    @testset "Layout Module" begin
+        layout_mod = DOPBrowser.Layout
+        
+        # Create layout data
+        layout = layout_mod.LayoutData()
+        layout_mod.resize_layout!(layout, 10)
+        @test length(layout.x) == 10
+        
+        # Set bounds
+        layout_mod.set_bounds!(layout, 1, 100.0f0, 50.0f0)
+        @test layout_mod.get_bounds(layout, 1) == (100.0f0, 50.0f0)
+    end
+    
+    @testset "DOMCSSOM Module" begin
+        domcssom = DOPBrowser.DOMCSSOM
+        
+        # Create string pool
+        pool = domcssom.StringPool()
+        @test pool isa domcssom.StringInterner.StringPool
+        
+        # Create DOM table
+        dom = domcssom.DOMTable(pool)
+        root_id = domcssom.add_node!(dom, domcssom.NODE_DOCUMENT)
+        @test root_id == UInt32(1)
+        
+        # Test archetype table
+        archetypes = domcssom.ArchetypeTable()
+        id = domcssom.get_or_create_archetype!(archetypes, UInt32[1, 2])
+        @test id > 0
+        
+        # Test command buffer
+        buffer = domcssom.CommandBuffer()
+        domcssom.emit_rect!(buffer, 0.0f0, 0.0f0, 100.0f0, 100.0f0, 1.0f0, 0.0f0, 0.0f0, 1.0f0)
+        @test domcssom.command_count(buffer) == 1
+    end
+    
+    @testset "Compiler Module" begin
+        compiler = DOPBrowser.Compiler
+        
+        # Create compiler context
+        ctx = compiler.CompilerContext()
+        @test ctx.optimize == true
+        
+        # Test source registration
+        file_id = compiler.register_source!(ctx, "<html></html>")
+        @test file_id == UInt32(1)
+        
+        # Test basic compilation
+        result = compiler.compile_document!("<html><body>Test</body></html>")
+        @test result.success == true
+    end
+    
+    @testset "EventLoop Module" begin
+        eventloop = DOPBrowser.EventLoop
+        
+        # Create event loop
+        loop = eventloop.BrowserEventLoop()
+        @test loop.is_running == false
+        
+        # Test task scheduling
+        executed = Ref(false)
+        eventloop.schedule_task!(loop, eventloop.TASK_DOM, () -> begin
+            executed[] = true
+        end)
+        
+        # Run until idle
+        eventloop.run_until_idle!(loop)
+        @test executed[] == true
+        
+        # Test microtask
+        micro_executed = Ref(false)
+        eventloop.schedule_microtask!(loop, () -> begin
+            micro_executed[] = true
+        end)
+        eventloop.run_until_idle!(loop)
+        @test micro_executed[] == true
+        
+        # Test animation frame
+        anim_executed = Ref(false)
+        eventloop.request_animation_frame!(loop, (time) -> begin
+            anim_executed[] = true
+        end)
+        # Force a render frame
+        eventloop.run_tick!(loop)
+        # Animation frame runs on render, so we may need to wait
+        loop.last_render_time = 0.0  # Force render
+        eventloop.run_tick!(loop)
+        @test anim_executed[] == true
+    end
+
+end
