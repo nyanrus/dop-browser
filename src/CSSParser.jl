@@ -24,7 +24,7 @@ using ..StringInterner: StringPool, intern!, get_string
 export CSSStyles, parse_inline_style, parse_color, parse_length
 export POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED
 export OVERFLOW_VISIBLE, OVERFLOW_HIDDEN
-export DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE
+export DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE, DISPLAY_TABLE, DISPLAY_TABLE_CELL, DISPLAY_TABLE_ROW, DISPLAY_INLINE_BLOCK
 export FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT
 export CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH
 export BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED
@@ -60,6 +60,10 @@ const OVERFLOW_HIDDEN = UInt8(1)
 const DISPLAY_NONE = UInt8(0)
 const DISPLAY_BLOCK = UInt8(1)
 const DISPLAY_INLINE = UInt8(2)
+const DISPLAY_TABLE = UInt8(3)
+const DISPLAY_TABLE_CELL = UInt8(4)
+const DISPLAY_TABLE_ROW = UInt8(5)
+const DISPLAY_INLINE_BLOCK = UInt8(6)
 
 """
     CSSStyles
@@ -134,6 +138,11 @@ mutable struct CSSStyles
     visibility::Bool  # true = visible
     overflow::UInt8  # OVERFLOW_*
     
+    # Text properties
+    line_height::Float32
+    line_height_normal::Bool  # true if line-height is "normal" (auto)
+    font_size::Float32
+    
     # Colors (RGBA, 0-255 each component)
     background_r::UInt8
     background_g::UInt8
@@ -167,6 +176,7 @@ mutable struct CSSStyles
             DISPLAY_BLOCK,
             true,  # visible
             OVERFLOW_VISIBLE,
+            16.0f0, true, 16.0f0,  # line-height (normal), font-size
             0xff, 0xff, 0xff, 0x00,  # transparent background
             0x00, 0x00, 0x00, 0xff,  # black text
             false  # no background
@@ -350,6 +360,14 @@ function apply_property!(styles::CSSStyles, prop::AbstractString, val::AbstractS
             styles.display = DISPLAY_INLINE
         elseif val_lower == "none"
             styles.display = DISPLAY_NONE
+        elseif val_lower == "table"
+            styles.display = DISPLAY_TABLE
+        elseif val_lower == "table-cell"
+            styles.display = DISPLAY_TABLE_CELL
+        elseif val_lower == "table-row"
+            styles.display = DISPLAY_TABLE_ROW
+        elseif val_lower == "inline-block"
+            styles.display = DISPLAY_INLINE_BLOCK
         end
         
     elseif prop == "visibility"
@@ -683,6 +701,47 @@ function apply_property!(styles::CSSStyles, prop::AbstractString, val::AbstractS
     elseif prop == "border-left-color"
         color = parse_color(val)
         styles.border_left_r, styles.border_left_g, styles.border_left_b, styles.border_left_a = color
+        
+    # Text properties
+    elseif prop == "line-height"
+        if val_lower == "normal"
+            styles.line_height_normal = true
+        else
+            (px, auto) = parse_length(val)
+            if !auto
+                styles.line_height = px
+                styles.line_height_normal = false
+            end
+        end
+        
+    elseif prop == "font-size"
+        (px, _) = parse_length(val)
+        styles.font_size = px
+        
+    elseif prop == "font"
+        # Parse font shorthand: [style] [variant] [weight] size[/line-height] family
+        # e.g., "2px/4px serif" or "bold 12px/1.5 Arial"
+        parts = split(strip(val))
+        for i in 1:length(parts)
+            part = parts[i]
+            if contains(part, '/')
+                # size/line-height format
+                size_lh = split(part, '/')
+                if length(size_lh) >= 2
+                    (px, _) = parse_length(size_lh[1])
+                    styles.font_size = px
+                    (lh_px, auto) = parse_length(size_lh[2])
+                    if !auto
+                        styles.line_height = lh_px
+                        styles.line_height_normal = false
+                    end
+                end
+            elseif occursin(r"^\d", part) && !occursin(r"^(normal|bold|bolder|lighter|\d{3})$", part)
+                # Pure size value
+                (px, _) = parse_length(part)
+                styles.font_size = px
+            end
+        end
     end
 end
 

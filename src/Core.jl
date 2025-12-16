@@ -18,23 +18,100 @@ using ..StyleArchetypes: ArchetypeTable, get_or_create_archetype!, archetype_cou
 using ..LayoutArrays: LayoutData, resize_layout!, set_bounds!, set_position!, compute_layout!,
                       set_css_position!, set_offsets!, set_margins!, set_paddings!, 
                       set_overflow!, set_visibility!, set_z_index!, set_background_color!,
-                      set_borders!, has_border,
+                      set_borders!, has_border, set_float!, set_clear!,
                       POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
-                      DISPLAY_NONE, DISPLAY_BLOCK, OVERFLOW_HIDDEN
+                      DISPLAY_NONE, DISPLAY_BLOCK, OVERFLOW_HIDDEN,
+                      FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT, CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH
 using ..RenderBuffer: CommandBuffer, emit_rect!, emit_stroke_sides!, clear!, command_count, get_commands
-using ..CSSParser: CSSStyles, parse_inline_style
+using ..CSSParser: CSSStyles, parse_inline_style,
+                   BORDER_STYLE_NONE, OVERFLOW_VISIBLE
 
 export BrowserContext, create_context, parse_html!, apply_styles!, 
        compute_layouts!, generate_render_commands!, process_document!
 
 """
+    CSSSpecificity
+
+CSS specificity as a tuple (inline, id_count, class_count, element_count).
+Higher values take precedence.
+"""
+struct CSSSpecificity
+    inline::UInt16      # 1 for inline styles, 0 otherwise
+    id_count::UInt16    # Number of ID selectors
+    class_count::UInt16 # Number of class, attribute, pseudo-class selectors
+    element_count::UInt16 # Number of element, pseudo-element selectors
+end
+
+CSSSpecificity() = CSSSpecificity(0, 0, 0, 0)
+
+"""
+Compare two CSSSpecificity values.
+Returns true if a > b (a takes precedence).
+"""
+function Base.isless(a::CSSSpecificity, b::CSSSpecificity)::Bool
+    if a.inline != b.inline
+        return a.inline < b.inline
+    elseif a.id_count != b.id_count
+        return a.id_count < b.id_count
+    elseif a.class_count != b.class_count
+        return a.class_count < b.class_count
+    else
+        return a.element_count < b.element_count
+    end
+end
+
+"""
+    calculate_specificity(selector::AbstractString) -> CSSSpecificity
+
+Calculate CSS specificity from a selector string.
+"""
+function calculate_specificity(selector::AbstractString)::CSSSpecificity
+    sel = String(strip(selector))
+    
+    id_count = UInt16(0)
+    class_count = UInt16(0)
+    element_count = UInt16(0)
+    
+    # Count IDs (#id)
+    id_count = UInt16(count(r"#[a-zA-Z_-][a-zA-Z0-9_-]*", sel))
+    
+    # Count classes (.class), attribute selectors ([...]), and pseudo-classes (:not :hover etc, but not ::)
+    class_count = UInt16(count(r"\.[a-zA-Z_-][a-zA-Z0-9_-]*", sel))
+    class_count += UInt16(count(r"\[[^\]]+\]", sel))
+    class_count += UInt16(count(r":[a-zA-Z_-][a-zA-Z0-9_-]*(?!\:)", sel))  # pseudo-class (single colon)
+    
+    # Count element selectors and pseudo-elements (::before, ::after)
+    # Remove IDs, classes, attributes, pseudo-classes first, then count remaining element names
+    remaining = replace(sel, r"#[a-zA-Z_-][a-zA-Z0-9_-]*" => "")
+    remaining = replace(remaining, r"\.[a-zA-Z_-][a-zA-Z0-9_-]*" => "")
+    remaining = replace(remaining, r"\[[^\]]+\]" => "")
+    remaining = replace(remaining, r":[a-zA-Z_-][a-zA-Z0-9_-]*" => "")
+    remaining = replace(remaining, r"[>\+\~\s]+" => " ")
+    
+    # Count element names (excluding * universal selector)
+    for part in split(remaining)
+        part = strip(part)
+        if !isempty(part) && part != "*"
+            element_count += UInt16(1)
+        end
+    end
+    
+    # Count pseudo-elements (::before, ::after)
+    element_count += UInt16(count(r"::[a-zA-Z_-][a-zA-Z0-9_-]*", sel))
+    
+    return CSSSpecificity(0, id_count, class_count, element_count)
+end
+
+"""
     CSSRule
 
-A parsed CSS rule with selector and styles.
+A parsed CSS rule with selector, styles, specificity, and source order.
 """
 struct CSSRule
     selector::String
     styles::CSSStyles
+    specificity::CSSSpecificity
+    source_order::UInt32  # Order in which rule was defined
 end
 
 """
@@ -230,7 +307,7 @@ end
 Parse CSS text and add rules to context.
 """
 function parse_css_rules!(ctx::BrowserContext, css_text::String)
-    # Remove comments
+    # Remove comments (handle escaped backslashes in comments)
     css_text = replace(css_text, r"/\*.*?\*/"s => "")
     
     # Parse rule blocks: selector { declarations }
@@ -246,7 +323,9 @@ function parse_css_rules!(ctx::BrowserContext, css_text::String)
         for sel in split(selector, ",")
             sel = strip(String(sel))
             if !isempty(sel)
-                push!(ctx.css_rules, CSSRule(sel, styles))
+                specificity = calculate_specificity(sel)
+                source_order = UInt32(length(ctx.css_rules) + 1)
+                push!(ctx.css_rules, CSSRule(sel, styles, specificity, source_order))
             end
         end
     end
@@ -323,12 +402,24 @@ end
     apply_css_rules!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
 
 Apply matching CSS rules to a node's styles.
+Rules are sorted by specificity before applying to ensure proper cascade.
 """
 function apply_css_rules!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
+    # Collect matching rules with their specificity
+    matching_rules = Tuple{CSSSpecificity, UInt32, CSSStyles}[]
+    
     for rule in ctx.css_rules
         if matches_selector(ctx, node_id, rule.selector)
-            merge_styles!(styles, rule.styles)
+            push!(matching_rules, (rule.specificity, rule.source_order, rule.styles))
         end
+    end
+    
+    # Sort by specificity, then by source order (stable sort)
+    sort!(matching_rules, by=x -> (x[1], x[2]))
+    
+    # Apply rules in order (lowest specificity first, highest wins)
+    for (_, _, rule_styles) in matching_rules
+        merge_styles!(styles, rule_styles)
     end
 end
 
@@ -725,12 +816,6 @@ function merge_styles!(target::CSSStyles, source::CSSStyles)
     end
 end
 
-# Import constants for merge_styles!
-const OVERFLOW_VISIBLE = UInt8(0)
-const BORDER_STYLE_NONE = UInt8(0)
-const FLOAT_NONE = UInt8(0)
-const CLEAR_NONE = UInt8(0)
-
 """
     apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
 
@@ -795,6 +880,10 @@ function apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSSt
     set_visibility!(ctx.layout, node_id, styles.visibility)
     set_overflow!(ctx.layout, node_id, styles.overflow)
     set_z_index!(ctx.layout, node_id, styles.z_index)
+    
+    # Apply float and clear
+    set_float!(ctx.layout, node_id, styles.float)
+    set_clear!(ctx.layout, node_id, styles.clear)
     
     # Apply background color (Content-- fill)
     if styles.has_background
