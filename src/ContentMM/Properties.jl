@@ -317,10 +317,9 @@ function set_property!(table::PropertyTable, id::Int, prop::Symbol, value)
     elseif prop == :offset
         o = value::Offset
         table.offset_top[id], table.offset_right[id], table.offset_bottom[id], table.offset_left[id] = o.top, o.right, o.bottom, o.left
-    # Handle simple properties with automatic conversion
+    # Handle simple properties - Julia's type system will convert automatically
     elseif hasfield(PropertyTable, prop)
-        field = getfield(table, prop)
-        field[id] = eltype(field) <: AbstractFloat ? Float32(value) : value
+        getfield(table, prop)[id] = value
     end
 end
 

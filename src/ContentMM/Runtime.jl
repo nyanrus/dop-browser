@@ -476,22 +476,28 @@ function js_get_property(iface::JSInterface, node_id::UInt32, prop::Symbol)::Any
     
     # Property to layout field mapping
     ctx = iface.runtime
-    layout_map = Dict(
-        :offsetLeft => (ctx.layout_x, node_id),
-        :offsetTop => (ctx.layout_y, node_id),
-        :offsetWidth => (ctx.layout_width, node_id),
-        :offsetHeight => (ctx.layout_height, node_id),
-        :scrollLeft => (nothing, ctx.scroll_x),
-        :scrollTop => (nothing, ctx.scroll_y)
+    
+    # Handle array-based layout properties
+    array_props = Dict(
+        :offsetLeft => ctx.layout_x,
+        :offsetTop => ctx.layout_y,
+        :offsetWidth => ctx.layout_width,
+        :offsetHeight => ctx.layout_height
     )
     
-    if haskey(layout_map, prop)
-        field_data = layout_map[prop]
-        if field_data[1] === nothing
-            return field_data[2]
-        elseif node_id <= length(field_data[1])
-            return field_data[1][node_id]
-        end
+    if haskey(array_props, prop)
+        arr = array_props[prop]
+        return node_id <= length(arr) ? arr[node_id] : nothing
+    end
+    
+    # Handle scalar scroll properties
+    scalar_props = Dict(
+        :scrollLeft => ctx.scroll_x,
+        :scrollTop => ctx.scroll_y
+    )
+    
+    if haskey(scalar_props, prop)
+        return scalar_props[prop]
     end
     
     return nothing

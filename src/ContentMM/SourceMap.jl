@@ -176,10 +176,20 @@ function add_mapping!(table::SourceMapTable, node_id::UInt32, location::SourceLo
         resize_sourcemap!(table, Int(node_id))
     end
     
-    # Set primary location using field names from SourceLocation
-    for field in [:source_type, :line, :column, :end_line, :end_column, :file_id, :selector_id]
-        table_field = field == :source_type ? :source_types : Symbol(field, :s)
-        getfield(table, table_field)[node_id] = getfield(location, field)
+    # Explicit mapping between SourceLocation fields and SourceMapTable fields
+    field_map = Dict(
+        :source_type => :source_types,
+        :line => :lines,
+        :column => :columns,
+        :end_line => :end_lines,
+        :end_column => :end_columns,
+        :file_id => :file_ids,
+        :selector_id => :selector_ids
+    )
+    
+    # Set primary location
+    for (loc_field, table_field) in field_map
+        getfield(table, table_field)[node_id] = getfield(location, loc_field)
     end
     
     # Add to reverse mapping
