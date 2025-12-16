@@ -203,7 +203,7 @@ Set the next sibling of a node.
 """
 function set_next_sibling!(table::DOMTable, id::UInt32, sibling::UInt32)
     if id != 0 && id <= length(table.next_siblings)
-        table.next_siblings[sibling] = sibling
+        table.next_siblings[id] = sibling
     end
 end
 

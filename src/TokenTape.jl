@@ -222,6 +222,9 @@ function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, 
     
     is_self_closing = false
     
+    # Collect attributes first, then emit in correct order
+    attributes = Token[]
+    
     # Parse attributes
     while pos <= len
         # Skip whitespace
@@ -301,15 +304,16 @@ function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, 
             end
         end
         
-        # Emit attribute token
-        push!(tokenizer.tokens, Token(TOKEN_ATTRIBUTE, attr_name_id, attr_value_id, start_offset))
+        # Collect attribute token
+        push!(attributes, Token(TOKEN_ATTRIBUTE, attr_name_id, attr_value_id, start_offset))
     end
     
-    # Emit tag token
+    # Emit tag token first, then attributes in correct order
     token_type = is_self_closing ? TOKEN_SELF_CLOSING : TOKEN_START_TAG
-    pushfirst!(tokenizer.tokens, Token(token_type, tag_name_id, UInt32(0), start_offset))
-    # Fix: we need to insert tag before its attributes
-    # Actually, let's restructure to emit tag first, then attributes
+    push!(tokenizer.tokens, Token(token_type, tag_name_id, UInt32(0), start_offset))
+    
+    # Append collected attributes
+    append!(tokenizer.tokens, attributes)
     
     return pos
 end
