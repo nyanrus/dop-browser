@@ -143,15 +143,14 @@ function create_node!(table::NodeTable, node_type::NodeType;
                       parent::UInt32=UInt32(0),
                       style_id::UInt32=UInt32(0),
                       text_id::UInt32=UInt32(0))::UInt32
-    push!(table.node_types, node_type)
-    push!(table.parents, parent)
-    push!(table.first_children, UInt32(0))
-    push!(table.next_siblings, UInt32(0))
-    push!(table.style_ids, style_id)
-    push!(table.archetype_ids, UInt32(0))
-    push!(table.text_ids, text_id)
-    push!(table.event_masks, UInt16(0))
-    push!(table.flags, FLAG_DIRTY | FLAG_VISIBLE)
+    # Add new node to all arrays
+    for (field, value) in [(table.node_types, node_type), (table.parents, parent),
+                           (table.first_children, UInt32(0)), (table.next_siblings, UInt32(0)),
+                           (table.style_ids, style_id), (table.archetype_ids, UInt32(0)),
+                           (table.text_ids, text_id), (table.event_masks, UInt16(0)),
+                           (table.flags, FLAG_DIRTY | FLAG_VISIBLE)]
+        push!(field, value)
+    end
     
     new_id = UInt32(length(table.node_types))
     
