@@ -1,0 +1,10 @@
+# This file is machine-generated - editing it directly is not advised
+
+julia_version = "1.12.2"
+manifest_format = "2.0"
+project_hash = "1314528643d3f2252838121c32c01d7cdbf852ad"
+
+[[deps.DOPBrowser]]
+path = "."
+uuid = "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+version = "0.1.0"
