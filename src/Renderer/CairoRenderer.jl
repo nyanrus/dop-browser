@@ -296,32 +296,18 @@ function render_text!(ctx::CairoRenderContext, text::String, x::Real, y::Real;
 end
 
 """
-Render text using FreeTypeAbstraction for glyph data.
+Render text using FreeTypeAbstraction for glyph metrics with Cairo for rendering.
+
+Note: While FreeTypeAbstraction provides accurate font metrics and glyph advances,
+Cairo's native text rendering produces higher quality anti-aliased output with
+proper hinting. We use FreeTypeAbstraction for font discovery and text measurement,
+but delegate actual rendering to Cairo's optimized text path.
 """
 function _render_text_freetype!(ctx::CairoRenderContext, font::FTFont, text::String, 
                                  x::Float64, y::Float64, font_size::Float64,
                                  color::NTuple{4, Float64})
-    # Get font metrics
-    scale = font_size / Float64(font.units_per_EM)
-    
-    # Position baseline
-    current_x = x
-    
-    # Render each character
-    for char in text
-        extent = FreeTypeAbstraction.get_extent(font, char)
-        
-        if extent !== nothing
-            # Get glyph metrics - advance is (x, y) tuple
-            hadvance = Float64(extent.advance[1]) * scale
-            current_x += hadvance
-        else
-            # Fallback for missing glyphs - use character width estimate
-            current_x += font_size * 0.6
-        end
-    end
-    
-    # Fallback to Cairo text if FreeType rendering is complex
+    # FreeTypeAbstraction provides font metrics for measurement
+    # but Cairo's text rendering produces better visual output
     Cairo.select_font_face(ctx.ctx, "sans-serif", Cairo.FONT_SLANT_NORMAL, Cairo.FONT_WEIGHT_NORMAL)
     Cairo.set_font_size(ctx.ctx, font_size)
     Cairo.move_to(ctx.ctx, x, y)

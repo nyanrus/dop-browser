@@ -444,11 +444,17 @@ function generate_cairo_commands!(ctx::UIContext)
             if text_id > 0 && text_id <= length(ctx.strings)
                 text = ctx.strings[text_id]
                 
-                # Get text color (default black)
+                # Get text color from properties (default black)
                 text_r = 0.0
                 text_g = 0.0
                 text_b = 0.0
                 text_a = 1.0
+                if i <= length(ctx.properties.text_color_a)
+                    text_r = Float64(ctx.properties.text_color_r[i]) / 255.0
+                    text_g = Float64(ctx.properties.text_color_g[i]) / 255.0
+                    text_b = Float64(ctx.properties.text_color_b[i]) / 255.0
+                    text_a = Float64(ctx.properties.text_color_a[i]) / 255.0
+                end
                 
                 # Get font size (default 16)
                 font_size = 16.0
