@@ -300,11 +300,11 @@ function apply_styles!(ctx::BrowserContext)::Int
 end
 
 """
-    apply_element_defaults!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+    apply_element_defaults!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
 
 Apply default styles based on element type.
 """
-function apply_element_defaults!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+function apply_element_defaults!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
     tag_id = ctx.dom.tags[node_id]
     if tag_id == 0
         return
@@ -319,11 +319,11 @@ function apply_element_defaults!(ctx::BrowserContext, node_id::Int, styles::CSSS
 end
 
 """
-    apply_css_rules!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+    apply_css_rules!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
 
 Apply matching CSS rules to a node's styles.
 """
-function apply_css_rules!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+function apply_css_rules!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
     for rule in ctx.css_rules
         if matches_selector(ctx, node_id, rule.selector)
             merge_styles!(styles, rule.styles)
@@ -332,7 +332,7 @@ function apply_css_rules!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
 end
 
 """
-    matches_selector(ctx::BrowserContext, node_id::Int, selector::String) -> Bool
+    matches_selector(ctx::BrowserContext, node_id::Integer, selector::AbstractString) -> Bool
 
 Check if a CSS selector matches a node.
 Supports:
@@ -343,8 +343,8 @@ Supports:
 - Combinators (descendant, >, +)
 - Universal selector (*)
 """
-function matches_selector(ctx::BrowserContext, node_id::Int, selector::String)::Bool
-    sel = strip(selector)
+function matches_selector(ctx::BrowserContext, node_id::Integer, selector::AbstractString)::Bool
+    sel = String(strip(selector))
     
     # Handle descendant combinator (space)
     if contains(sel, ' ')
@@ -378,8 +378,8 @@ function matches_selector(ctx::BrowserContext, node_id::Int, selector::String)::
     if contains(sel, '>')
         parts = split(sel, '>')
         if length(parts) == 2
-            parent_sel = strip(String(parts[1]))
-            child_sel = strip(String(parts[2]))
+            parent_sel = String(strip(parts[1]))
+            child_sel = String(strip(parts[2]))
             if !matches_simple_selector(ctx, node_id, child_sel)
                 return false
             end
@@ -395,8 +395,8 @@ function matches_selector(ctx::BrowserContext, node_id::Int, selector::String)::
     if contains(sel, '+')
         parts = split(sel, '+')
         if length(parts) == 2
-            prev_sel = strip(String(parts[1]))
-            next_sel = strip(String(parts[2]))
+            prev_sel = String(strip(parts[1]))
+            next_sel = String(strip(parts[2]))
             if !matches_simple_selector(ctx, node_id, next_sel)
                 return false
             end
@@ -423,12 +423,12 @@ function matches_selector(ctx::BrowserContext, node_id::Int, selector::String)::
 end
 
 """
-    matches_simple_selector(ctx::BrowserContext, node_id::Int, selector::String) -> Bool
+    matches_simple_selector(ctx::BrowserContext, node_id::Integer, selector::AbstractString) -> Bool
 
 Match a simple selector (no combinators).
 """
-function matches_simple_selector(ctx::BrowserContext, node_id::Int, selector::String)::Bool
-    sel = strip(selector)
+function matches_simple_selector(ctx::BrowserContext, node_id::Integer, selector::AbstractString)::Bool
+    sel = String(strip(selector))
     
     # Get node info
     tag_id = ctx.dom.tags[node_id]
