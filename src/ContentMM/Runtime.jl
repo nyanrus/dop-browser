@@ -18,7 +18,8 @@ Sticky is resolved outside the main constraint solver:
 module Runtime
 
 using ..Primitives: NodeTable, NodeType, NODE_STACK, NODE_PARAGRAPH, node_count
-using ..Properties: PropertyTable, Direction, resize_properties!
+using ..Properties: PropertyTable, Direction, resize_properties!, 
+                    DIRECTION_DOWN, DIRECTION_UP, DIRECTION_RIGHT, DIRECTION_LEFT
 using ..Styles: FlatStyle
 using ..TextJIT: TextShaper, shape_paragraph!, ShapedParagraph
 using ..Reactive: EventBindingTable, EventType, VarMap, get_bindings, EventBinding
@@ -312,9 +313,6 @@ function compute_layout!(ctx::RuntimeContext)
         end
     end
 end
-
-# Import Properties module for Direction enum
-using ..Properties
 
 """
     shape_paragraph_node!(ctx::RuntimeContext, node_id::UInt32)

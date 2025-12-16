@@ -170,16 +170,23 @@ function load!(browser::Browser, url::String)::Bool
         return false
     end
     
-    # Parse HTML
+    # Parse HTML using traditional pipeline
     html = String(response.body)
     process_document!(browser.context, html)
     
-    # Initialize Content-- runtime with parsed DOM
-    ContentMM.Runtime.initialize!(
-        browser.runtime,
-        ContentMM.Primitives.NodeTable(),
-        ContentMM.Properties.PropertyTable()
-    )
+    # Sync layout data to runtime for JS interface access
+    n = node_count(browser.context.dom)
+    resize!(browser.runtime.layout_x, n)
+    resize!(browser.runtime.layout_y, n)
+    resize!(browser.runtime.layout_width, n)
+    resize!(browser.runtime.layout_height, n)
+    
+    for i in 1:n
+        browser.runtime.layout_x[i] = browser.context.layout.x[i]
+        browser.runtime.layout_y[i] = browser.context.layout.y[i]
+        browser.runtime.layout_width[i] = browser.context.layout.width[i]
+        browser.runtime.layout_height[i] = browser.context.layout.height[i]
+    end
     
     browser.is_loading = false
     return true
@@ -197,6 +204,22 @@ function load_html!(browser::Browser, html::String)
     browser.current_url = "about:blank"
     
     process_document!(browser.context, html)
+    
+    # Sync layout data to runtime for JS interface access
+    n = node_count(browser.context.dom)
+    if n > 0
+        resize!(browser.runtime.layout_x, n)
+        resize!(browser.runtime.layout_y, n)
+        resize!(browser.runtime.layout_width, n)
+        resize!(browser.runtime.layout_height, n)
+        
+        for i in 1:n
+            browser.runtime.layout_x[i] = browser.context.layout.x[i]
+            browser.runtime.layout_y[i] = browser.context.layout.y[i]
+            browser.runtime.layout_width[i] = browser.context.layout.width[i]
+            browser.runtime.layout_height[i] = browser.context.layout.height[i]
+        end
+    end
     
     browser.is_loading = false
 end
