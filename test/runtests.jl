@@ -499,6 +499,31 @@ using DOPBrowser
         # Yellow: (1.0, 1.0, 0.0), Black: (0.0, 0.0, 0.0)
         @test length(colors_found) >= 2
     end
+    
+    @testset "Acid2 - Border Rendering" begin
+        ctx = create_context(viewport_width=300.0f0, viewport_height=200.0f0)
+        
+        html = """
+        <div style="width: 100px; height: 100px; border: 2px solid red; background-color: yellow;"></div>
+        """
+        
+        result = process_document!(ctx, html)
+        
+        @test result.node_count > 0
+        # Should have background (yellow) + 4 border rects (red)
+        @test result.command_count >= 5
+        
+        # Verify border data was stored correctly
+        # Find the div with border
+        for i in 1:result.node_count
+            if ctx.layout.border_top_width[i] == 2.0f0
+                @test ctx.layout.border_top_r[i] == 0xff  # Red
+                @test ctx.layout.border_top_g[i] == 0x00
+                @test ctx.layout.border_top_b[i] == 0x00
+                break
+            end
+        end
+    end
 
 end
 
@@ -792,6 +817,31 @@ end
         @test rect[:height] == 400.0f0
         @test rect[:right] == 400.0f0
         @test rect[:bottom] == 600.0f0
+    end
+    
+    @testset "SourceMap - Mapping" begin
+        # Test SourceMap functionality
+        table = DOPBrowser.ContentMM.SourceMap.SourceMapTable()
+        
+        # Add a mapping
+        loc = DOPBrowser.ContentMM.SourceMap.SourceLocation(
+            source_type = DOPBrowser.ContentMM.SourceMap.SOURCE_HTML_ELEMENT,
+            line = UInt32(10),
+            column = UInt32(5),
+            file_id = UInt32(1)
+        )
+        DOPBrowser.ContentMM.SourceMap.add_mapping!(table, UInt32(1), loc)
+        
+        # Retrieve the mapping
+        retrieved = DOPBrowser.ContentMM.SourceMap.get_location(table, UInt32(1))
+        @test retrieved.line == UInt32(10)
+        @test retrieved.column == UInt32(5)
+        @test retrieved.source_type == DOPBrowser.ContentMM.SourceMap.SOURCE_HTML_ELEMENT
+        
+        # Test reverse lookup
+        nodes = DOPBrowser.ContentMM.SourceMap.get_nodes_at_location(table, UInt32(1), UInt32(10))
+        @test length(nodes) == 1
+        @test nodes[1] == UInt32(1)
     end
 
 end

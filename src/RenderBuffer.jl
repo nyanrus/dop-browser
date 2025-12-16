@@ -9,7 +9,7 @@ contiguous buffer for optimal cache performance.
 """
 module RenderBuffer
 
-export RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!
+export RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, emit_stroke!, emit_stroke_sides!
 export clear!, get_commands, command_count
 
 """
@@ -25,6 +25,7 @@ Types of render commands.
     CMD_CLIP_POP = 5
     CMD_TRANSFORM_PUSH = 6
     CMD_TRANSFORM_POP = 7
+    CMD_STROKE = 8  # Border/stroke rendering
 end
 
 """
@@ -206,6 +207,96 @@ function pop_clip!(buffer::CommandBuffer)
                             0.0f0, 0.0f0, 0.0f0, 0.0f0, UInt32(0), UInt32(0))
         push!(buffer.commands, cmd)
     end
+    return buffer
+end
+
+"""
+    emit_stroke!(buffer::CommandBuffer, x::Float32, y::Float32,
+                 width::Float32, height::Float32,
+                 stroke_width::Float32,
+                 r::Float32, g::Float32, b::Float32, a::Float32)
+
+Emit a stroke (border) draw command.
+Draws a rectangular outline.
+
+# Arguments
+- `buffer::CommandBuffer` - Target command buffer
+- `x, y` - Position of the stroke box (outer edge)
+- `width, height` - Dimensions of the stroke box (outer edge)
+- `stroke_width` - Width of the stroke line
+- `r, g, b, a` - Stroke color components (0-1)
+
+# Mathematical Model
+
+The stroke is drawn as 4 rectangles forming a frame:
+    - Top:    (x, y, width, stroke_width)
+    - Right:  (x + width - stroke_width, y, stroke_width, height)
+    - Bottom: (x, y + height - stroke_width, width, stroke_width)
+    - Left:   (x, y, stroke_width, height)
+"""
+function emit_stroke!(buffer::CommandBuffer, x::Float32, y::Float32,
+                      width::Float32, height::Float32,
+                      stroke_width::Float32,
+                      r::Float32, g::Float32, b::Float32, a::Float32)
+    if stroke_width <= 0.0f0
+        return buffer
+    end
+    
+    # Encode stroke_width as extra_data (multiplied by 100 to preserve precision)
+    extra = UInt32(round(stroke_width * 100))
+    
+    cmd = RenderCommand(CMD_STROKE, x, y, width, height, r, g, b, a, UInt32(0), extra)
+    push!(buffer.commands, cmd)
+    return buffer
+end
+
+"""
+    emit_stroke_sides!(buffer::CommandBuffer, x::Float32, y::Float32,
+                       width::Float32, height::Float32,
+                       top_width::Float32, right_width::Float32,
+                       bottom_width::Float32, left_width::Float32,
+                       top_r::Float32, top_g::Float32, top_b::Float32, top_a::Float32,
+                       right_r::Float32, right_g::Float32, right_b::Float32, right_a::Float32,
+                       bottom_r::Float32, bottom_g::Float32, bottom_b::Float32, bottom_a::Float32,
+                       left_r::Float32, left_g::Float32, left_b::Float32, left_a::Float32)
+
+Emit individual border sides with different widths and colors.
+This is the more complete version for Acid2 compliance where each side
+can have different styling.
+"""
+function emit_stroke_sides!(buffer::CommandBuffer, x::Float32, y::Float32,
+                            width::Float32, height::Float32,
+                            top_width::Float32, right_width::Float32,
+                            bottom_width::Float32, left_width::Float32,
+                            top_r::Float32, top_g::Float32, top_b::Float32, top_a::Float32,
+                            right_r::Float32, right_g::Float32, right_b::Float32, right_a::Float32,
+                            bottom_r::Float32, bottom_g::Float32, bottom_b::Float32, bottom_a::Float32,
+                            left_r::Float32, left_g::Float32, left_b::Float32, left_a::Float32)
+    # Top border
+    if top_width > 0.0f0 && top_a > 0.0f0
+        emit_rect!(buffer, x, y, width, top_width, top_r, top_g, top_b, top_a)
+    end
+    
+    # Right border
+    if right_width > 0.0f0 && right_a > 0.0f0
+        emit_rect!(buffer, x + width - right_width, y + top_width, 
+                   right_width, height - top_width - bottom_width,
+                   right_r, right_g, right_b, right_a)
+    end
+    
+    # Bottom border
+    if bottom_width > 0.0f0 && bottom_a > 0.0f0
+        emit_rect!(buffer, x, y + height - bottom_width, width, bottom_width,
+                   bottom_r, bottom_g, bottom_b, bottom_a)
+    end
+    
+    # Left border
+    if left_width > 0.0f0 && left_a > 0.0f0
+        emit_rect!(buffer, x, y + top_width, left_width, 
+                   height - top_width - bottom_width,
+                   left_r, left_g, left_b, left_a)
+    end
+    
     return buffer
 end
 

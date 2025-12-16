@@ -3,8 +3,33 @@
 
 Content-- language implementation based on the v6.0 specification.
 
-The Content-- language is a **Design-First, Data-Oriented, Performance-Over-Flexibility** 
-UI language that replaces traditional DOM & CSSOM with a hybrid AOT/JIT model.
+Content-- is the **target language** for rendering, designed as a mathematically
+intuitive, pre-calculated IR that replaces traditional DOM & CSSOM.
+
+## Design Philosophy
+
+HTML & CSS → (Lowering) → Content-- → (Rendering Engine)
+
+1. **Source Language**: HTML & CSS (familiar authoring format)
+2. **Target Language**: Content-- (rendering engine's only input)
+3. **Key Invariant**: Rendering engine understands ONLY Content--, never HTML/CSS
+
+## Mathematical Model
+
+Content-- uses a simple coordinate system:
+- Origin (0,0) at top-left
+- X increases rightward, Y increases downward
+- All values in device pixels (Float32)
+
+### Layout Computation (Pre-calculated)
+
+For node N with parent P:
+    N.x = P.content_x + N.offset_left + Σ(sibling.total_width)
+    N.y = P.content_y + N.offset_top + Σ(sibling.total_height)
+
+Where content box:
+    P.content_x = P.x + P.inset_left
+    P.content_y = P.y + P.inset_top
 
 ## Architecture
 
@@ -20,10 +45,12 @@ UI language that replaces traditional DOM & CSSOM with a hybrid AOT/JIT model.
 - `Primitives`: Layout primitives (Stack, Grid, Scroll, Rect) and text primitives (Paragraph, Span, Link)
 - `Properties`: Layout semantics (Direction, Pack, Align, Inset, Offset, Size)
 - `Styles`: Declarative style system with inheritance flattening
+- `SourceMap`: Bidirectional mapping from HTML/CSS to Content-- for debugging
 - `Compiler`: AOT compilation to specialized binary format
 - `TextJIT`: JIT text shaping for Paragraph nodes
 - `Reactive`: Environment switches, variable injection, event bindings
 - `Runtime`: WASM-compatible runtime for dynamic interactions
+- `HTMLLowering`: Converts HTML/CSS (source) to Content-- (target)
 """
 module ContentMM
 
@@ -33,6 +60,7 @@ include("Properties.jl")
 include("Styles.jl")
 include("Macros.jl")
 include("Environment.jl")
+include("SourceMap.jl")
 include("Compiler.jl")
 include("TextJIT.jl")
 include("Reactive.jl")
@@ -45,12 +73,13 @@ using .Properties
 using .Styles
 using .Macros
 using .Environment
+using .SourceMap
 using .Compiler
 using .TextJIT
 using .Reactive
 using .Runtime
 using .HTMLLowering
 
-export Primitives, Properties, Styles, Macros, Environment, Compiler, TextJIT, Reactive, Runtime, HTMLLowering
+export Primitives, Properties, Styles, Macros, Environment, SourceMap, Compiler, TextJIT, Reactive, Runtime, HTMLLowering
 
 end # module ContentMM

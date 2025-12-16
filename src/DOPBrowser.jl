@@ -63,8 +63,8 @@ using .NodeTable: NodeKind, DOMTable, add_node!, get_parent, get_first_child, ge
 using .StyleArchetypes: StyleProperty, Archetype, ArchetypeTable, get_or_create_archetype!, apply_archetype!, get_archetype, archetype_count
 using .LayoutArrays: LayoutData, resize_layout!, set_bounds!, get_bounds, set_position!, get_position, compute_layout!,
                     set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!,
-                    set_background_color!, get_background_color
-using .RenderBuffer: RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, clear!, get_commands, command_count
+                    set_background_color!, get_background_color, set_borders!, has_border
+using .RenderBuffer: RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, emit_stroke!, clear!, get_commands, command_count
 using .CSSParser: CSSStyles, parse_inline_style, parse_color, parse_length,
                   POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
                   OVERFLOW_VISIBLE, OVERFLOW_HIDDEN,
@@ -81,8 +81,8 @@ export NodeKind, DOMTable, add_node!, get_parent, get_first_child, get_next_sibl
 export StyleProperty, Archetype, ArchetypeTable, get_or_create_archetype!, apply_archetype!, get_archetype, archetype_count
 export LayoutData, resize_layout!, set_bounds!, get_bounds, set_position!, get_position, compute_layout!,
        set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!,
-       set_background_color!, get_background_color
-export RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, clear!, get_commands, command_count
+       set_background_color!, get_background_color, set_borders!, has_border
+export RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, emit_stroke!, clear!, get_commands, command_count
 export CSSStyles, parse_inline_style, parse_color, parse_length,
        POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
        OVERFLOW_VISIBLE, OVERFLOW_HIDDEN,

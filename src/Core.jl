@@ -18,9 +18,10 @@ using ..StyleArchetypes: ArchetypeTable, get_or_create_archetype!, archetype_cou
 using ..LayoutArrays: LayoutData, resize_layout!, set_bounds!, set_position!, compute_layout!,
                       set_css_position!, set_offsets!, set_margins!, set_paddings!, 
                       set_overflow!, set_visibility!, set_z_index!, set_background_color!,
+                      set_borders!, has_border,
                       POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
                       DISPLAY_NONE, DISPLAY_BLOCK, OVERFLOW_HIDDEN
-using ..RenderBuffer: CommandBuffer, emit_rect!, clear!, command_count, get_commands
+using ..RenderBuffer: CommandBuffer, emit_rect!, emit_stroke_sides!, clear!, command_count, get_commands
 using ..CSSParser: CSSStyles, parse_inline_style
 
 export BrowserContext, create_context, parse_html!, apply_styles!, 
@@ -734,6 +735,12 @@ const CLEAR_NONE = UInt8(0)
     apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
 
 Apply computed styles to layout data.
+
+Content-- semantic mapping:
+- CSS margin → Content-- offset (space outside)
+- CSS padding → Content-- inset (space inside)
+- CSS border → Content-- stroke (visual boundary)
+- CSS background → Content-- fill (background color)
 """
 function apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
     # Apply CSS positioning
@@ -754,15 +761,34 @@ function apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSSt
         ctx.layout.height[node_id] = styles.height
     end
     
-    # Apply margins
+    # Apply margins (Content-- offset)
     set_margins!(ctx.layout, node_id,
                 top=styles.margin_top, right=styles.margin_right,
                 bottom=styles.margin_bottom, left=styles.margin_left)
     
-    # Apply paddings
+    # Apply paddings (Content-- inset)
     set_paddings!(ctx.layout, node_id,
                  top=styles.padding_top, right=styles.padding_right,
                  bottom=styles.padding_bottom, left=styles.padding_left)
+    
+    # Apply borders (Content-- stroke)
+    set_borders!(ctx.layout, node_id,
+                top_width=styles.border_top_width,
+                right_width=styles.border_right_width,
+                bottom_width=styles.border_bottom_width,
+                left_width=styles.border_left_width,
+                top_style=styles.border_top_style,
+                right_style=styles.border_right_style,
+                bottom_style=styles.border_bottom_style,
+                left_style=styles.border_left_style,
+                top_r=styles.border_top_r, top_g=styles.border_top_g,
+                top_b=styles.border_top_b, top_a=styles.border_top_a,
+                right_r=styles.border_right_r, right_g=styles.border_right_g,
+                right_b=styles.border_right_b, right_a=styles.border_right_a,
+                bottom_r=styles.border_bottom_r, bottom_g=styles.border_bottom_g,
+                bottom_b=styles.border_bottom_b, bottom_a=styles.border_bottom_a,
+                left_r=styles.border_left_r, left_g=styles.border_left_g,
+                left_b=styles.border_left_b, left_a=styles.border_left_a)
     
     # Apply display and visibility
     ctx.layout.display[node_id] = styles.display
@@ -770,7 +796,7 @@ function apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSSt
     set_overflow!(ctx.layout, node_id, styles.overflow)
     set_z_index!(ctx.layout, node_id, styles.z_index)
     
-    # Apply background color
+    # Apply background color (Content-- fill)
     if styles.has_background
         set_background_color!(ctx.layout, node_id,
                              styles.background_r, styles.background_g,
@@ -858,6 +884,36 @@ function generate_render_commands!(ctx::BrowserContext)::Int
         # Only emit rect if has visible background
         if ctx.layout.has_background[i]
             emit_rect!(ctx.render_buffer, x, y, width, height, r, g, b, a)
+        end
+        
+        # Emit border commands if node has visible borders
+        if has_border(ctx.layout, i)
+            emit_stroke_sides!(ctx.render_buffer, x, y, width, height,
+                # Widths
+                ctx.layout.border_top_width[i],
+                ctx.layout.border_right_width[i],
+                ctx.layout.border_bottom_width[i],
+                ctx.layout.border_left_width[i],
+                # Top color
+                Float32(ctx.layout.border_top_r[i]) / 255.0f0,
+                Float32(ctx.layout.border_top_g[i]) / 255.0f0,
+                Float32(ctx.layout.border_top_b[i]) / 255.0f0,
+                Float32(ctx.layout.border_top_a[i]) / 255.0f0,
+                # Right color
+                Float32(ctx.layout.border_right_r[i]) / 255.0f0,
+                Float32(ctx.layout.border_right_g[i]) / 255.0f0,
+                Float32(ctx.layout.border_right_b[i]) / 255.0f0,
+                Float32(ctx.layout.border_right_a[i]) / 255.0f0,
+                # Bottom color
+                Float32(ctx.layout.border_bottom_r[i]) / 255.0f0,
+                Float32(ctx.layout.border_bottom_g[i]) / 255.0f0,
+                Float32(ctx.layout.border_bottom_b[i]) / 255.0f0,
+                Float32(ctx.layout.border_bottom_a[i]) / 255.0f0,
+                # Left color
+                Float32(ctx.layout.border_left_r[i]) / 255.0f0,
+                Float32(ctx.layout.border_left_g[i]) / 255.0f0,
+                Float32(ctx.layout.border_left_b[i]) / 255.0f0,
+                Float32(ctx.layout.border_left_a[i]) / 255.0f0)
         end
     end
     
