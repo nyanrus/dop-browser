@@ -10,7 +10,7 @@ module LayoutArrays
 
 export LayoutData, resize_layout!, set_bounds!, get_bounds, set_position!, get_position, compute_layout!
 export set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!
-export set_background_color!, get_background_color, set_borders!, has_border
+export set_background_color!, get_background_color, set_borders!, has_border, set_float!, set_clear!
 
 # Position types (matching CSSParser)
 const POSITION_STATIC = UInt8(0)
@@ -22,10 +22,25 @@ const POSITION_FIXED = UInt8(3)
 const OVERFLOW_VISIBLE = UInt8(0)
 const OVERFLOW_HIDDEN = UInt8(1)
 
-# Display types
+# Display types (matching CSSParser)
 const DISPLAY_NONE = UInt8(0)
 const DISPLAY_BLOCK = UInt8(1)
 const DISPLAY_INLINE = UInt8(2)
+const DISPLAY_TABLE = UInt8(3)
+const DISPLAY_TABLE_CELL = UInt8(4)
+const DISPLAY_TABLE_ROW = UInt8(5)
+const DISPLAY_INLINE_BLOCK = UInt8(6)
+
+# Float types
+const FLOAT_NONE = UInt8(0)
+const FLOAT_LEFT = UInt8(1)
+const FLOAT_RIGHT = UInt8(2)
+
+# Clear types
+const CLEAR_NONE = UInt8(0)
+const CLEAR_LEFT = UInt8(1)
+const CLEAR_RIGHT = UInt8(2)
+const CLEAR_BOTH = UInt8(3)
 
 """
     LayoutData
@@ -117,6 +132,10 @@ mutable struct LayoutData
     offset_left_auto::Vector{Bool}
     z_index::Vector{Int32}
     
+    # Float and clear
+    float_type::Vector{UInt8}  # 0=none, 1=left, 2=right
+    clear_type::Vector{UInt8}  # 0=none, 1=left, 2=right, 3=both
+    
     # Display & visibility
     display::Vector{UInt8}
     visibility::Vector{Bool}
@@ -190,6 +209,9 @@ mutable struct LayoutData
             Vector{Bool}(undef, capacity),
             Vector{Bool}(undef, capacity),
             Vector{Int32}(undef, capacity),
+            # float and clear
+            Vector{UInt8}(undef, capacity),
+            Vector{UInt8}(undef, capacity),
             # display
             Vector{UInt8}(undef, capacity),
             Vector{Bool}(undef, capacity),
@@ -266,6 +288,9 @@ function resize_layout!(layout::LayoutData, new_size::Int)
     resize!(layout.offset_bottom_auto, new_size)
     resize!(layout.offset_left_auto, new_size)
     resize!(layout.z_index, new_size)
+    # Float and clear
+    resize!(layout.float_type, new_size)
+    resize!(layout.clear_type, new_size)
     resize!(layout.display, new_size)
     resize!(layout.visibility, new_size)
     resize!(layout.overflow, new_size)
@@ -330,6 +355,9 @@ function resize_layout!(layout::LayoutData, new_size::Int)
         layout.offset_bottom_auto[i] = true
         layout.offset_left_auto[i] = true
         layout.z_index[i] = Int32(0)
+        # Float and clear
+        layout.float_type[i] = 0x00  # none
+        layout.clear_type[i] = 0x00  # none
         layout.display[i] = DISPLAY_BLOCK
         layout.visibility[i] = true
         layout.overflow[i] = OVERFLOW_VISIBLE
@@ -501,6 +529,30 @@ function set_z_index!(layout::LayoutData, id::Int, z::Int32)
 end
 
 """
+    set_float!(layout::LayoutData, id::Int, float_type::UInt8)
+
+Set float property for a node (0=none, 1=left, 2=right).
+"""
+function set_float!(layout::LayoutData, id::Int, float_type::UInt8)
+    if id >= 1 && id <= length(layout.float_type)
+        layout.float_type[id] = float_type
+        layout.dirty[id] = true
+    end
+end
+
+"""
+    set_clear!(layout::LayoutData, id::Int, clear_type::UInt8)
+
+Set clear property for a node (0=none, 1=left, 2=right, 3=both).
+"""
+function set_clear!(layout::LayoutData, id::Int, clear_type::UInt8)
+    if id >= 1 && id <= length(layout.clear_type)
+        layout.clear_type[id] = clear_type
+        layout.dirty[id] = true
+    end
+end
+
+"""
     set_background_color!(layout::LayoutData, id::Int, r::UInt8, g::UInt8, b::UInt8, a::UInt8)
 
 Set background color for a node.
@@ -647,7 +699,7 @@ end
 Compute layout for all dirty nodes using flat loop iteration.
 
 This implementation uses contiguous array access patterns suitable for
-SIMD/AVX vectorization by the Julia compiler. Supports CSS positioning.
+SIMD/AVX vectorization by the Julia compiler. Supports CSS positioning and floats.
 """
 function compute_layout!(layout::LayoutData, parents::Vector{UInt32}, 
                          first_children::Vector{UInt32}, next_siblings::Vector{UInt32})
@@ -671,6 +723,7 @@ function compute_layout!(layout::LayoutData, parents::Vector{UInt32},
         child_id = first_children[i]
         total_height = 0.0f0
         max_width = 0.0f0
+        float_height = 0.0f0  # Track float height
         
         while child_id != 0
             # Skip out-of-flow children (absolute/fixed positioned)
@@ -679,11 +732,20 @@ function compute_layout!(layout::LayoutData, parents::Vector{UInt32},
                layout.display[child_id] != DISPLAY_NONE
                 child_h = layout.height[child_id] + layout.margin_top[child_id] + layout.margin_bottom[child_id]
                 child_w = layout.width[child_id] + layout.margin_left[child_id] + layout.margin_right[child_id]
-                total_height += child_h
+                
+                # Floats don't contribute to block height in the same way
+                if layout.float_type[child_id] != FLOAT_NONE
+                    float_height = max(float_height, child_h)
+                else
+                    total_height += child_h
+                end
                 max_width = max(max_width, child_w)
             end
             child_id = next_siblings[child_id]
         end
+        
+        # Floats expand container if they're taller than block content
+        total_height = max(total_height, float_height)
         
         layout.content_width[i] = max_width
         layout.content_height[i] = total_height
@@ -697,7 +759,7 @@ function compute_layout!(layout::LayoutData, parents::Vector{UInt32},
         end
     end
     
-    # Second pass: compute positions (top-down)
+    # Second pass: compute positions (top-down) with float support
     @inbounds for i in 1:n
         if !layout.dirty[i]
             continue
@@ -713,6 +775,7 @@ function compute_layout!(layout::LayoutData, parents::Vector{UInt32},
         
         parent_id = Int(parents[i])
         pos_type = layout.position_type[i]
+        float_type = layout.float_type[i]
         
         if pos_type == POSITION_ABSOLUTE || pos_type == POSITION_FIXED
             # Absolute/fixed positioning
@@ -749,6 +812,50 @@ function compute_layout!(layout::LayoutData, parents::Vector{UInt32},
                 layout.y[i] = cb_y
             end
             
+        elseif float_type != FLOAT_NONE
+            # Float positioning - simplified implementation
+            if parent_id == 0
+                base_x = layout.margin_left[i]
+                base_y = layout.margin_top[i]
+                parent_w = n >= 1 ? layout.width[1] : 0.0f0
+            else
+                base_x = layout.x[parent_id] + layout.padding_left[parent_id]
+                base_y = layout.y[parent_id] + layout.padding_top[parent_id]
+                parent_w = layout.width[parent_id] - layout.padding_left[parent_id] - layout.padding_right[parent_id]
+                
+                # Find float position among siblings
+                sibling_id = first_children[parent_id]
+                left_float_x = base_x
+                right_float_x = base_x + parent_w
+                y_offset = 0.0f0
+                max_float_y = base_y
+                
+                while sibling_id != 0 && sibling_id != UInt32(i)
+                    if layout.display[sibling_id] != DISPLAY_NONE
+                        if layout.float_type[sibling_id] == FLOAT_LEFT
+                            left_float_x = max(left_float_x, layout.x[sibling_id] + layout.width[sibling_id] + layout.margin_right[sibling_id])
+                            max_float_y = max(max_float_y, layout.y[sibling_id])
+                        elseif layout.float_type[sibling_id] == FLOAT_RIGHT
+                            right_float_x = min(right_float_x, layout.x[sibling_id] - layout.margin_left[sibling_id])
+                            max_float_y = max(max_float_y, layout.y[sibling_id])
+                        elseif layout.position_type[sibling_id] != POSITION_ABSOLUTE && 
+                               layout.position_type[sibling_id] != POSITION_FIXED
+                            y_offset += layout.height[sibling_id] + layout.margin_top[sibling_id] + layout.margin_bottom[sibling_id]
+                        end
+                    end
+                    sibling_id = next_siblings[sibling_id]
+                end
+                
+                # Position float
+                if float_type == FLOAT_LEFT
+                    layout.x[i] = left_float_x + layout.margin_left[i]
+                    layout.y[i] = max_float_y + layout.margin_top[i]
+                else  # FLOAT_RIGHT
+                    layout.x[i] = right_float_x - layout.width[i] - layout.margin_right[i]
+                    layout.y[i] = max_float_y + layout.margin_top[i]
+                end
+            end
+            
         elseif pos_type == POSITION_RELATIVE
             # First compute normal flow position
             if parent_id == 0
@@ -764,6 +871,7 @@ function compute_layout!(layout::LayoutData, parents::Vector{UInt32},
                 while sibling_id != 0 && sibling_id != UInt32(i)
                     if layout.position_type[sibling_id] != POSITION_ABSOLUTE && 
                        layout.position_type[sibling_id] != POSITION_FIXED &&
+                       layout.float_type[sibling_id] == FLOAT_NONE &&
                        layout.display[sibling_id] != DISPLAY_NONE
                         y_offset += layout.height[sibling_id] + layout.margin_top[sibling_id] + layout.margin_bottom[sibling_id]
                     end
@@ -799,20 +907,38 @@ function compute_layout!(layout::LayoutData, parents::Vector{UInt32},
                 base_x = layout.x[parent_id] + layout.padding_left[parent_id]
                 base_y = layout.y[parent_id] + layout.padding_top[parent_id]
                 
-                # Find position among in-flow siblings
+                # Find position among in-flow siblings, accounting for clear
                 sibling_id = first_children[parent_id]
                 y_offset = 0.0f0
+                max_left_float_bottom = base_y
+                max_right_float_bottom = base_y
+                
                 while sibling_id != 0 && sibling_id != UInt32(i)
-                    if layout.position_type[sibling_id] != POSITION_ABSOLUTE && 
-                       layout.position_type[sibling_id] != POSITION_FIXED &&
-                       layout.display[sibling_id] != DISPLAY_NONE
-                        y_offset += layout.height[sibling_id] + layout.margin_top[sibling_id] + layout.margin_bottom[sibling_id]
+                    if layout.display[sibling_id] != DISPLAY_NONE
+                        if layout.float_type[sibling_id] == FLOAT_LEFT
+                            max_left_float_bottom = max(max_left_float_bottom, layout.y[sibling_id] + layout.height[sibling_id] + layout.margin_bottom[sibling_id])
+                        elseif layout.float_type[sibling_id] == FLOAT_RIGHT
+                            max_right_float_bottom = max(max_right_float_bottom, layout.y[sibling_id] + layout.height[sibling_id] + layout.margin_bottom[sibling_id])
+                        elseif layout.position_type[sibling_id] != POSITION_ABSOLUTE && 
+                               layout.position_type[sibling_id] != POSITION_FIXED
+                            y_offset += layout.height[sibling_id] + layout.margin_top[sibling_id] + layout.margin_bottom[sibling_id]
+                        end
                     end
                     sibling_id = next_siblings[sibling_id]
                 end
                 
+                # Apply clear property
+                clear_type = layout.clear_type[i]
+                clear_offset = 0.0f0
+                if clear_type == CLEAR_LEFT || clear_type == CLEAR_BOTH
+                    clear_offset = max(clear_offset, max_left_float_bottom - base_y - y_offset)
+                end
+                if clear_type == CLEAR_RIGHT || clear_type == CLEAR_BOTH
+                    clear_offset = max(clear_offset, max_right_float_bottom - base_y - y_offset)
+                end
+                
                 layout.x[i] = base_x + layout.margin_left[i]
-                layout.y[i] = base_y + y_offset + layout.margin_top[i]
+                layout.y[i] = base_y + y_offset + layout.margin_top[i] + max(0.0f0, clear_offset)
             end
         end
         
