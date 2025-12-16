@@ -34,6 +34,9 @@ export BrowserEventLoop, Task, TaskType
 export schedule_task!, schedule_microtask!, request_animation_frame!
 export run_tick!, run_until_idle!, stop!
 
+# Export TaskType enum values
+export TASK_SCRIPT, TASK_TIMER, TASK_DOM, TASK_USER_INPUT, TASK_NETWORK, TASK_RENDER, TASK_IDLE
+
 """
     TaskType
 
