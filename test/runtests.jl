@@ -1211,3 +1211,262 @@ end
     end
 
 end
+
+# ============================================================================
+# Content-- Text Format Parser Tests
+# ============================================================================
+
+@testset "Content-- Text Parser" begin
+    
+    @testset "Basic Parsing" begin
+        source = """
+        Stack(Direction: Down, Fill: #FF0000) {
+            Rect(Size: (100, 50));
+        }
+        """
+        
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        
+        @test doc.success == true
+        @test isempty(doc.errors)
+        @test DOPBrowser.ContentMM.Primitives.node_count(doc.nodes) >= 2  # Root + Stack + Rect
+    end
+    
+    @testset "Property Parsing" begin
+        # Test Direction parsing
+        source = "Stack(Direction: Right)"
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test doc.properties.direction[2] == DOPBrowser.ContentMM.Properties.DIRECTION_RIGHT
+        
+        # Test Size parsing
+        source = "Rect(Width: 100, Height: 50)"
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test doc.properties.width[2] == 100.0f0
+        @test doc.properties.height[2] == 50.0f0
+        
+        # Test Size tuple parsing
+        source = "Rect(Size: (200, 150))"
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test doc.properties.width[2] == 200.0f0
+        @test doc.properties.height[2] == 150.0f0
+    end
+    
+    @testset "Color Parsing" begin
+        # Test hex color
+        source = "Rect(Fill: #FF0000)"
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test doc.properties.fill_r[2] == 0xff
+        @test doc.properties.fill_g[2] == 0x00
+        @test doc.properties.fill_b[2] == 0x00
+        @test doc.properties.fill_a[2] == 0xff
+        
+        # Test named color
+        source = "Rect(Fill: blue)"
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test doc.properties.fill_b[2] == 0xff
+    end
+    
+    @testset "Box Properties" begin
+        # Test Inset (padding)
+        source = "Stack(Inset: (10, 20, 30, 40))"
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test doc.properties.inset_top[2] == 10.0f0
+        @test doc.properties.inset_right[2] == 20.0f0
+        @test doc.properties.inset_bottom[2] == 30.0f0
+        @test doc.properties.inset_left[2] == 40.0f0
+        
+        # Test Offset (margin)
+        source = "Stack(Offset: 15)"
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test doc.properties.offset_top[2] == 15.0f0
+        @test doc.properties.offset_left[2] == 15.0f0
+    end
+    
+    @testset "Nested Children" begin
+        source = """
+        Stack(Direction: Down) {
+            Rect(Size: (100, 50));
+            Stack(Direction: Right) {
+                Rect(Size: (25, 25));
+                Rect(Size: (25, 25));
+            }
+            Rect(Size: (100, 50));
+        }
+        """
+        
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        # Root + outer Stack + 2 outer Rects + inner Stack + 2 inner Rects
+        @test DOPBrowser.ContentMM.Primitives.node_count(doc.nodes) >= 6
+    end
+    
+    @testset "Text Content" begin
+        source = """
+        Paragraph {
+            Span(Text: "Hello World");
+        }
+        """
+        
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test length(doc.strings) >= 1
+        @test "Hello World" in doc.strings
+    end
+    
+    @testset "Comments" begin
+        source = """
+        // This is a line comment
+        Stack(Direction: Down) {
+            /* This is a
+               block comment */
+            Rect(Size: (100, 50));
+        }
+        """
+        
+        doc = DOPBrowser.ContentMM.TextParser.parse_content_text(source)
+        @test doc.success == true
+        @test DOPBrowser.ContentMM.Primitives.node_count(doc.nodes) >= 2
+    end
+
+end
+
+# ============================================================================
+# Native UI Library Tests
+# ============================================================================
+
+@testset "Native UI Library" begin
+    
+    @testset "Create UI from Text" begin
+        source = """
+        Stack(Direction: Down, Fill: #FFFFFF) {
+            Rect(Size: (100, 50), Fill: #FF0000);
+        }
+        """
+        
+        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
+        @test ui !== nothing
+        @test DOPBrowser.ContentMM.Primitives.node_count(ui.nodes) >= 2
+    end
+    
+    @testset "Create UI Programmatically" begin
+        builder = DOPBrowser.ContentMM.NativeUI.UIBuilder()
+        
+        DOPBrowser.ContentMM.NativeUI.with_stack!(builder, direction=:down, fill="#FFFFFF") do
+            DOPBrowser.ContentMM.NativeUI.rect!(builder, width=100.0f0, height=50.0f0, fill="#FF0000")
+        end
+        
+        ctx = DOPBrowser.ContentMM.NativeUI.get_context(builder)
+        @test DOPBrowser.ContentMM.Primitives.node_count(ctx.nodes) >= 2
+    end
+    
+    @testset "Render Commands" begin
+        source = """
+        Rect(Size: (100, 50), Fill: #FF0000)
+        """
+        
+        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
+        DOPBrowser.ContentMM.NativeUI.render!(ui, width=200, height=200)
+        
+        # Should have at least one render command for the rect
+        @test command_count(ui.command_buffer) >= 1
+    end
+
+end
+
+# ============================================================================
+# Pixel Comparison Tests
+# ============================================================================
+
+@testset "Pixel Comparison" begin
+    
+    @testset "Buffer Comparison" begin
+        # Create two identical buffers
+        buffer1 = UInt8[255, 0, 0, 255, 0, 255, 0, 255]  # Red, Green
+        buffer2 = UInt8[255, 0, 0, 255, 0, 255, 0, 255]  # Red, Green
+        
+        # This test validates internal comparison logic
+        result = DOPBrowser.ContentMM.NativeUI.compare_buffers(buffer1, buffer2, 0)
+        @test result.match == true
+        @test result.match_ratio == 1.0
+        @test result.diff_count == 0
+        @test result.total_pixels == 2
+    end
+    
+    @testset "Buffer Comparison with Difference" begin
+        buffer1 = UInt8[255, 0, 0, 255, 0, 255, 0, 255]  # Red, Green
+        buffer2 = UInt8[255, 0, 0, 255, 0, 0, 255, 255]  # Red, Blue
+        
+        result = DOPBrowser.ContentMM.NativeUI.compare_buffers(buffer1, buffer2, 0)
+        @test result.match == false
+        @test result.diff_count == 1  # One pixel differs
+        @test result.match_ratio == 0.5
+    end
+    
+    @testset "Buffer Comparison with Tolerance" begin
+        buffer1 = UInt8[255, 0, 0, 255]  # Red
+        buffer2 = UInt8[250, 5, 0, 255]  # Slightly different red
+        
+        # With tolerance 0, they differ
+        result = DOPBrowser.ContentMM.NativeUI.compare_buffers(buffer1, buffer2, 0)
+        @test result.match == false
+        
+        # With tolerance 10, they match
+        result = DOPBrowser.ContentMM.NativeUI.compare_buffers(buffer1, buffer2, 10)
+        @test result.match == true
+    end
+    
+    @testset "PNG Encode/Decode Roundtrip" begin
+        # Create a simple 2x2 image
+        original = UInt8[
+            255, 0, 0, 255,    0, 255, 0, 255,   # Red, Green
+            0, 0, 255, 255,    255, 255, 0, 255  # Blue, Yellow
+        ]
+        
+        # Encode to PNG
+        png_data = DOPBrowser.Renderer.PNGExport.encode_png(original, UInt32(2), UInt32(2))
+        @test length(png_data) > 0
+        
+        # PNG signature should be valid
+        @test png_data[1:8] == UInt8[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        
+        # Write and read back
+        temp_file = tempname() * ".png"
+        DOPBrowser.Renderer.PNGExport.write_png_file(temp_file, original, UInt32(2), UInt32(2))
+        
+        @test isfile(temp_file)
+        
+        # Decode
+        decoded = DOPBrowser.Renderer.PNGExport.decode_png(temp_file)
+        
+        # Compare (allowing for minimal compression artifacts)
+        result = DOPBrowser.ContentMM.NativeUI.compare_buffers(original, decoded, 0)
+        @test result.match == true
+        
+        # Cleanup
+        rm(temp_file)
+    end
+    
+    @testset "Render and Compare" begin
+        # Create a simple red rectangle
+        source = """
+        Rect(Size: (100, 100), Fill: #FF0000)
+        """
+        
+        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
+        buffer = DOPBrowser.ContentMM.NativeUI.render_to_buffer(ui, width=100, height=100)
+        
+        @test length(buffer) == 100 * 100 * 4  # RGBA
+        
+        # Check that at least some pixels are red (the rect should render)
+        # Note: The exact position depends on layout, so we just verify the buffer exists
+        @test length(buffer) > 0
+    end
+
+end

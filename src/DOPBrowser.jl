@@ -67,6 +67,9 @@ include("Compiler/Compiler.jl")
 # Event Loop module
 include("EventLoop/EventLoop.jl")
 
+# Rendering pipeline (before ContentMM for NativeUI dependencies)
+include("Renderer/Renderer.jl")
+
 # Content-- IR modules
 include("ContentMM/ContentMM.jl")
 
@@ -75,9 +78,6 @@ include("Network/Network.jl")
 
 # Core browser context (uses the modular components)
 include("Core.jl")
-
-# Rendering pipeline
-include("Renderer/Renderer.jl")
 
 # =============================================================================
 # Re-exports from Modular Submodules
