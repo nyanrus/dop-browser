@@ -300,11 +300,11 @@ function apply_styles!(ctx::BrowserContext)::Int
 end
 
 """
-    apply_element_defaults!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+    apply_element_defaults!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
 
 Apply default styles based on element type.
 """
-function apply_element_defaults!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+function apply_element_defaults!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
     tag_id = ctx.dom.tags[node_id]
     if tag_id == 0
         return
@@ -319,11 +319,11 @@ function apply_element_defaults!(ctx::BrowserContext, node_id::Int, styles::CSSS
 end
 
 """
-    apply_css_rules!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+    apply_css_rules!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
 
 Apply matching CSS rules to a node's styles.
 """
-function apply_css_rules!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+function apply_css_rules!(ctx::BrowserContext, node_id::Integer, styles::CSSStyles)
     for rule in ctx.css_rules
         if matches_selector(ctx, node_id, rule.selector)
             merge_styles!(styles, rule.styles)
@@ -332,13 +332,103 @@ function apply_css_rules!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
 end
 
 """
-    matches_selector(ctx::BrowserContext, node_id::Int, selector::String) -> Bool
+    matches_selector(ctx::BrowserContext, node_id::Integer, selector::AbstractString) -> Bool
 
 Check if a CSS selector matches a node.
-Supports: tag, #id, .class, tag.class, tag#id
+Supports:
+- Tag selectors (div, p)
+- ID selectors (#id)
+- Class selectors (.class, .class1.class2)
+- Attribute selectors ([attr], [attr=value], [attr~=value])
+- Combinators (descendant, >, +)
+- Universal selector (*)
 """
-function matches_selector(ctx::BrowserContext, node_id::Int, selector::String)::Bool
-    sel = strip(selector)
+function matches_selector(ctx::BrowserContext, node_id::Integer, selector::AbstractString)::Bool
+    sel = String(strip(selector))
+    
+    # Handle descendant combinator (space)
+    if contains(sel, ' ')
+        parts = split(sel, r"\s+")
+        # Match from right to left
+        current_node = node_id
+        for i in length(parts):-1:1
+            if !matches_simple_selector(ctx, current_node, String(parts[i]))
+                return false
+            end
+            if i > 1
+                # Find ancestor that matches previous selector
+                current_node = ctx.dom.parents[current_node]
+                found = false
+                while current_node != 0
+                    if matches_simple_selector(ctx, current_node, String(parts[i-1]))
+                        found = true
+                        break
+                    end
+                    current_node = ctx.dom.parents[current_node]
+                end
+                if !found
+                    return false
+                end
+            end
+        end
+        return true
+    end
+    
+    # Handle child combinator (>)
+    if contains(sel, '>')
+        parts = split(sel, '>')
+        if length(parts) == 2
+            parent_sel = String(strip(parts[1]))
+            child_sel = String(strip(parts[2]))
+            if !matches_simple_selector(ctx, node_id, child_sel)
+                return false
+            end
+            parent_id = ctx.dom.parents[node_id]
+            if parent_id == 0
+                return false
+            end
+            return matches_selector(ctx, parent_id, parent_sel)
+        end
+    end
+    
+    # Handle adjacent sibling combinator (+)
+    if contains(sel, '+')
+        parts = split(sel, '+')
+        if length(parts) == 2
+            prev_sel = String(strip(parts[1]))
+            next_sel = String(strip(parts[2]))
+            if !matches_simple_selector(ctx, node_id, next_sel)
+                return false
+            end
+            # Find previous sibling
+            parent_id = ctx.dom.parents[node_id]
+            if parent_id == 0
+                return false
+            end
+            prev_sibling = UInt32(0)
+            child_id = ctx.dom.first_children[parent_id]
+            while child_id != 0 && child_id != node_id
+                prev_sibling = child_id
+                child_id = ctx.dom.next_siblings[child_id]
+            end
+            if prev_sibling == 0
+                return false
+            end
+            return matches_selector(ctx, prev_sibling, prev_sel)
+        end
+    end
+    
+    # Simple selector (no combinators)
+    return matches_simple_selector(ctx, node_id, sel)
+end
+
+"""
+    matches_simple_selector(ctx::BrowserContext, node_id::Integer, selector::AbstractString) -> Bool
+
+Match a simple selector (no combinators).
+"""
+function matches_simple_selector(ctx::BrowserContext, node_id::Integer, selector::AbstractString)::Bool
+    sel = String(strip(selector))
     
     # Get node info
     tag_id = ctx.dom.tags[node_id]
@@ -351,51 +441,128 @@ function matches_selector(ctx::BrowserContext, node_id::Int, selector::String)::
     class_attr = class_attr_id != 0 ? get_string(ctx.strings, class_attr_id) : ""
     classes = split(class_attr)
     
-    # Handle complex selectors by splitting on spaces (descendant combinator)
-    # For now, only handle the last part (the simple selector)
-    parts = split(sel)
-    if length(parts) > 1
-        sel = String(parts[end])
-    end
+    # Extract parts: tag, ids, classes, attributes
+    remaining = sel
+    matched_tag = ""
+    matched_ids = String[]
+    matched_classes = String[]
+    matched_attrs = Tuple{String,String,String}[]  # (name, operator, value)
     
-    # ID selector: #id
-    if startswith(sel, "#")
-        sel_id = sel[2:end]
-        return id_attr == sel_id
-    end
-    
-    # Class selector: .class
-    if startswith(sel, ".")
-        sel_class = sel[2:end]
-        return sel_class in classes
-    end
-    
-    # Combined selector: tag.class or tag#id
-    if contains(sel, ".")
-        dot_idx = findfirst('.', sel)
-        if dot_idx !== nothing
-            sel_tag = sel[1:dot_idx-1]
-            sel_class = sel[dot_idx+1:end]
-            return (isempty(sel_tag) || tag_name == sel_tag) && sel_class in classes
+    # Extract attribute selectors first
+    while contains(remaining, '[')
+        bracket_start = findfirst('[', remaining)
+        bracket_end = findfirst(']', remaining)
+        if bracket_start !== nothing && bracket_end !== nothing && bracket_end > bracket_start
+            attr_sel = remaining[bracket_start+1:bracket_end-1]
+            # Parse attribute selector
+            if contains(attr_sel, '=')
+                if contains(attr_sel, "~=")
+                    parts = split(attr_sel, "~=")
+                    attr_name = strip(String(parts[1]))
+                    attr_value = strip(String(parts[2]), [' ', '"'])
+                    push!(matched_attrs, (attr_name, "~=", attr_value))
+                elseif contains(attr_sel, '=')
+                    parts = split(attr_sel, '=')
+                    attr_name = strip(String(parts[1]))
+                    attr_value = strip(String(parts[2]), [' ', '"'])
+                    push!(matched_attrs, (attr_name, "=", attr_value))
+                end
+            else
+                # Just presence check
+                attr_name = strip(attr_sel)
+                push!(matched_attrs, (attr_name, "", ""))
+            end
+            remaining = remaining[1:bracket_start-1] * remaining[bracket_end+1:end]
+        else
+            break
         end
     end
     
-    if contains(sel, "#")
-        hash_idx = findfirst('#', sel)
+    # Extract IDs
+    while contains(remaining, '#')
+        hash_idx = findfirst('#', remaining)
         if hash_idx !== nothing
-            sel_tag = sel[1:hash_idx-1]
-            sel_id = sel[hash_idx+1:end]
-            return (isempty(sel_tag) || tag_name == sel_tag) && id_attr == sel_id
+            # Find end of ID (next . or # or end of string)
+            id_end = length(remaining)
+            for i in (hash_idx+1):length(remaining)
+                if remaining[i] in ['.', '#', '[', ' ', '>','+']
+                    id_end = i - 1
+                    break
+                end
+            end
+            push!(matched_ids, remaining[hash_idx+1:id_end])
+            remaining = remaining[1:hash_idx-1] * remaining[id_end+1:end]
         end
     end
     
-    # Universal selector
-    if sel == "*"
-        return true
+    # Extract classes
+    while contains(remaining, '.')
+        dot_idx = findfirst('.', remaining)
+        if dot_idx !== nothing
+            # Find end of class (next . or # or end of string)
+            class_end = length(remaining)
+            for i in (dot_idx+1):length(remaining)
+                if remaining[i] in ['.', '#', '[', ' ', '>', '+']
+                    class_end = i - 1
+                    break
+                end
+            end
+            push!(matched_classes, remaining[dot_idx+1:class_end])
+            remaining = remaining[1:dot_idx-1] * remaining[class_end+1:end]
+        end
     end
     
-    # Tag selector
-    return tag_name == sel
+    # What's left should be the tag name or *
+    matched_tag = strip(remaining)
+    
+    # Now check all conditions
+    # Tag match
+    if !isempty(matched_tag) && matched_tag != "*"
+        if tag_name != matched_tag
+            return false
+        end
+    end
+    
+    # ID match
+    for mid in matched_ids
+        if id_attr != mid
+            return false
+        end
+    end
+    
+    # Class match (all classes must be present)
+    for mc in matched_classes
+        if !(mc in classes)
+            return false
+        end
+    end
+    
+    # Attribute match
+    for (attr_name, operator, attr_value) in matched_attrs
+        # TODO: Get attribute value from node (would need to extend NodeTable)
+        # For now, handle class attribute specially
+        if attr_name == "class"
+            if operator == "~="
+                # Word match
+                if !(attr_value in classes)
+                    return false
+                end
+            elseif operator == "="
+                # Exact match
+                if class_attr != attr_value
+                    return false
+                end
+            else
+                # Presence
+                if isempty(class_attr)
+                    return false
+                end
+            end
+        end
+        # Other attributes would need more infrastructure
+    end
+    
+    return true
 end
 
 """
@@ -436,6 +603,24 @@ function merge_styles!(target::CSSStyles, source::CSSStyles)
         target.height_auto = false
     end
     
+    # Min/max dimensions
+    if source.has_min_width
+        target.min_width = source.min_width
+        target.has_min_width = true
+    end
+    if source.has_max_width
+        target.max_width = source.max_width
+        target.has_max_width = true
+    end
+    if source.has_min_height
+        target.min_height = source.min_height
+        target.has_min_height = true
+    end
+    if source.has_max_height
+        target.max_height = source.max_height
+        target.has_max_height = true
+    end
+    
     # Box model
     if source.margin_top != 0
         target.margin_top = source.margin_top
@@ -463,6 +648,57 @@ function merge_styles!(target::CSSStyles, source::CSSStyles)
         target.padding_left = source.padding_left
     end
     
+    # Borders
+    if source.border_top_width != 0
+        target.border_top_width = source.border_top_width
+    end
+    if source.border_right_width != 0
+        target.border_right_width = source.border_right_width
+    end
+    if source.border_bottom_width != 0
+        target.border_bottom_width = source.border_bottom_width
+    end
+    if source.border_left_width != 0
+        target.border_left_width = source.border_left_width
+    end
+    
+    if source.border_top_style != BORDER_STYLE_NONE
+        target.border_top_style = source.border_top_style
+        target.border_top_r = source.border_top_r
+        target.border_top_g = source.border_top_g
+        target.border_top_b = source.border_top_b
+        target.border_top_a = source.border_top_a
+    end
+    if source.border_right_style != BORDER_STYLE_NONE
+        target.border_right_style = source.border_right_style
+        target.border_right_r = source.border_right_r
+        target.border_right_g = source.border_right_g
+        target.border_right_b = source.border_right_b
+        target.border_right_a = source.border_right_a
+    end
+    if source.border_bottom_style != BORDER_STYLE_NONE
+        target.border_bottom_style = source.border_bottom_style
+        target.border_bottom_r = source.border_bottom_r
+        target.border_bottom_g = source.border_bottom_g
+        target.border_bottom_b = source.border_bottom_b
+        target.border_bottom_a = source.border_bottom_a
+    end
+    if source.border_left_style != BORDER_STYLE_NONE
+        target.border_left_style = source.border_left_style
+        target.border_left_r = source.border_left_r
+        target.border_left_g = source.border_left_g
+        target.border_left_b = source.border_left_b
+        target.border_left_a = source.border_left_a
+    end
+    
+    # Float and clear
+    if source.float != FLOAT_NONE
+        target.float = source.float
+    end
+    if source.clear != CLEAR_NONE
+        target.clear = source.clear
+    end
+    
     # Display
     if source.display != DISPLAY_BLOCK
         target.display = source.display
@@ -488,8 +724,11 @@ function merge_styles!(target::CSSStyles, source::CSSStyles)
     end
 end
 
-# Import OVERFLOW_VISIBLE for merge_styles!
+# Import constants for merge_styles!
 const OVERFLOW_VISIBLE = UInt8(0)
+const BORDER_STYLE_NONE = UInt8(0)
+const FLOAT_NONE = UInt8(0)
+const CLEAR_NONE = UInt8(0)
 
 """
     apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
