@@ -317,9 +317,12 @@ function set_property!(table::PropertyTable, id::Int, prop::Symbol, value)
     elseif prop == :offset
         o = value::Offset
         table.offset_top[id], table.offset_right[id], table.offset_bottom[id], table.offset_left[id] = o.top, o.right, o.bottom, o.left
-    # Handle simple properties - Julia's type system will convert automatically
+    # Handle simple properties with explicit type conversion
     elseif hasfield(PropertyTable, prop)
-        getfield(table, prop)[id] = value
+        field = getfield(table, prop)
+        # Convert numeric types explicitly to match field type
+        converted_val = eltype(field) <: Number ? convert(eltype(field), value) : value
+        field[id] = converted_val
     end
 end
 
