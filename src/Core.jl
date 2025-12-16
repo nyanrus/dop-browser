@@ -27,6 +27,16 @@ export BrowserContext, create_context, parse_html!, apply_styles!,
        compute_layouts!, generate_render_commands!, process_document!
 
 """
+    CSSRule
+
+A parsed CSS rule with selector and styles.
+"""
+struct CSSRule
+    selector::String
+    styles::CSSStyles
+end
+
+"""
     BrowserContext
 
 Central context holding all browser engine data structures.
@@ -42,6 +52,7 @@ Designed for cache-efficient batch processing of documents.
 - `render_buffer::CommandBuffer` - Render command buffer
 - `viewport_width::Float32` - Viewport width in pixels
 - `viewport_height::Float32` - Viewport height in pixels
+- `css_rules::Vector{CSSRule}` - Parsed CSS rules from style blocks
 """
 mutable struct BrowserContext
     strings::StringPool
@@ -52,6 +63,7 @@ mutable struct BrowserContext
     render_buffer::CommandBuffer
     viewport_width::Float32
     viewport_height::Float32
+    css_rules::Vector{CSSRule}
     
     function BrowserContext(; viewport_width::Float32 = 1920.0f0, 
                               viewport_height::Float32 = 1080.0f0)
@@ -64,7 +76,8 @@ mutable struct BrowserContext
             LayoutData(),
             CommandBuffer(),
             viewport_width,
-            viewport_height
+            viewport_height,
+            CSSRule[]
         )
     end
 end
@@ -167,7 +180,75 @@ function parse_html!(ctx::BrowserContext, html::AbstractString)::Int
         i += 1
     end
     
+    # Extract CSS from <style> blocks
+    parse_style_blocks!(ctx)
+    
     return node_count(ctx.dom)
+end
+
+"""
+    parse_style_blocks!(ctx::BrowserContext)
+
+Find <style> elements in the DOM and parse their CSS content.
+"""
+function parse_style_blocks!(ctx::BrowserContext)
+    empty!(ctx.css_rules)
+    n = node_count(ctx.dom)
+    
+    style_tag_id = intern!(ctx.strings, "style")
+    
+    for i in 1:n
+        if ctx.dom.kinds[i] != NODE_ELEMENT
+            continue
+        end
+        
+        tag_id = ctx.dom.tags[i]
+        if tag_id != style_tag_id
+            continue
+        end
+        
+        # Find text content (first text child)
+        child_id = ctx.dom.first_children[i]
+        while child_id != 0 && child_id <= n
+            if ctx.dom.kinds[child_id] == NODE_TEXT
+                text_id = ctx.dom.text_content[child_id]
+                if text_id != 0
+                    css_text = get_string(ctx.strings, text_id)
+                    parse_css_rules!(ctx, css_text)
+                end
+                break
+            end
+            child_id = ctx.dom.next_siblings[child_id]
+        end
+    end
+end
+
+"""
+    parse_css_rules!(ctx::BrowserContext, css_text::String)
+
+Parse CSS text and add rules to context.
+"""
+function parse_css_rules!(ctx::BrowserContext, css_text::String)
+    # Remove comments
+    css_text = replace(css_text, r"/\*.*?\*/"s => "")
+    
+    # Parse rule blocks: selector { declarations }
+    rule_pattern = r"([^{}]+)\{([^{}]*)\}"s
+    for m in eachmatch(rule_pattern, css_text)
+        selector = strip(m.captures[1])
+        declarations = m.captures[2]
+        
+        # Parse declarations as inline style
+        styles = parse_inline_style(declarations)
+        
+        # Handle multiple selectors separated by comma
+        for sel in split(selector, ",")
+            sel = strip(String(sel))
+            if !isempty(sel)
+                push!(ctx.css_rules, CSSRule(sel, styles))
+            end
+        end
+    end
 end
 
 """
@@ -175,7 +256,8 @@ end
 
 Apply style archetypes to all nodes.
 
-Parses inline styles and applies CSS properties to layout data.
+Applies CSS rules from style blocks and inline styles to layout data.
+Follows CSS cascade: element defaults < CSS rules < inline styles.
 
 Returns the number of unique archetypes.
 """
@@ -192,57 +274,269 @@ function apply_styles!(ctx::BrowserContext)::Int
         if ctx.dom.kinds[i] == NODE_ELEMENT
             ctx.dom.archetype_ids[i] = default_archetype
             
-            # Parse and apply inline styles
+            # Start with default styles
+            styles = CSSStyles()
+            
+            # Apply element defaults based on tag
+            apply_element_defaults!(ctx, i, styles)
+            
+            # Apply matching CSS rules
+            apply_css_rules!(ctx, i, styles)
+            
+            # Apply inline styles (highest priority)
             style_id = ctx.dom.style_attrs[i]
             if style_id != 0
                 style_str = get_string(ctx.strings, style_id)
-                styles = parse_inline_style(style_str)
-                
-                # Apply CSS positioning
-                set_css_position!(ctx.layout, i, styles.position)
-                
-                # Apply offsets
-                set_offsets!(ctx.layout, i,
-                            top=styles.top, right=styles.right,
-                            bottom=styles.bottom, left=styles.left,
-                            top_auto=styles.top_auto, right_auto=styles.right_auto,
-                            bottom_auto=styles.bottom_auto, left_auto=styles.left_auto)
-                
-                # Apply dimensions
-                if !styles.width_auto
-                    ctx.layout.width[i] = styles.width
-                end
-                if !styles.height_auto
-                    ctx.layout.height[i] = styles.height
-                end
-                
-                # Apply margins
-                set_margins!(ctx.layout, i,
-                            top=styles.margin_top, right=styles.margin_right,
-                            bottom=styles.margin_bottom, left=styles.margin_left)
-                
-                # Apply paddings
-                set_paddings!(ctx.layout, i,
-                             top=styles.padding_top, right=styles.padding_right,
-                             bottom=styles.padding_bottom, left=styles.padding_left)
-                
-                # Apply display and visibility
-                ctx.layout.display[i] = styles.display
-                set_visibility!(ctx.layout, i, styles.visibility)
-                set_overflow!(ctx.layout, i, styles.overflow)
-                set_z_index!(ctx.layout, i, styles.z_index)
-                
-                # Apply background color
-                if styles.has_background
-                    set_background_color!(ctx.layout, i,
-                                         styles.background_r, styles.background_g,
-                                         styles.background_b, styles.background_a)
-                end
+                inline_styles = parse_inline_style(style_str)
+                merge_styles!(styles, inline_styles)
             end
+            
+            # Apply final computed styles to layout
+            apply_computed_styles!(ctx, i, styles)
         end
     end
     
     return archetype_count(ctx.archetypes)
+end
+
+"""
+    apply_element_defaults!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+
+Apply default styles based on element type.
+"""
+function apply_element_defaults!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+    tag_id = ctx.dom.tags[node_id]
+    if tag_id == 0
+        return
+    end
+    
+    tag_name = lowercase(get_string(ctx.strings, tag_id))
+    
+    # Hide head, script, style elements
+    if tag_name in ["head", "script", "style", "meta", "link", "title"]
+        styles.display = DISPLAY_NONE
+    end
+end
+
+"""
+    apply_css_rules!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+
+Apply matching CSS rules to a node's styles.
+"""
+function apply_css_rules!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+    for rule in ctx.css_rules
+        if matches_selector(ctx, node_id, rule.selector)
+            merge_styles!(styles, rule.styles)
+        end
+    end
+end
+
+"""
+    matches_selector(ctx::BrowserContext, node_id::Int, selector::String) -> Bool
+
+Check if a CSS selector matches a node.
+Supports: tag, #id, .class, tag.class, tag#id
+"""
+function matches_selector(ctx::BrowserContext, node_id::Int, selector::String)::Bool
+    sel = strip(selector)
+    
+    # Get node info
+    tag_id = ctx.dom.tags[node_id]
+    tag_name = tag_id != 0 ? lowercase(get_string(ctx.strings, tag_id)) : ""
+    
+    id_attr_id = ctx.dom.id_attrs[node_id]
+    id_attr = id_attr_id != 0 ? get_string(ctx.strings, id_attr_id) : ""
+    
+    class_attr_id = ctx.dom.class_attrs[node_id]
+    class_attr = class_attr_id != 0 ? get_string(ctx.strings, class_attr_id) : ""
+    classes = split(class_attr)
+    
+    # Handle complex selectors by splitting on spaces (descendant combinator)
+    # For now, only handle the last part (the simple selector)
+    parts = split(sel)
+    if length(parts) > 1
+        sel = String(parts[end])
+    end
+    
+    # ID selector: #id
+    if startswith(sel, "#")
+        sel_id = sel[2:end]
+        return id_attr == sel_id
+    end
+    
+    # Class selector: .class
+    if startswith(sel, ".")
+        sel_class = sel[2:end]
+        return sel_class in classes
+    end
+    
+    # Combined selector: tag.class or tag#id
+    if contains(sel, ".")
+        dot_idx = findfirst('.', sel)
+        if dot_idx !== nothing
+            sel_tag = sel[1:dot_idx-1]
+            sel_class = sel[dot_idx+1:end]
+            return (isempty(sel_tag) || tag_name == sel_tag) && sel_class in classes
+        end
+    end
+    
+    if contains(sel, "#")
+        hash_idx = findfirst('#', sel)
+        if hash_idx !== nothing
+            sel_tag = sel[1:hash_idx-1]
+            sel_id = sel[hash_idx+1:end]
+            return (isempty(sel_tag) || tag_name == sel_tag) && id_attr == sel_id
+        end
+    end
+    
+    # Universal selector
+    if sel == "*"
+        return true
+    end
+    
+    # Tag selector
+    return tag_name == sel
+end
+
+"""
+    merge_styles!(target::CSSStyles, source::CSSStyles)
+
+Merge source styles into target (source overrides).
+"""
+function merge_styles!(target::CSSStyles, source::CSSStyles)
+    # Position
+    if source.position != POSITION_STATIC
+        target.position = source.position
+    end
+    
+    if !source.top_auto
+        target.top = source.top
+        target.top_auto = false
+    end
+    if !source.right_auto
+        target.right = source.right
+        target.right_auto = false
+    end
+    if !source.bottom_auto
+        target.bottom = source.bottom
+        target.bottom_auto = false
+    end
+    if !source.left_auto
+        target.left = source.left
+        target.left_auto = false
+    end
+    
+    # Dimensions
+    if !source.width_auto
+        target.width = source.width
+        target.width_auto = false
+    end
+    if !source.height_auto
+        target.height = source.height
+        target.height_auto = false
+    end
+    
+    # Box model
+    if source.margin_top != 0
+        target.margin_top = source.margin_top
+    end
+    if source.margin_right != 0
+        target.margin_right = source.margin_right
+    end
+    if source.margin_bottom != 0
+        target.margin_bottom = source.margin_bottom
+    end
+    if source.margin_left != 0
+        target.margin_left = source.margin_left
+    end
+    
+    if source.padding_top != 0
+        target.padding_top = source.padding_top
+    end
+    if source.padding_right != 0
+        target.padding_right = source.padding_right
+    end
+    if source.padding_bottom != 0
+        target.padding_bottom = source.padding_bottom
+    end
+    if source.padding_left != 0
+        target.padding_left = source.padding_left
+    end
+    
+    # Display
+    if source.display != DISPLAY_BLOCK
+        target.display = source.display
+    end
+    
+    target.visibility = source.visibility
+    
+    if source.overflow != OVERFLOW_VISIBLE
+        target.overflow = source.overflow
+    end
+    
+    if source.z_index != 0
+        target.z_index = source.z_index
+    end
+    
+    # Colors
+    if source.has_background
+        target.background_r = source.background_r
+        target.background_g = source.background_g
+        target.background_b = source.background_b
+        target.background_a = source.background_a
+        target.has_background = true
+    end
+end
+
+# Import OVERFLOW_VISIBLE for merge_styles!
+const OVERFLOW_VISIBLE = UInt8(0)
+
+"""
+    apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+
+Apply computed styles to layout data.
+"""
+function apply_computed_styles!(ctx::BrowserContext, node_id::Int, styles::CSSStyles)
+    # Apply CSS positioning
+    set_css_position!(ctx.layout, node_id, styles.position)
+    
+    # Apply offsets
+    set_offsets!(ctx.layout, node_id,
+                top=styles.top, right=styles.right,
+                bottom=styles.bottom, left=styles.left,
+                top_auto=styles.top_auto, right_auto=styles.right_auto,
+                bottom_auto=styles.bottom_auto, left_auto=styles.left_auto)
+    
+    # Apply dimensions
+    if !styles.width_auto
+        ctx.layout.width[node_id] = styles.width
+    end
+    if !styles.height_auto
+        ctx.layout.height[node_id] = styles.height
+    end
+    
+    # Apply margins
+    set_margins!(ctx.layout, node_id,
+                top=styles.margin_top, right=styles.margin_right,
+                bottom=styles.margin_bottom, left=styles.margin_left)
+    
+    # Apply paddings
+    set_paddings!(ctx.layout, node_id,
+                 top=styles.padding_top, right=styles.padding_right,
+                 bottom=styles.padding_bottom, left=styles.padding_left)
+    
+    # Apply display and visibility
+    ctx.layout.display[node_id] = styles.display
+    set_visibility!(ctx.layout, node_id, styles.visibility)
+    set_overflow!(ctx.layout, node_id, styles.overflow)
+    set_z_index!(ctx.layout, node_id, styles.z_index)
+    
+    # Apply background color
+    if styles.has_background
+        set_background_color!(ctx.layout, node_id,
+                             styles.background_r, styles.background_g,
+                             styles.background_b, styles.background_a)
+    end
 end
 
 """
