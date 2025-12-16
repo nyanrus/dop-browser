@@ -249,260 +249,88 @@ end
 
 Union type for all property values.
 """
-const PropertyValue = Union{Direction, Pack, Align, Size, Inset, Offset, Gap, Color, 
-                            Float32, Int32, Bool, String, Nothing}
+const PropertyValue = Union{Direction, Pack, Align, Size, Inset, Offset, Gap, Color, Float32, Int32, Bool, String, Nothing}
 
-"""
-    PropertyTable
+# Property field definitions: (name, type, default_value)
+const PROPERTY_FIELDS = [
+    (:direction, Direction, DIRECTION_DOWN), (:pack, Pack, PACK_START), (:align, Align, ALIGN_STRETCH),
+    (:gap_row, Float32, 0.0f0), (:gap_col, Float32, 0.0f0),
+    (:width, Float32, 0.0f0), (:height, Float32, 0.0f0),
+    (:width_spec, SizeSpec, SIZE_AUTO), (:height_spec, SizeSpec, SIZE_AUTO),
+    (:min_width, Float32, 0.0f0), (:min_height, Float32, 0.0f0),
+    (:max_width, Float32, typemax(Float32)), (:max_height, Float32, typemax(Float32)),
+    (:inset_top, Float32, 0.0f0), (:inset_right, Float32, 0.0f0), (:inset_bottom, Float32, 0.0f0), (:inset_left, Float32, 0.0f0),
+    (:offset_top, Float32, 0.0f0), (:offset_right, Float32, 0.0f0), (:offset_bottom, Float32, 0.0f0), (:offset_left, Float32, 0.0f0),
+    (:fill_r, UInt8, 0x00), (:fill_g, UInt8, 0x00), (:fill_b, UInt8, 0x00), (:fill_a, UInt8, 0x00),
+    (:round_tl, Float32, 0.0f0), (:round_tr, Float32, 0.0f0), (:round_br, Float32, 0.0f0), (:round_bl, Float32, 0.0f0),
+    (:grid_cols, UInt16, UInt16(1)), (:grid_rows, UInt16, UInt16(1)),
+    (:scroll_x, Float32, 0.0f0), (:scroll_y, Float32, 0.0f0)
+]
 
-Structure of Arrays for node properties.
-Enables efficient batch processing and SIMD operations.
-"""
+"PropertyTable - Structure of Arrays for node properties (SIMD-friendly)."
 mutable struct PropertyTable
-    # Stack/Grid properties
-    direction::Vector{Direction}
-    pack::Vector{Pack}
-    align::Vector{Align}
-    gap_row::Vector{Float32}
-    gap_col::Vector{Float32}
-    
-    # Size properties  
-    width::Vector{Float32}
-    height::Vector{Float32}
-    width_spec::Vector{SizeSpec}
-    height_spec::Vector{SizeSpec}
-    min_width::Vector{Float32}
-    min_height::Vector{Float32}
-    max_width::Vector{Float32}
-    max_height::Vector{Float32}
-    
-    # Box model
-    inset_top::Vector{Float32}
-    inset_right::Vector{Float32}
-    inset_bottom::Vector{Float32}
-    inset_left::Vector{Float32}
-    offset_top::Vector{Float32}
-    offset_right::Vector{Float32}
-    offset_bottom::Vector{Float32}
-    offset_left::Vector{Float32}
-    
-    # Colors
-    fill_r::Vector{UInt8}
-    fill_g::Vector{UInt8}
-    fill_b::Vector{UInt8}
-    fill_a::Vector{UInt8}
-    
-    # Border radius (Round in Content--)
-    round_tl::Vector{Float32}
-    round_tr::Vector{Float32}
-    round_br::Vector{Float32}
-    round_bl::Vector{Float32}
-    
-    # Grid-specific
-    grid_cols::Vector{UInt16}
-    grid_rows::Vector{UInt16}
-    
-    # Scroll-specific
-    scroll_x::Vector{Float32}
-    scroll_y::Vector{Float32}
+    direction::Vector{Direction}; pack::Vector{Pack}; align::Vector{Align}
+    gap_row::Vector{Float32}; gap_col::Vector{Float32}
+    width::Vector{Float32}; height::Vector{Float32}
+    width_spec::Vector{SizeSpec}; height_spec::Vector{SizeSpec}
+    min_width::Vector{Float32}; min_height::Vector{Float32}
+    max_width::Vector{Float32}; max_height::Vector{Float32}
+    inset_top::Vector{Float32}; inset_right::Vector{Float32}; inset_bottom::Vector{Float32}; inset_left::Vector{Float32}
+    offset_top::Vector{Float32}; offset_right::Vector{Float32}; offset_bottom::Vector{Float32}; offset_left::Vector{Float32}
+    fill_r::Vector{UInt8}; fill_g::Vector{UInt8}; fill_b::Vector{UInt8}; fill_a::Vector{UInt8}
+    round_tl::Vector{Float32}; round_tr::Vector{Float32}; round_br::Vector{Float32}; round_bl::Vector{Float32}
+    grid_cols::Vector{UInt16}; grid_rows::Vector{UInt16}
+    scroll_x::Vector{Float32}; scroll_y::Vector{Float32}
     
     function PropertyTable(capacity::Int = 0)
-        new(
-            Vector{Direction}(undef, capacity),
-            Vector{Pack}(undef, capacity),
-            Vector{Align}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{SizeSpec}(undef, capacity),
-            Vector{SizeSpec}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{UInt16}(undef, capacity),
-            Vector{UInt16}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity)
-        )
+        args = [Vector{t}(undef, capacity) for (_, t, _) in PROPERTY_FIELDS]
+        new(args...)
     end
 end
 
-"""
-    resize_properties!(table::PropertyTable, new_size::Int)
-
-Resize property arrays and initialize new entries with defaults.
-"""
+"Resize property arrays and initialize new entries with defaults."
 function resize_properties!(table::PropertyTable, new_size::Int)
     old_size = length(table.direction)
-    
-    # Resize all arrays
-    resize!(table.direction, new_size)
-    resize!(table.pack, new_size)
-    resize!(table.align, new_size)
-    resize!(table.gap_row, new_size)
-    resize!(table.gap_col, new_size)
-    resize!(table.width, new_size)
-    resize!(table.height, new_size)
-    resize!(table.width_spec, new_size)
-    resize!(table.height_spec, new_size)
-    resize!(table.min_width, new_size)
-    resize!(table.min_height, new_size)
-    resize!(table.max_width, new_size)
-    resize!(table.max_height, new_size)
-    resize!(table.inset_top, new_size)
-    resize!(table.inset_right, new_size)
-    resize!(table.inset_bottom, new_size)
-    resize!(table.inset_left, new_size)
-    resize!(table.offset_top, new_size)
-    resize!(table.offset_right, new_size)
-    resize!(table.offset_bottom, new_size)
-    resize!(table.offset_left, new_size)
-    resize!(table.fill_r, new_size)
-    resize!(table.fill_g, new_size)
-    resize!(table.fill_b, new_size)
-    resize!(table.fill_a, new_size)
-    resize!(table.round_tl, new_size)
-    resize!(table.round_tr, new_size)
-    resize!(table.round_br, new_size)
-    resize!(table.round_bl, new_size)
-    resize!(table.grid_cols, new_size)
-    resize!(table.grid_rows, new_size)
-    resize!(table.scroll_x, new_size)
-    resize!(table.scroll_y, new_size)
-    
-    # Initialize defaults for new entries
+    for (name, _, _) in PROPERTY_FIELDS
+        resize!(getfield(table, name), new_size)
+    end
     for i in (old_size + 1):new_size
-        table.direction[i] = DIRECTION_DOWN
-        table.pack[i] = PACK_START
-        table.align[i] = ALIGN_STRETCH
-        table.gap_row[i] = 0.0f0
-        table.gap_col[i] = 0.0f0
-        table.width[i] = 0.0f0
-        table.height[i] = 0.0f0
-        table.width_spec[i] = SIZE_AUTO
-        table.height_spec[i] = SIZE_AUTO
-        table.min_width[i] = 0.0f0
-        table.min_height[i] = 0.0f0
-        table.max_width[i] = typemax(Float32)
-        table.max_height[i] = typemax(Float32)
-        table.inset_top[i] = 0.0f0
-        table.inset_right[i] = 0.0f0
-        table.inset_bottom[i] = 0.0f0
-        table.inset_left[i] = 0.0f0
-        table.offset_top[i] = 0.0f0
-        table.offset_right[i] = 0.0f0
-        table.offset_bottom[i] = 0.0f0
-        table.offset_left[i] = 0.0f0
-        table.fill_r[i] = 0x00
-        table.fill_g[i] = 0x00
-        table.fill_b[i] = 0x00
-        table.fill_a[i] = 0x00  # Transparent
-        table.round_tl[i] = 0.0f0
-        table.round_tr[i] = 0.0f0
-        table.round_br[i] = 0.0f0
-        table.round_bl[i] = 0.0f0
-        table.grid_cols[i] = UInt16(1)
-        table.grid_rows[i] = UInt16(1)
-        table.scroll_x[i] = 0.0f0
-        table.scroll_y[i] = 0.0f0
+        for (name, _, default) in PROPERTY_FIELDS
+            getfield(table, name)[i] = default
+        end
     end
 end
 
-"""
-    set_property!(table::PropertyTable, id::Int, prop::Symbol, value)
+@inline valid_prop_id(table, id) = id >= 1 && id <= length(table.direction)
 
-Set a property value for a node.
-"""
+"Set a property value for a node."
 function set_property!(table::PropertyTable, id::Int, prop::Symbol, value)
-    if id < 1 || id > length(table.direction)
-        return
-    end
-    
-    if prop == :direction
-        table.direction[id] = value
-    elseif prop == :pack
-        table.pack[id] = value
-    elseif prop == :align
-        table.align[id] = value
-    elseif prop == :gap_row
-        table.gap_row[id] = Float32(value)
-    elseif prop == :gap_col
-        table.gap_col[id] = Float32(value)
-    elseif prop == :width
-        table.width[id] = Float32(value)
-    elseif prop == :height
-        table.height[id] = Float32(value)
-    elseif prop == :fill
-        c = value::Color
-        table.fill_r[id] = c.r
-        table.fill_g[id] = c.g
-        table.fill_b[id] = c.b
-        table.fill_a[id] = c.a
-    elseif prop == :inset
-        i = value::Inset
-        table.inset_top[id] = i.top
-        table.inset_right[id] = i.right
-        table.inset_bottom[id] = i.bottom
-        table.inset_left[id] = i.left
-    elseif prop == :offset
-        o = value::Offset
-        table.offset_top[id] = o.top
-        table.offset_right[id] = o.right
-        table.offset_bottom[id] = o.bottom
-        table.offset_left[id] = o.left
+    valid_prop_id(table, id) || return
+    if prop == :direction;  table.direction[id] = value
+    elseif prop == :pack;   table.pack[id] = value
+    elseif prop == :align;  table.align[id] = value
+    elseif prop == :gap_row; table.gap_row[id] = Float32(value)
+    elseif prop == :gap_col; table.gap_col[id] = Float32(value)
+    elseif prop == :width;  table.width[id] = Float32(value)
+    elseif prop == :height; table.height[id] = Float32(value)
+    elseif prop == :fill;   c = value::Color; table.fill_r[id], table.fill_g[id], table.fill_b[id], table.fill_a[id] = c.r, c.g, c.b, c.a
+    elseif prop == :inset;  i = value::Inset; table.inset_top[id], table.inset_right[id], table.inset_bottom[id], table.inset_left[id] = i.top, i.right, i.bottom, i.left
+    elseif prop == :offset; o = value::Offset; table.offset_top[id], table.offset_right[id], table.offset_bottom[id], table.offset_left[id] = o.top, o.right, o.bottom, o.left
     end
 end
 
-"""
-    get_property(table::PropertyTable, id::Int, prop::Symbol) -> PropertyValue
-
-Get a property value for a node.
-"""
+"Get a property value for a node."
 function get_property(table::PropertyTable, id::Int, prop::Symbol)::PropertyValue
-    if id < 1 || id > length(table.direction)
-        return nothing
-    end
-    
-    if prop == :direction
-        return table.direction[id]
-    elseif prop == :pack
-        return table.pack[id]
-    elseif prop == :align
-        return table.align[id]
-    elseif prop == :width
-        return table.width[id]
-    elseif prop == :height
-        return table.height[id]
-    elseif prop == :fill
-        return Color(table.fill_r[id], table.fill_g[id], 
-                     table.fill_b[id], table.fill_a[id])
-    elseif prop == :inset
-        return Inset(table.inset_top[id], table.inset_right[id],
-                     table.inset_bottom[id], table.inset_left[id])
-    elseif prop == :offset
-        return Offset(table.offset_top[id], table.offset_right[id],
-                      table.offset_bottom[id], table.offset_left[id])
-    end
-    
-    return nothing
+    valid_prop_id(table, id) || return nothing
+    prop == :direction && return table.direction[id]
+    prop == :pack && return table.pack[id]
+    prop == :align && return table.align[id]
+    prop == :width && return table.width[id]
+    prop == :height && return table.height[id]
+    prop == :fill && return Color(table.fill_r[id], table.fill_g[id], table.fill_b[id], table.fill_a[id])
+    prop == :inset && return Inset(table.inset_top[id], table.inset_right[id], table.inset_bottom[id], table.inset_left[id])
+    prop == :offset && return Offset(table.offset_top[id], table.offset_right[id], table.offset_bottom[id], table.offset_left[id])
+    nothing
 end
 
 end # module Properties
