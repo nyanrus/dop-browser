@@ -14,6 +14,7 @@ style Derived(use: Base, Border: 1px);  // Inherits Base, flattened at compile
 - All inheritance resolved at AOT (zero runtime lookup cost)
 - Archetype-based deduplication for efficient memory usage
 - Direct binary patching for WASM runtime updates
+- Metadata-driven property operations for maintainability
 """
 module Styles
 
@@ -23,6 +24,49 @@ using ..Properties: Color, parse_color, Direction, Pack, Align, Size, Inset, Off
 export StyleDeclaration, StyleTable, FlatStyle, StyleResolver
 export create_style!, inherit_style!, flatten_styles!, get_style, style_count
 export resolve_archetype!, get_archetype_styles
+export FLAT_STYLE_FIELDS
+
+# ============================================================================
+# Metadata-driven FlatStyle fields definition
+# Format: (name::Symbol, type::DataType, default_value)
+# This metadata enables loop-based operations instead of repetitive code
+# ============================================================================
+const FLAT_STYLE_FIELDS = [
+    # Layout
+    (:direction, Direction, DIRECTION_DOWN),
+    (:pack, Pack, PACK_START),
+    (:align, Align, ALIGN_STRETCH),
+    (:gap_row, Float32, 0.0f0),
+    (:gap_col, Float32, 0.0f0),
+    # Dimensions
+    (:width, Float32, 0.0f0),
+    (:height, Float32, 0.0f0),
+    (:min_width, Float32, 0.0f0),
+    (:min_height, Float32, 0.0f0),
+    (:max_width, Float32, typemax(Float32)),
+    (:max_height, Float32, typemax(Float32)),
+    # Box model (inset = padding, offset = margin in Content-- semantics)
+    (:inset_top, Float32, 0.0f0),
+    (:inset_right, Float32, 0.0f0),
+    (:inset_bottom, Float32, 0.0f0),
+    (:inset_left, Float32, 0.0f0),
+    (:offset_top, Float32, 0.0f0),
+    (:offset_right, Float32, 0.0f0),
+    (:offset_bottom, Float32, 0.0f0),
+    (:offset_left, Float32, 0.0f0),
+    # Colors
+    (:fill_r, UInt8, 0x00),
+    (:fill_g, UInt8, 0x00),
+    (:fill_b, UInt8, 0x00),
+    (:fill_a, UInt8, 0x00),
+    # Border radius
+    (:round, Float32, 0.0f0),
+]
+
+"Generate default props dictionary from FLAT_STYLE_FIELDS metadata."
+function _default_style_props()::Dict{Symbol, Any}
+    return Dict{Symbol, Any}(name => default for (name, _, default) in FLAT_STYLE_FIELDS)
+end
 
 """
     StyleDeclaration
@@ -51,6 +95,8 @@ end
 
 A completely flattened style with all inheritance resolved.
 Optimized for direct memcpy to layout arrays.
+
+Fields are defined by FLAT_STYLE_FIELDS metadata for maintainability.
 """
 struct FlatStyle
     # Layout
@@ -97,18 +143,16 @@ end
 Create a default flat style with all properties at their defaults.
 """
 function default_flat_style()::FlatStyle
-    return FlatStyle(
-        DIRECTION_DOWN, PACK_START, ALIGN_STRETCH,
-        0.0f0, 0.0f0,  # gap
-        0.0f0, 0.0f0,  # size
-        0.0f0, 0.0f0,  # min size
-        typemax(Float32), typemax(Float32),  # max size
-        0.0f0, 0.0f0, 0.0f0, 0.0f0,  # inset
-        0.0f0, 0.0f0, 0.0f0, 0.0f0,  # offset
-        0x00, 0x00, 0x00, 0x00,  # fill (transparent)
-        0.0f0,  # round
-        UInt64(0)  # hash
-    )
+    # Use metadata to build defaults tuple
+    defaults = tuple((default for (_, _, default) in FLAT_STYLE_FIELDS)..., UInt64(0))
+    return FlatStyle(defaults...)
+end
+
+"Copy all properties from FlatStyle to props dictionary using metadata."
+function _copy_flat_to_props!(props::Dict{Symbol, Any}, flat::FlatStyle)
+    for (name, _, _) in FLAT_STYLE_FIELDS
+        props[name] = getfield(flat, name)
+    end
 end
 
 """
@@ -182,6 +226,7 @@ end
                   visited::Set{UInt32}=Set{UInt32}()) -> FlatStyle
 
 Recursively flatten a style by resolving all inheritance.
+Uses FLAT_STYLE_FIELDS metadata to avoid repetitive code.
 """
 function flatten_style(table::StyleTable, style_id::UInt32,
                        visited::Set{UInt32}=Set{UInt32}())::FlatStyle
@@ -197,65 +242,16 @@ function flatten_style(table::StyleTable, style_id::UInt32,
     
     decl = table.declarations[style_id]
     
-    # Start with defaults
-    props = Dict{Symbol, Any}(
-        :direction => DIRECTION_DOWN,
-        :pack => PACK_START,
-        :align => ALIGN_STRETCH,
-        :gap_row => 0.0f0,
-        :gap_col => 0.0f0,
-        :width => 0.0f0,
-        :height => 0.0f0,
-        :min_width => 0.0f0,
-        :min_height => 0.0f0,
-        :max_width => typemax(Float32),
-        :max_height => typemax(Float32),
-        :inset_top => 0.0f0,
-        :inset_right => 0.0f0,
-        :inset_bottom => 0.0f0,
-        :inset_left => 0.0f0,
-        :offset_top => 0.0f0,
-        :offset_right => 0.0f0,
-        :offset_bottom => 0.0f0,
-        :offset_left => 0.0f0,
-        :fill_r => 0x00,
-        :fill_g => 0x00,
-        :fill_b => 0x00,
-        :fill_a => 0x00,
-        :round => 0.0f0
-    )
+    # Start with defaults from metadata
+    props = _default_style_props()
     
-    # Apply parent styles first (in order)
+    # Apply parent styles first (in order) - use metadata-driven copy
     for parent_id in decl.parent_ids
         parent_flat = flatten_style(table, parent_id, copy(visited))
-        # Copy parent properties
-        props[:direction] = parent_flat.direction
-        props[:pack] = parent_flat.pack
-        props[:align] = parent_flat.align
-        props[:gap_row] = parent_flat.gap_row
-        props[:gap_col] = parent_flat.gap_col
-        props[:width] = parent_flat.width
-        props[:height] = parent_flat.height
-        props[:min_width] = parent_flat.min_width
-        props[:min_height] = parent_flat.min_height
-        props[:max_width] = parent_flat.max_width
-        props[:max_height] = parent_flat.max_height
-        props[:inset_top] = parent_flat.inset_top
-        props[:inset_right] = parent_flat.inset_right
-        props[:inset_bottom] = parent_flat.inset_bottom
-        props[:inset_left] = parent_flat.inset_left
-        props[:offset_top] = parent_flat.offset_top
-        props[:offset_right] = parent_flat.offset_right
-        props[:offset_bottom] = parent_flat.offset_bottom
-        props[:offset_left] = parent_flat.offset_left
-        props[:fill_r] = parent_flat.fill_r
-        props[:fill_g] = parent_flat.fill_g
-        props[:fill_b] = parent_flat.fill_b
-        props[:fill_a] = parent_flat.fill_a
-        props[:round] = parent_flat.round
+        _copy_flat_to_props!(props, parent_flat)
     end
     
-    # Apply own properties (override parents)
+    # Apply own properties (override parents) - handle compound properties
     for (key, value) in decl.properties
         if key == :fill && value isa Color
             props[:fill_r] = value.r
@@ -285,21 +281,14 @@ function flatten_style(table::StyleTable, style_id::UInt32,
               props[:fill_r], props[:fill_g], props[:fill_b], props[:fill_a],
               props[:width], props[:height]))
     
-    return FlatStyle(
-        props[:direction], props[:pack], props[:align],
-        Float32(props[:gap_row]), Float32(props[:gap_col]),
-        Float32(props[:width]), Float32(props[:height]),
-        Float32(props[:min_width]), Float32(props[:min_height]),
-        Float32(props[:max_width]), Float32(props[:max_height]),
-        Float32(props[:inset_top]), Float32(props[:inset_right]),
-        Float32(props[:inset_bottom]), Float32(props[:inset_left]),
-        Float32(props[:offset_top]), Float32(props[:offset_right]),
-        Float32(props[:offset_bottom]), Float32(props[:offset_left]),
-        UInt8(props[:fill_r]), UInt8(props[:fill_g]),
-        UInt8(props[:fill_b]), UInt8(props[:fill_a]),
-        Float32(props[:round]),
-        h
-    )
+    # Build FlatStyle from props using metadata for type conversion
+    values = Any[]
+    for (name, T, _) in FLAT_STYLE_FIELDS
+        push!(values, convert(T, props[name]))
+    end
+    push!(values, h)  # Add hash
+    
+    return FlatStyle(values...)
 end
 
 """

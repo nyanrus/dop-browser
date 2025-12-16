@@ -734,10 +734,22 @@ function create_lowered_node(cm_type::NodeType, dom_id::UInt32, parent_cm_id::UI
     )
 end
 
+# ============================================================================
+# Metadata for shared fields between LoweredNode and PropertyTable
+# This enables loop-based copying during apply_properties!
+# ============================================================================
+const LOWERED_TO_PROPERTY_FIELDS = [
+    :direction, :pack, :align, :width, :height,
+    :inset_top, :inset_right, :inset_bottom, :inset_left,
+    :offset_top, :offset_right, :offset_bottom, :offset_left,
+    :fill_r, :fill_g, :fill_b, :fill_a
+]
+
 """
     apply_properties!(ctx::HTMLLoweringContext)
 
 Apply lowered node properties to Content-- property table.
+Uses LOWERED_TO_PROPERTY_FIELDS metadata for field-by-field copy.
 """
 function apply_properties!(ctx::HTMLLoweringContext)
     n = length(ctx.nodes)
@@ -749,10 +761,7 @@ function apply_properties!(ctx::HTMLLoweringContext)
     
     # Copy node properties to property table using metadata
     for (i, node) in enumerate(ctx.nodes)
-        for field in [:direction, :pack, :align, :width, :height,
-                      :inset_top, :inset_right, :inset_bottom, :inset_left,
-                      :offset_top, :offset_right, :offset_bottom, :offset_left,
-                      :fill_r, :fill_g, :fill_b, :fill_a]
+        for field in LOWERED_TO_PROPERTY_FIELDS
             getfield(ctx.cm_props, field)[i] = getfield(node, field)
         end
     end
