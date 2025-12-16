@@ -2,9 +2,7 @@
     LayoutArrays
 
 SIMD-friendly layout computation using contiguous float arrays.
-
-Layout data is stored in Structure of Arrays format, enabling
-vectorized computation across multiple nodes simultaneously.
+Layout data is stored in Structure of Arrays format for vectorized computation.
 """
 module LayoutArrays
 
@@ -12,35 +10,13 @@ export LayoutData, resize_layout!, set_bounds!, get_bounds, set_position!, get_p
 export set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!
 export set_background_color!, get_background_color, set_borders!, has_border, set_float!, set_clear!
 
-# Position types (matching CSSParser)
-const POSITION_STATIC = UInt8(0)
-const POSITION_RELATIVE = UInt8(1)
-const POSITION_ABSOLUTE = UInt8(2)
-const POSITION_FIXED = UInt8(3)
-
-# Overflow types
-const OVERFLOW_VISIBLE = UInt8(0)
-const OVERFLOW_HIDDEN = UInt8(1)
-
-# Display types (matching CSSParser)
-const DISPLAY_NONE = UInt8(0)
-const DISPLAY_BLOCK = UInt8(1)
-const DISPLAY_INLINE = UInt8(2)
-const DISPLAY_TABLE = UInt8(3)
-const DISPLAY_TABLE_CELL = UInt8(4)
-const DISPLAY_TABLE_ROW = UInt8(5)
-const DISPLAY_INLINE_BLOCK = UInt8(6)
-
-# Float types
-const FLOAT_NONE = UInt8(0)
-const FLOAT_LEFT = UInt8(1)
-const FLOAT_RIGHT = UInt8(2)
-
-# Clear types
-const CLEAR_NONE = UInt8(0)
-const CLEAR_LEFT = UInt8(1)
-const CLEAR_RIGHT = UInt8(2)
-const CLEAR_BOTH = UInt8(3)
+# Constants (position, overflow, display, float, clear)
+const POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED = UInt8(0), UInt8(1), UInt8(2), UInt8(3)
+const OVERFLOW_VISIBLE, OVERFLOW_HIDDEN = UInt8(0), UInt8(1)
+const DISPLAY_NONE, DISPLAY_BLOCK, DISPLAY_INLINE = UInt8(0), UInt8(1), UInt8(2)
+const DISPLAY_TABLE, DISPLAY_TABLE_CELL, DISPLAY_TABLE_ROW, DISPLAY_INLINE_BLOCK = UInt8(3), UInt8(4), UInt8(5), UInt8(6)
+const FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT = UInt8(0), UInt8(1), UInt8(2)
+const CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH = UInt8(0), UInt8(1), UInt8(2), UInt8(3)
 
 """
     LayoutData
@@ -73,634 +49,210 @@ All arrays are pre-allocated and resized together.
     |                    margin_bottom                 |
     +--------------------------------------------------+
 """
-mutable struct LayoutData
+
+# Field specifications: (name, type, default_value)
+const LAYOUT_FIELDS = [
     # Position & dimensions
-    x::Vector{Float32}
-    y::Vector{Float32}
-    width::Vector{Float32}
-    height::Vector{Float32}
-    content_width::Vector{Float32}
-    content_height::Vector{Float32}
-    
-    # Box model - margin (offset in Content-- terms)
-    margin_top::Vector{Float32}
-    margin_right::Vector{Float32}
-    margin_bottom::Vector{Float32}
-    margin_left::Vector{Float32}
-    
-    # Box model - padding (inset in Content-- terms)
-    padding_top::Vector{Float32}
-    padding_right::Vector{Float32}
-    padding_bottom::Vector{Float32}
-    padding_left::Vector{Float32}
-    
-    # Box model - border (stroke in Content-- terms)
-    border_top_width::Vector{Float32}
-    border_right_width::Vector{Float32}
-    border_bottom_width::Vector{Float32}
-    border_left_width::Vector{Float32}
-    border_top_style::Vector{UInt8}
-    border_right_style::Vector{UInt8}
-    border_bottom_style::Vector{UInt8}
-    border_left_style::Vector{UInt8}
-    border_top_r::Vector{UInt8}
-    border_top_g::Vector{UInt8}
-    border_top_b::Vector{UInt8}
-    border_top_a::Vector{UInt8}
-    border_right_r::Vector{UInt8}
-    border_right_g::Vector{UInt8}
-    border_right_b::Vector{UInt8}
-    border_right_a::Vector{UInt8}
-    border_bottom_r::Vector{UInt8}
-    border_bottom_g::Vector{UInt8}
-    border_bottom_b::Vector{UInt8}
-    border_bottom_a::Vector{UInt8}
-    border_left_r::Vector{UInt8}
-    border_left_g::Vector{UInt8}
-    border_left_b::Vector{UInt8}
-    border_left_a::Vector{UInt8}
-    
+    (:x, Float32, 0.0f0), (:y, Float32, 0.0f0), (:width, Float32, 0.0f0), (:height, Float32, 0.0f0),
+    (:content_width, Float32, 0.0f0), (:content_height, Float32, 0.0f0),
+    # Margins
+    (:margin_top, Float32, 0.0f0), (:margin_right, Float32, 0.0f0), 
+    (:margin_bottom, Float32, 0.0f0), (:margin_left, Float32, 0.0f0),
+    # Paddings
+    (:padding_top, Float32, 0.0f0), (:padding_right, Float32, 0.0f0),
+    (:padding_bottom, Float32, 0.0f0), (:padding_left, Float32, 0.0f0),
+    # Border widths
+    (:border_top_width, Float32, 0.0f0), (:border_right_width, Float32, 0.0f0),
+    (:border_bottom_width, Float32, 0.0f0), (:border_left_width, Float32, 0.0f0),
+    # Border styles
+    (:border_top_style, UInt8, 0x00), (:border_right_style, UInt8, 0x00),
+    (:border_bottom_style, UInt8, 0x00), (:border_left_style, UInt8, 0x00),
+    # Border colors (top, right, bottom, left - RGBA each)
+    (:border_top_r, UInt8, 0x00), (:border_top_g, UInt8, 0x00), (:border_top_b, UInt8, 0x00), (:border_top_a, UInt8, 0x00),
+    (:border_right_r, UInt8, 0x00), (:border_right_g, UInt8, 0x00), (:border_right_b, UInt8, 0x00), (:border_right_a, UInt8, 0x00),
+    (:border_bottom_r, UInt8, 0x00), (:border_bottom_g, UInt8, 0x00), (:border_bottom_b, UInt8, 0x00), (:border_bottom_a, UInt8, 0x00),
+    (:border_left_r, UInt8, 0x00), (:border_left_g, UInt8, 0x00), (:border_left_b, UInt8, 0x00), (:border_left_a, UInt8, 0x00),
     # CSS positioning
-    position_type::Vector{UInt8}  # POSITION_*
-    offset_top::Vector{Float32}
-    offset_right::Vector{Float32}
-    offset_bottom::Vector{Float32}
-    offset_left::Vector{Float32}
-    offset_top_auto::Vector{Bool}
-    offset_right_auto::Vector{Bool}
-    offset_bottom_auto::Vector{Bool}
-    offset_left_auto::Vector{Bool}
-    z_index::Vector{Int32}
-    
+    (:position_type, UInt8, POSITION_STATIC), (:offset_top, Float32, 0.0f0), (:offset_right, Float32, 0.0f0),
+    (:offset_bottom, Float32, 0.0f0), (:offset_left, Float32, 0.0f0),
+    (:offset_top_auto, Bool, true), (:offset_right_auto, Bool, true), (:offset_bottom_auto, Bool, true), (:offset_left_auto, Bool, true),
+    (:z_index, Int32, Int32(0)),
     # Float and clear
-    float_type::Vector{UInt8}  # 0=none, 1=left, 2=right
-    clear_type::Vector{UInt8}  # 0=none, 1=left, 2=right, 3=both
-    
-    # Display & visibility
-    display::Vector{UInt8}
-    visibility::Vector{Bool}
-    overflow::Vector{UInt8}
-    
-    # Colors (RGBA 0-255)
-    bg_r::Vector{UInt8}
-    bg_g::Vector{UInt8}
-    bg_b::Vector{UInt8}
-    bg_a::Vector{UInt8}
-    has_background::Vector{Bool}
-    
-    dirty::Vector{Bool}
+    (:float_type, UInt8, 0x00), (:clear_type, UInt8, 0x00),
+    # Display & visibility  
+    (:display, UInt8, DISPLAY_BLOCK), (:visibility, Bool, true), (:overflow, UInt8, OVERFLOW_VISIBLE),
+    # Background colors
+    (:bg_r, UInt8, 0xff), (:bg_g, UInt8, 0xff), (:bg_b, UInt8, 0xff), (:bg_a, UInt8, 0x00),
+    (:has_background, Bool, false), (:dirty, Bool, true)
+]
+
+"LayoutData - Structure of Arrays for layout computation (SIMD-friendly)."
+mutable struct LayoutData
+    x::Vector{Float32}; y::Vector{Float32}; width::Vector{Float32}; height::Vector{Float32}
+    content_width::Vector{Float32}; content_height::Vector{Float32}
+    margin_top::Vector{Float32}; margin_right::Vector{Float32}; margin_bottom::Vector{Float32}; margin_left::Vector{Float32}
+    padding_top::Vector{Float32}; padding_right::Vector{Float32}; padding_bottom::Vector{Float32}; padding_left::Vector{Float32}
+    border_top_width::Vector{Float32}; border_right_width::Vector{Float32}; border_bottom_width::Vector{Float32}; border_left_width::Vector{Float32}
+    border_top_style::Vector{UInt8}; border_right_style::Vector{UInt8}; border_bottom_style::Vector{UInt8}; border_left_style::Vector{UInt8}
+    border_top_r::Vector{UInt8}; border_top_g::Vector{UInt8}; border_top_b::Vector{UInt8}; border_top_a::Vector{UInt8}
+    border_right_r::Vector{UInt8}; border_right_g::Vector{UInt8}; border_right_b::Vector{UInt8}; border_right_a::Vector{UInt8}
+    border_bottom_r::Vector{UInt8}; border_bottom_g::Vector{UInt8}; border_bottom_b::Vector{UInt8}; border_bottom_a::Vector{UInt8}
+    border_left_r::Vector{UInt8}; border_left_g::Vector{UInt8}; border_left_b::Vector{UInt8}; border_left_a::Vector{UInt8}
+    position_type::Vector{UInt8}; offset_top::Vector{Float32}; offset_right::Vector{Float32}; offset_bottom::Vector{Float32}; offset_left::Vector{Float32}
+    offset_top_auto::Vector{Bool}; offset_right_auto::Vector{Bool}; offset_bottom_auto::Vector{Bool}; offset_left_auto::Vector{Bool}
+    z_index::Vector{Int32}; float_type::Vector{UInt8}; clear_type::Vector{UInt8}
+    display::Vector{UInt8}; visibility::Vector{Bool}; overflow::Vector{UInt8}
+    bg_r::Vector{UInt8}; bg_g::Vector{UInt8}; bg_b::Vector{UInt8}; bg_a::Vector{UInt8}
+    has_background::Vector{Bool}; dirty::Vector{Bool}
     
     function LayoutData(capacity::Int = 0)
-        new(
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            # margin
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            # padding
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            # border widths
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            # border styles
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            # border top color
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            # border right color
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            # border bottom color
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            # border left color
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            # positioning
-            Vector{UInt8}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Float32}(undef, capacity),
-            Vector{Bool}(undef, capacity),
-            Vector{Bool}(undef, capacity),
-            Vector{Bool}(undef, capacity),
-            Vector{Bool}(undef, capacity),
-            Vector{Int32}(undef, capacity),
-            # float and clear
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            # display
-            Vector{UInt8}(undef, capacity),
-            Vector{Bool}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            # colors
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{UInt8}(undef, capacity),
-            Vector{Bool}(undef, capacity),
-            Vector{Bool}(undef, capacity)
-        )
+        args = [Vector{t}(undef, capacity) for (_, t, _) in LAYOUT_FIELDS]
+        new(args...)
     end
 end
 
-"""
-    resize_layout!(layout::LayoutData, new_size::Int)
-
-Resize all layout arrays to accommodate `new_size` nodes.
-New entries are zero-initialized.
-"""
+"Resize all layout arrays. New entries are initialized with defaults from LAYOUT_FIELDS."
 function resize_layout!(layout::LayoutData, new_size::Int)
     old_size = length(layout.x)
-    
-    resize!(layout.x, new_size)
-    resize!(layout.y, new_size)
-    resize!(layout.width, new_size)
-    resize!(layout.height, new_size)
-    resize!(layout.content_width, new_size)
-    resize!(layout.content_height, new_size)
-    resize!(layout.margin_top, new_size)
-    resize!(layout.margin_right, new_size)
-    resize!(layout.margin_bottom, new_size)
-    resize!(layout.margin_left, new_size)
-    resize!(layout.padding_top, new_size)
-    resize!(layout.padding_right, new_size)
-    resize!(layout.padding_bottom, new_size)
-    resize!(layout.padding_left, new_size)
-    # Border widths
-    resize!(layout.border_top_width, new_size)
-    resize!(layout.border_right_width, new_size)
-    resize!(layout.border_bottom_width, new_size)
-    resize!(layout.border_left_width, new_size)
-    # Border styles
-    resize!(layout.border_top_style, new_size)
-    resize!(layout.border_right_style, new_size)
-    resize!(layout.border_bottom_style, new_size)
-    resize!(layout.border_left_style, new_size)
-    # Border colors
-    resize!(layout.border_top_r, new_size)
-    resize!(layout.border_top_g, new_size)
-    resize!(layout.border_top_b, new_size)
-    resize!(layout.border_top_a, new_size)
-    resize!(layout.border_right_r, new_size)
-    resize!(layout.border_right_g, new_size)
-    resize!(layout.border_right_b, new_size)
-    resize!(layout.border_right_a, new_size)
-    resize!(layout.border_bottom_r, new_size)
-    resize!(layout.border_bottom_g, new_size)
-    resize!(layout.border_bottom_b, new_size)
-    resize!(layout.border_bottom_a, new_size)
-    resize!(layout.border_left_r, new_size)
-    resize!(layout.border_left_g, new_size)
-    resize!(layout.border_left_b, new_size)
-    resize!(layout.border_left_a, new_size)
-    # Positioning
-    resize!(layout.position_type, new_size)
-    resize!(layout.offset_top, new_size)
-    resize!(layout.offset_right, new_size)
-    resize!(layout.offset_bottom, new_size)
-    resize!(layout.offset_left, new_size)
-    resize!(layout.offset_top_auto, new_size)
-    resize!(layout.offset_right_auto, new_size)
-    resize!(layout.offset_bottom_auto, new_size)
-    resize!(layout.offset_left_auto, new_size)
-    resize!(layout.z_index, new_size)
-    # Float and clear
-    resize!(layout.float_type, new_size)
-    resize!(layout.clear_type, new_size)
-    resize!(layout.display, new_size)
-    resize!(layout.visibility, new_size)
-    resize!(layout.overflow, new_size)
-    resize!(layout.bg_r, new_size)
-    resize!(layout.bg_g, new_size)
-    resize!(layout.bg_b, new_size)
-    resize!(layout.bg_a, new_size)
-    resize!(layout.has_background, new_size)
-    resize!(layout.dirty, new_size)
-    
-    # Zero-initialize new entries
+    # Resize all arrays using field metadata
+    for (name, _, _) in LAYOUT_FIELDS
+        resize!(getfield(layout, name), new_size)
+    end
+    # Initialize new entries with defaults
     for i in (old_size + 1):new_size
-        layout.x[i] = 0.0f0
-        layout.y[i] = 0.0f0
-        layout.width[i] = 0.0f0
-        layout.height[i] = 0.0f0
-        layout.content_width[i] = 0.0f0
-        layout.content_height[i] = 0.0f0
-        layout.margin_top[i] = 0.0f0
-        layout.margin_right[i] = 0.0f0
-        layout.margin_bottom[i] = 0.0f0
-        layout.margin_left[i] = 0.0f0
-        layout.padding_top[i] = 0.0f0
-        layout.padding_right[i] = 0.0f0
-        layout.padding_bottom[i] = 0.0f0
-        layout.padding_left[i] = 0.0f0
-        # Border widths
-        layout.border_top_width[i] = 0.0f0
-        layout.border_right_width[i] = 0.0f0
-        layout.border_bottom_width[i] = 0.0f0
-        layout.border_left_width[i] = 0.0f0
-        # Border styles (0 = none)
-        layout.border_top_style[i] = 0x00
-        layout.border_right_style[i] = 0x00
-        layout.border_bottom_style[i] = 0x00
-        layout.border_left_style[i] = 0x00
-        # Border colors (black by default)
-        layout.border_top_r[i] = 0x00
-        layout.border_top_g[i] = 0x00
-        layout.border_top_b[i] = 0x00
-        layout.border_top_a[i] = 0x00
-        layout.border_right_r[i] = 0x00
-        layout.border_right_g[i] = 0x00
-        layout.border_right_b[i] = 0x00
-        layout.border_right_a[i] = 0x00
-        layout.border_bottom_r[i] = 0x00
-        layout.border_bottom_g[i] = 0x00
-        layout.border_bottom_b[i] = 0x00
-        layout.border_bottom_a[i] = 0x00
-        layout.border_left_r[i] = 0x00
-        layout.border_left_g[i] = 0x00
-        layout.border_left_b[i] = 0x00
-        layout.border_left_a[i] = 0x00
-        # Positioning
-        layout.position_type[i] = POSITION_STATIC
-        layout.offset_top[i] = 0.0f0
-        layout.offset_right[i] = 0.0f0
-        layout.offset_bottom[i] = 0.0f0
-        layout.offset_left[i] = 0.0f0
-        layout.offset_top_auto[i] = true
-        layout.offset_right_auto[i] = true
-        layout.offset_bottom_auto[i] = true
-        layout.offset_left_auto[i] = true
-        layout.z_index[i] = Int32(0)
-        # Float and clear
-        layout.float_type[i] = 0x00  # none
-        layout.clear_type[i] = 0x00  # none
-        layout.display[i] = DISPLAY_BLOCK
-        layout.visibility[i] = true
-        layout.overflow[i] = OVERFLOW_VISIBLE
-        layout.bg_r[i] = 0xff
-        layout.bg_g[i] = 0xff
-        layout.bg_b[i] = 0xff
-        layout.bg_a[i] = 0x00  # transparent
-        layout.has_background[i] = false
-        layout.dirty[i] = true
+        for (name, _, default) in LAYOUT_FIELDS
+            getfield(layout, name)[i] = default
+        end
     end
-    
-    return layout
+    layout
 end
 
-"""
-    set_bounds!(layout::LayoutData, id::Int, width::Float32, height::Float32)
+# Helper to check valid id range
+@inline valid_id(layout, id) = id >= 1 && id <= length(layout.x)
 
-Set the width and height for a node.
-"""
+"Set width and height for a node."
 function set_bounds!(layout::LayoutData, id::Int, width::Float32, height::Float32)
-    if id >= 1 && id <= length(layout.width)
-        layout.width[id] = width
-        layout.height[id] = height
-        layout.dirty[id] = true
-    end
+    valid_id(layout, id) && (layout.width[id] = width; layout.height[id] = height; layout.dirty[id] = true)
 end
 
-"""
-    get_bounds(layout::LayoutData, id::Int) -> Tuple{Float32, Float32}
+"Get width and height for a node."
+get_bounds(layout::LayoutData, id::Int)::Tuple{Float32, Float32} = 
+    valid_id(layout, id) ? (layout.width[id], layout.height[id]) : (0.0f0, 0.0f0)
 
-Get the width and height for a node.
-"""
-function get_bounds(layout::LayoutData, id::Int)::Tuple{Float32, Float32}
-    if id >= 1 && id <= length(layout.width)
-        return (layout.width[id], layout.height[id])
-    end
-    return (0.0f0, 0.0f0)
-end
-
-"""
-    set_position!(layout::LayoutData, id::Int, x::Float32, y::Float32)
-
-Set the position for a node.
-"""
+"Set position for a node."
 function set_position!(layout::LayoutData, id::Int, x::Float32, y::Float32)
-    if id >= 1 && id <= length(layout.x)
-        layout.x[id] = x
-        layout.y[id] = y
-    end
+    valid_id(layout, id) && (layout.x[id] = x; layout.y[id] = y)
 end
 
-"""
-    get_position(layout::LayoutData, id::Int) -> Tuple{Float32, Float32}
+"Get position for a node."
+get_position(layout::LayoutData, id::Int)::Tuple{Float32, Float32} = 
+    valid_id(layout, id) ? (layout.x[id], layout.y[id]) : (0.0f0, 0.0f0)
 
-Get the position for a node.
-"""
-function get_position(layout::LayoutData, id::Int)::Tuple{Float32, Float32}
-    if id >= 1 && id <= length(layout.x)
-        return (layout.x[id], layout.y[id])
-    end
-    return (0.0f0, 0.0f0)
-end
-
-"""
-    set_css_position!(layout::LayoutData, id::Int, pos_type::UInt8)
-
-Set the CSS position type for a node.
-"""
+"Set CSS position type."
 function set_css_position!(layout::LayoutData, id::Int, pos_type::UInt8)
-    if id >= 1 && id <= length(layout.position_type)
-        layout.position_type[id] = pos_type
-        layout.dirty[id] = true
-    end
+    valid_id(layout, id) && (layout.position_type[id] = pos_type; layout.dirty[id] = true)
 end
 
-"""
-    set_offsets!(layout::LayoutData, id::Int; top::Float32=0.0f0, right::Float32=0.0f0, 
-                 bottom::Float32=0.0f0, left::Float32=0.0f0,
-                 top_auto::Bool=true, right_auto::Bool=true, 
-                 bottom_auto::Bool=true, left_auto::Bool=true)
-
-Set CSS offset properties (top, right, bottom, left) for positioned elements.
-"""
-function set_offsets!(layout::LayoutData, id::Int; 
-                      top::Float32=0.0f0, right::Float32=0.0f0, 
-                      bottom::Float32=0.0f0, left::Float32=0.0f0,
-                      top_auto::Bool=true, right_auto::Bool=true, 
-                      bottom_auto::Bool=true, left_auto::Bool=true)
-    if id >= 1 && id <= length(layout.offset_top)
-        layout.offset_top[id] = top
-        layout.offset_right[id] = right
-        layout.offset_bottom[id] = bottom
-        layout.offset_left[id] = left
-        layout.offset_top_auto[id] = top_auto
-        layout.offset_right_auto[id] = right_auto
-        layout.offset_bottom_auto[id] = bottom_auto
-        layout.offset_left_auto[id] = left_auto
-        layout.dirty[id] = true
-    end
+"Set CSS offset properties for positioned elements."
+function set_offsets!(layout::LayoutData, id::Int;
+                      top::Float32=0.0f0, right::Float32=0.0f0, bottom::Float32=0.0f0, left::Float32=0.0f0,
+                      top_auto::Bool=true, right_auto::Bool=true, bottom_auto::Bool=true, left_auto::Bool=true)
+    valid_id(layout, id) || return
+    layout.offset_top[id], layout.offset_right[id] = top, right
+    layout.offset_bottom[id], layout.offset_left[id] = bottom, left
+    layout.offset_top_auto[id], layout.offset_right_auto[id] = top_auto, right_auto
+    layout.offset_bottom_auto[id], layout.offset_left_auto[id] = bottom_auto, left_auto
+    layout.dirty[id] = true
 end
 
-"""
-    set_margins!(layout::LayoutData, id::Int; top::Float32=0.0f0, right::Float32=0.0f0, 
-                 bottom::Float32=0.0f0, left::Float32=0.0f0)
-
-Set margin values for a node.
-"""
-function set_margins!(layout::LayoutData, id::Int; 
-                      top::Float32=0.0f0, right::Float32=0.0f0, 
-                      bottom::Float32=0.0f0, left::Float32=0.0f0)
-    if id >= 1 && id <= length(layout.margin_top)
-        layout.margin_top[id] = top
-        layout.margin_right[id] = right
-        layout.margin_bottom[id] = bottom
-        layout.margin_left[id] = left
-        layout.dirty[id] = true
-    end
+"Set margins for a node."
+function set_margins!(layout::LayoutData, id::Int; top::Float32=0.0f0, right::Float32=0.0f0, bottom::Float32=0.0f0, left::Float32=0.0f0)
+    valid_id(layout, id) || return
+    layout.margin_top[id], layout.margin_right[id] = top, right
+    layout.margin_bottom[id], layout.margin_left[id] = bottom, left
+    layout.dirty[id] = true
 end
 
-"""
-    set_paddings!(layout::LayoutData, id::Int; top::Float32=0.0f0, right::Float32=0.0f0, 
-                  bottom::Float32=0.0f0, left::Float32=0.0f0)
-
-Set padding values for a node.
-"""
-function set_paddings!(layout::LayoutData, id::Int; 
-                       top::Float32=0.0f0, right::Float32=0.0f0, 
-                       bottom::Float32=0.0f0, left::Float32=0.0f0)
-    if id >= 1 && id <= length(layout.padding_top)
-        layout.padding_top[id] = top
-        layout.padding_right[id] = right
-        layout.padding_bottom[id] = bottom
-        layout.padding_left[id] = left
-        layout.dirty[id] = true
-    end
+"Set paddings for a node."
+function set_paddings!(layout::LayoutData, id::Int; top::Float32=0.0f0, right::Float32=0.0f0, bottom::Float32=0.0f0, left::Float32=0.0f0)
+    valid_id(layout, id) || return
+    layout.padding_top[id], layout.padding_right[id] = top, right
+    layout.padding_bottom[id], layout.padding_left[id] = bottom, left
+    layout.dirty[id] = true
 end
 
-"""
-    set_overflow!(layout::LayoutData, id::Int, overflow::UInt8)
+"Set overflow behavior."
+set_overflow!(layout::LayoutData, id::Int, overflow::UInt8) = valid_id(layout, id) && (layout.overflow[id] = overflow)
 
-Set overflow behavior for a node.
-"""
-function set_overflow!(layout::LayoutData, id::Int, overflow::UInt8)
-    if id >= 1 && id <= length(layout.overflow)
-        layout.overflow[id] = overflow
-    end
-end
+"Set visibility."
+set_visibility!(layout::LayoutData, id::Int, visible::Bool) = valid_id(layout, id) && (layout.visibility[id] = visible)
 
-"""
-    set_visibility!(layout::LayoutData, id::Int, visible::Bool)
+"Set z-index."
+set_z_index!(layout::LayoutData, id::Int, z::Int32) = valid_id(layout, id) && (layout.z_index[id] = z)
 
-Set visibility for a node.
-"""
-function set_visibility!(layout::LayoutData, id::Int, visible::Bool)
-    if id >= 1 && id <= length(layout.visibility)
-        layout.visibility[id] = visible
-    end
-end
-
-"""
-    set_z_index!(layout::LayoutData, id::Int, z::Int32)
-
-Set z-index for a node.
-"""
-function set_z_index!(layout::LayoutData, id::Int, z::Int32)
-    if id >= 1 && id <= length(layout.z_index)
-        layout.z_index[id] = z
-    end
-end
-
-"""
-    set_float!(layout::LayoutData, id::Int, float_type::UInt8)
-
-Set float property for a node (0=none, 1=left, 2=right).
-"""
+"Set float property (0=none, 1=left, 2=right)."
 function set_float!(layout::LayoutData, id::Int, float_type::UInt8)
-    if id >= 1 && id <= length(layout.float_type)
-        layout.float_type[id] = float_type
-        layout.dirty[id] = true
-    end
+    valid_id(layout, id) && (layout.float_type[id] = float_type; layout.dirty[id] = true)
 end
 
-"""
-    set_clear!(layout::LayoutData, id::Int, clear_type::UInt8)
-
-Set clear property for a node (0=none, 1=left, 2=right, 3=both).
-"""
+"Set clear property (0=none, 1=left, 2=right, 3=both)."
 function set_clear!(layout::LayoutData, id::Int, clear_type::UInt8)
-    if id >= 1 && id <= length(layout.clear_type)
-        layout.clear_type[id] = clear_type
-        layout.dirty[id] = true
-    end
+    valid_id(layout, id) && (layout.clear_type[id] = clear_type; layout.dirty[id] = true)
 end
 
-"""
-    set_background_color!(layout::LayoutData, id::Int, r::UInt8, g::UInt8, b::UInt8, a::UInt8)
-
-Set background color for a node.
-"""
+"Set background color."
 function set_background_color!(layout::LayoutData, id::Int, r::UInt8, g::UInt8, b::UInt8, a::UInt8)
-    if id >= 1 && id <= length(layout.bg_r)
-        layout.bg_r[id] = r
-        layout.bg_g[id] = g
-        layout.bg_b[id] = b
-        layout.bg_a[id] = a
-        layout.has_background[id] = a > 0
-    end
+    valid_id(layout, id) || return
+    layout.bg_r[id], layout.bg_g[id], layout.bg_b[id], layout.bg_a[id] = r, g, b, a
+    layout.has_background[id] = a > 0
 end
 
-"""
-    get_background_color(layout::LayoutData, id::Int) -> Tuple{UInt8, UInt8, UInt8, UInt8}
+"Get background color."
+get_background_color(layout::LayoutData, id::Int)::Tuple{UInt8,UInt8,UInt8,UInt8} = 
+    valid_id(layout, id) ? (layout.bg_r[id], layout.bg_g[id], layout.bg_b[id], layout.bg_a[id]) : (0x00, 0x00, 0x00, 0x00)
 
-Get background color for a node.
-"""
-function get_background_color(layout::LayoutData, id::Int)::Tuple{UInt8, UInt8, UInt8, UInt8}
-    if id >= 1 && id <= length(layout.bg_r)
-        return (layout.bg_r[id], layout.bg_g[id], layout.bg_b[id], layout.bg_a[id])
-    end
-    return (0x00, 0x00, 0x00, 0x00)
-end
-
-"""
-    set_borders!(layout::LayoutData, id::Int;
-                 top_width::Float32=0.0f0, right_width::Float32=0.0f0,
-                 bottom_width::Float32=0.0f0, left_width::Float32=0.0f0,
-                 top_style::UInt8=0x00, right_style::UInt8=0x00,
-                 bottom_style::UInt8=0x00, left_style::UInt8=0x00,
-                 top_r::UInt8=0x00, top_g::UInt8=0x00, top_b::UInt8=0x00, top_a::UInt8=0x00,
-                 right_r::UInt8=0x00, right_g::UInt8=0x00, right_b::UInt8=0x00, right_a::UInt8=0x00,
-                 bottom_r::UInt8=0x00, bottom_g::UInt8=0x00, bottom_b::UInt8=0x00, bottom_a::UInt8=0x00,
-                 left_r::UInt8=0x00, left_g::UInt8=0x00, left_b::UInt8=0x00, left_a::UInt8=0x00)
-
-Set border (stroke) properties for a node.
-
-Content-- semantic mapping:
-- CSS border → Content-- stroke
-- Border defines the visual boundary of a node
-
-# Arguments
-- `layout::LayoutData` - Layout data structure
-- `id::Int` - Node ID
-- `*_width` - Border width per side in device pixels
-- `*_style` - Border style per side (0=none, 1=solid, 2=dotted, 3=dashed)
-- `*_r/g/b/a` - Border color per side (RGBA 0-255)
-"""
+"Set border properties (widths, styles, colors per side)."
 function set_borders!(layout::LayoutData, id::Int;
-                      top_width::Float32=0.0f0, right_width::Float32=0.0f0,
-                      bottom_width::Float32=0.0f0, left_width::Float32=0.0f0,
-                      top_style::UInt8=0x00, right_style::UInt8=0x00,
-                      bottom_style::UInt8=0x00, left_style::UInt8=0x00,
-                      top_r::UInt8=0x00, top_g::UInt8=0x00, top_b::UInt8=0x00, top_a::UInt8=0x00,
-                      right_r::UInt8=0x00, right_g::UInt8=0x00, right_b::UInt8=0x00, right_a::UInt8=0x00,
-                      bottom_r::UInt8=0x00, bottom_g::UInt8=0x00, bottom_b::UInt8=0x00, bottom_a::UInt8=0x00,
-                      left_r::UInt8=0x00, left_g::UInt8=0x00, left_b::UInt8=0x00, left_a::UInt8=0x00)
-    if id < 1 || id > length(layout.border_top_width)
-        return
-    end
-    
-    # Widths
-    layout.border_top_width[id] = top_width
-    layout.border_right_width[id] = right_width
-    layout.border_bottom_width[id] = bottom_width
-    layout.border_left_width[id] = left_width
-    
-    # Styles
-    layout.border_top_style[id] = top_style
-    layout.border_right_style[id] = right_style
-    layout.border_bottom_style[id] = bottom_style
-    layout.border_left_style[id] = left_style
-    
-    # Top color
-    layout.border_top_r[id] = top_r
-    layout.border_top_g[id] = top_g
-    layout.border_top_b[id] = top_b
-    layout.border_top_a[id] = top_a
-    
-    # Right color
-    layout.border_right_r[id] = right_r
-    layout.border_right_g[id] = right_g
-    layout.border_right_b[id] = right_b
-    layout.border_right_a[id] = right_a
-    
-    # Bottom color
-    layout.border_bottom_r[id] = bottom_r
-    layout.border_bottom_g[id] = bottom_g
-    layout.border_bottom_b[id] = bottom_b
-    layout.border_bottom_a[id] = bottom_a
-    
-    # Left color
-    layout.border_left_r[id] = left_r
-    layout.border_left_g[id] = left_g
-    layout.border_left_b[id] = left_b
-    layout.border_left_a[id] = left_a
+        top_width::Float32=0.0f0, right_width::Float32=0.0f0, bottom_width::Float32=0.0f0, left_width::Float32=0.0f0,
+        top_style::UInt8=0x00, right_style::UInt8=0x00, bottom_style::UInt8=0x00, left_style::UInt8=0x00,
+        top_r::UInt8=0x00, top_g::UInt8=0x00, top_b::UInt8=0x00, top_a::UInt8=0x00,
+        right_r::UInt8=0x00, right_g::UInt8=0x00, right_b::UInt8=0x00, right_a::UInt8=0x00,
+        bottom_r::UInt8=0x00, bottom_g::UInt8=0x00, bottom_b::UInt8=0x00, bottom_a::UInt8=0x00,
+        left_r::UInt8=0x00, left_g::UInt8=0x00, left_b::UInt8=0x00, left_a::UInt8=0x00)
+    valid_id(layout, id) || return
+    # Widths & styles
+    layout.border_top_width[id], layout.border_right_width[id] = top_width, right_width
+    layout.border_bottom_width[id], layout.border_left_width[id] = bottom_width, left_width
+    layout.border_top_style[id], layout.border_right_style[id] = top_style, right_style
+    layout.border_bottom_style[id], layout.border_left_style[id] = bottom_style, left_style
+    # Colors
+    layout.border_top_r[id], layout.border_top_g[id], layout.border_top_b[id], layout.border_top_a[id] = top_r, top_g, top_b, top_a
+    layout.border_right_r[id], layout.border_right_g[id], layout.border_right_b[id], layout.border_right_a[id] = right_r, right_g, right_b, right_a
+    layout.border_bottom_r[id], layout.border_bottom_g[id], layout.border_bottom_b[id], layout.border_bottom_a[id] = bottom_r, bottom_g, bottom_b, bottom_a
+    layout.border_left_r[id], layout.border_left_g[id], layout.border_left_b[id], layout.border_left_a[id] = left_r, left_g, left_b, left_a
 end
 
-"""
-    has_border(layout::LayoutData, id::Int) -> Bool
-
-Check if a node has any visible border.
-A border side is visible if width > 0, style != none (0), and alpha > 0.
-"""
+"Check if node has any visible border (width > 0, style != 0, alpha > 0)."
 function has_border(layout::LayoutData, id::Int)::Bool
-    if id < 1 || id > length(layout.border_top_width)
-        return false
-    end
-    
-    # Helper to check if a single border side is visible
-    is_side_visible(width, style, alpha) = width > 0 && style != 0 && alpha > 0
-    
-    # Check if any side has a visible border
-    return is_side_visible(layout.border_top_width[id], layout.border_top_style[id], layout.border_top_a[id]) ||
-           is_side_visible(layout.border_right_width[id], layout.border_right_style[id], layout.border_right_a[id]) ||
-           is_side_visible(layout.border_bottom_width[id], layout.border_bottom_style[id], layout.border_bottom_a[id]) ||
-           is_side_visible(layout.border_left_width[id], layout.border_left_style[id], layout.border_left_a[id])
+    valid_id(layout, id) || return false
+    is_visible(w, s, a) = w > 0 && s != 0 && a > 0
+    is_visible(layout.border_top_width[id], layout.border_top_style[id], layout.border_top_a[id]) ||
+    is_visible(layout.border_right_width[id], layout.border_right_style[id], layout.border_right_a[id]) ||
+    is_visible(layout.border_bottom_width[id], layout.border_bottom_style[id], layout.border_bottom_a[id]) ||
+    is_visible(layout.border_left_width[id], layout.border_left_style[id], layout.border_left_a[id])
 end
 
-"""
-    find_containing_block(layout::LayoutData, parents::Vector{UInt32}, node_id::Int) -> Int
-
-Find the containing block for a positioned element.
-For absolute positioning, this is the nearest ancestor with position != static.
-Returns 0 if no such ancestor exists (use viewport).
-"""
+"Find containing block for positioned element (nearest ancestor with position != static)."
 function find_containing_block(layout::LayoutData, parents::Vector{UInt32}, node_id::Int)::Int
     parent_id = Int(parents[node_id])
     while parent_id != 0
-        if layout.position_type[parent_id] != POSITION_STATIC
-            return parent_id
-        end
+        layout.position_type[parent_id] != POSITION_STATIC && return parent_id
         parent_id = Int(parents[parent_id])
     end
-    return 0  # Use viewport
+    0  # Use viewport
 end
 
-"""
-    compute_layout!(layout::LayoutData, parents::Vector{UInt32}, 
-                    first_children::Vector{UInt32}, next_siblings::Vector{UInt32})
-
-Compute layout for all dirty nodes using flat loop iteration.
-
-This implementation uses contiguous array access patterns suitable for
-SIMD/AVX vectorization by the Julia compiler. Supports CSS positioning and floats.
-"""
+"Compute layout for all dirty nodes using flat loop iteration (SIMD-friendly)."
 function compute_layout!(layout::LayoutData, parents::Vector{UInt32}, 
                          first_children::Vector{UInt32}, next_siblings::Vector{UInt32})
     n = length(layout.x)

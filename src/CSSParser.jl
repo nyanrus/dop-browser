@@ -1,21 +1,6 @@
 """
-    CSSParser
-
-CSS parsing and style computation for the Acid2 test.
-
-Parses inline styles and style blocks, computing final styles for each node.
-Supports key CSS properties needed for Acid2:
-- position (static, relative, absolute, fixed)
-- overflow (visible, hidden)
-- display (block, inline, none)
-- visibility (visible, hidden)
-- background-color
-- color
-- width, height (px, %)
-- margin (top, right, bottom, left)
-- padding (top, right, bottom, left)
-- top, right, bottom, left
-- z-index
+CSSParser - CSS parsing and style computation.
+Supports position, overflow, display, visibility, colors, dimensions, margins, padding, borders.
 """
 module CSSParser
 
@@ -29,250 +14,91 @@ export FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT
 export CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH
 export BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED
 
-# Position types
-const POSITION_STATIC = UInt8(0)
-const POSITION_RELATIVE = UInt8(1)
-const POSITION_ABSOLUTE = UInt8(2)
-const POSITION_FIXED = UInt8(3)
+# Constants
+const POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED = UInt8(0), UInt8(1), UInt8(2), UInt8(3)
+const FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT = UInt8(0), UInt8(1), UInt8(2)
+const CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH = UInt8(0), UInt8(1), UInt8(2), UInt8(3)
+const BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED = UInt8(0), UInt8(1), UInt8(2), UInt8(3)
+const OVERFLOW_VISIBLE, OVERFLOW_HIDDEN = UInt8(0), UInt8(1)
+const DISPLAY_NONE, DISPLAY_BLOCK, DISPLAY_INLINE = UInt8(0), UInt8(1), UInt8(2)
+const DISPLAY_TABLE, DISPLAY_TABLE_CELL, DISPLAY_TABLE_ROW, DISPLAY_INLINE_BLOCK = UInt8(3), UInt8(4), UInt8(5), UInt8(6)
 
-# Float types
-const FLOAT_NONE = UInt8(0)
-const FLOAT_LEFT = UInt8(1)
-const FLOAT_RIGHT = UInt8(2)
-
-# Clear types
-const CLEAR_NONE = UInt8(0)
-const CLEAR_LEFT = UInt8(1)
-const CLEAR_RIGHT = UInt8(2)
-const CLEAR_BOTH = UInt8(3)
-
-# Border style types
-const BORDER_STYLE_NONE = UInt8(0)
-const BORDER_STYLE_SOLID = UInt8(1)
-const BORDER_STYLE_DOTTED = UInt8(2)
-const BORDER_STYLE_DASHED = UInt8(3)
-
-# Overflow types
-const OVERFLOW_VISIBLE = UInt8(0)
-const OVERFLOW_HIDDEN = UInt8(1)
-
-# Display types (must match LayoutArrays.jl)
-const DISPLAY_NONE = UInt8(0)
-const DISPLAY_BLOCK = UInt8(1)
-const DISPLAY_INLINE = UInt8(2)
-const DISPLAY_TABLE = UInt8(3)
-const DISPLAY_TABLE_CELL = UInt8(4)
-const DISPLAY_TABLE_ROW = UInt8(5)
-const DISPLAY_INLINE_BLOCK = UInt8(6)
-
-"""
-    CSSStyles
-
-Computed CSS styles for a node.
-"""
+"CSSStyles - Computed CSS styles for a node."
 mutable struct CSSStyles
     # Positioning
-    position::UInt8  # POSITION_*
-    float::UInt8  # FLOAT_*
-    clear::UInt8  # CLEAR_*
-    top::Float32
-    right::Float32
-    bottom::Float32
-    left::Float32
-    top_auto::Bool
-    right_auto::Bool
-    bottom_auto::Bool
-    left_auto::Bool
+    position::UInt8; float::UInt8; clear::UInt8
+    top::Float32; right::Float32; bottom::Float32; left::Float32
+    top_auto::Bool; right_auto::Bool; bottom_auto::Bool; left_auto::Bool
     z_index::Int32
-    
     # Box model
-    width::Float32
-    height::Float32
-    width_auto::Bool
-    height_auto::Bool
-    min_width::Float32
-    max_width::Float32
-    min_height::Float32
-    max_height::Float32
-    has_min_width::Bool
-    has_max_width::Bool
-    has_min_height::Bool
-    has_max_height::Bool
-    margin_top::Float32
-    margin_right::Float32
-    margin_bottom::Float32
-    margin_left::Float32
-    padding_top::Float32
-    padding_right::Float32
-    padding_bottom::Float32
-    padding_left::Float32
-    
-    # Borders
-    border_top_width::Float32
-    border_right_width::Float32
-    border_bottom_width::Float32
-    border_left_width::Float32
-    border_top_style::UInt8  # BORDER_STYLE_*
-    border_right_style::UInt8
-    border_bottom_style::UInt8
-    border_left_style::UInt8
-    border_top_r::UInt8
-    border_top_g::UInt8
-    border_top_b::UInt8
-    border_top_a::UInt8
-    border_right_r::UInt8
-    border_right_g::UInt8
-    border_right_b::UInt8
-    border_right_a::UInt8
-    border_bottom_r::UInt8
-    border_bottom_g::UInt8
-    border_bottom_b::UInt8
-    border_bottom_a::UInt8
-    border_left_r::UInt8
-    border_left_g::UInt8
-    border_left_b::UInt8
-    border_left_a::UInt8
-    
+    width::Float32; height::Float32; width_auto::Bool; height_auto::Bool
+    min_width::Float32; max_width::Float32; min_height::Float32; max_height::Float32
+    has_min_width::Bool; has_max_width::Bool; has_min_height::Bool; has_max_height::Bool
+    margin_top::Float32; margin_right::Float32; margin_bottom::Float32; margin_left::Float32
+    padding_top::Float32; padding_right::Float32; padding_bottom::Float32; padding_left::Float32
+    # Borders (width, style, rgba per side)
+    border_top_width::Float32; border_right_width::Float32; border_bottom_width::Float32; border_left_width::Float32
+    border_top_style::UInt8; border_right_style::UInt8; border_bottom_style::UInt8; border_left_style::UInt8
+    border_top_r::UInt8; border_top_g::UInt8; border_top_b::UInt8; border_top_a::UInt8
+    border_right_r::UInt8; border_right_g::UInt8; border_right_b::UInt8; border_right_a::UInt8
+    border_bottom_r::UInt8; border_bottom_g::UInt8; border_bottom_b::UInt8; border_bottom_a::UInt8
+    border_left_r::UInt8; border_left_g::UInt8; border_left_b::UInt8; border_left_a::UInt8
     # Display & visibility
-    display::UInt8  # DISPLAY_*
-    visibility::Bool  # true = visible
-    overflow::UInt8  # OVERFLOW_*
+    display::UInt8; visibility::Bool; overflow::UInt8
+    line_height::Float32; line_height_normal::Bool; font_size::Float32
+    # Colors & content
+    background_r::UInt8; background_g::UInt8; background_b::UInt8; background_a::UInt8
+    color_r::UInt8; color_g::UInt8; color_b::UInt8; color_a::UInt8
+    has_background::Bool; content::String; has_content::Bool
     
-    # Text properties
-    line_height::Float32
-    line_height_normal::Bool  # true if line-height is "normal" (auto)
-    font_size::Float32
-    
-    # Colors (RGBA, 0-255 each component)
-    background_r::UInt8
-    background_g::UInt8
-    background_b::UInt8
-    background_a::UInt8
-    color_r::UInt8
-    color_g::UInt8
-    color_b::UInt8
-    color_a::UInt8
-    has_background::Bool
-    
-    # Content property for pseudo-elements
-    content::String
-    has_content::Bool
-    
-    function CSSStyles()
-        new(
-            POSITION_STATIC,
-            FLOAT_NONE, CLEAR_NONE,
-            0.0f0, 0.0f0, 0.0f0, 0.0f0,
-            true, true, true, true,  # auto for top/right/bottom/left
-            Int32(0),
-            0.0f0, 0.0f0,
-            true, true,  # width/height auto
-            0.0f0, Float32(Inf), 0.0f0, Float32(Inf),  # min/max width/height
-            false, false, false, false,  # has_min/max flags
-            0.0f0, 0.0f0, 0.0f0, 0.0f0,  # margins
-            0.0f0, 0.0f0, 0.0f0, 0.0f0,  # paddings
-            0.0f0, 0.0f0, 0.0f0, 0.0f0,  # border widths
-            BORDER_STYLE_NONE, BORDER_STYLE_NONE, BORDER_STYLE_NONE, BORDER_STYLE_NONE,
-            0x00, 0x00, 0x00, 0x00,  # border top color
-            0x00, 0x00, 0x00, 0x00,  # border right color
-            0x00, 0x00, 0x00, 0x00,  # border bottom color
-            0x00, 0x00, 0x00, 0x00,  # border left color
-            DISPLAY_BLOCK,
-            true,  # visible
-            OVERFLOW_VISIBLE,
-            16.0f0, true, 16.0f0,  # line-height (normal), font-size
-            0xff, 0xff, 0xff, 0x00,  # transparent background
-            0x00, 0x00, 0x00, 0xff,  # black text
-            false,  # no background
-            "",     # content
-            false   # has_content
-        )
-    end
+    CSSStyles() = new(
+        POSITION_STATIC, FLOAT_NONE, CLEAR_NONE,
+        0.0f0, 0.0f0, 0.0f0, 0.0f0, true, true, true, true, Int32(0),
+        0.0f0, 0.0f0, true, true, 0.0f0, Float32(Inf), 0.0f0, Float32(Inf), false, false, false, false,
+        0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0,  # margins & paddings
+        0.0f0, 0.0f0, 0.0f0, 0.0f0,  # border widths
+        BORDER_STYLE_NONE, BORDER_STYLE_NONE, BORDER_STYLE_NONE, BORDER_STYLE_NONE,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  # border colors
+        DISPLAY_BLOCK, true, OVERFLOW_VISIBLE, 16.0f0, true, 16.0f0,
+        0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, false, "", false
+    )
 end
 
-"""
-    parse_color(value::AbstractString) -> Tuple{UInt8, UInt8, UInt8, UInt8}
+# Named color lookup table (const for performance)
+const NAMED_COLORS = Dict{String,Tuple{UInt8,UInt8,UInt8,UInt8}}(
+    "black"=>(0x00,0x00,0x00,0xff), "white"=>(0xff,0xff,0xff,0xff), "red"=>(0xff,0x00,0x00,0xff),
+    "green"=>(0x00,0x80,0x00,0xff), "lime"=>(0x00,0xff,0x00,0xff), "blue"=>(0x00,0x00,0xff,0xff),
+    "yellow"=>(0xff,0xff,0x00,0xff), "cyan"=>(0x00,0xff,0xff,0xff), "magenta"=>(0xff,0x00,0xff,0xff),
+    "gray"=>(0x80,0x80,0x80,0xff), "grey"=>(0x80,0x80,0x80,0xff), "transparent"=>(0x00,0x00,0x00,0x00),
+    "orange"=>(0xff,0xa5,0x00,0xff), "purple"=>(0x80,0x00,0x80,0xff), "navy"=>(0x00,0x00,0x80,0xff),
+    "maroon"=>(0x80,0x00,0x00,0xff), "olive"=>(0x80,0x80,0x00,0xff), "teal"=>(0x00,0x80,0x80,0xff),
+    "silver"=>(0xc0,0xc0,0xc0,0xff), "fuchsia"=>(0xff,0x00,0xff,0xff), "aqua"=>(0x00,0xff,0xff,0xff)
+)
 
-Parse a CSS color value and return RGBA components.
-Supports: hex colors (#rgb, #rrggbb), named colors.
-"""
-function parse_color(value::AbstractString)::Tuple{UInt8, UInt8, UInt8, UInt8}
+"Parse CSS color (hex #rgb/#rrggbb, named, rgb()/rgba())."
+function parse_color(value::AbstractString)::Tuple{UInt8,UInt8,UInt8,UInt8}
     val = strip(lowercase(value))
-    
-    # Named colors
-    named_colors = Dict{String, Tuple{UInt8,UInt8,UInt8,UInt8}}(
-        "black" => (0x00, 0x00, 0x00, 0xff),
-        "white" => (0xff, 0xff, 0xff, 0xff),
-        "red" => (0xff, 0x00, 0x00, 0xff),
-        "green" => (0x00, 0x80, 0x00, 0xff),
-        "lime" => (0x00, 0xff, 0x00, 0xff),
-        "blue" => (0x00, 0x00, 0xff, 0xff),
-        "yellow" => (0xff, 0xff, 0x00, 0xff),
-        "cyan" => (0x00, 0xff, 0xff, 0xff),
-        "magenta" => (0xff, 0x00, 0xff, 0xff),
-        "gray" => (0x80, 0x80, 0x80, 0xff),
-        "grey" => (0x80, 0x80, 0x80, 0xff),
-        "transparent" => (0x00, 0x00, 0x00, 0x00),
-        "orange" => (0xff, 0xa5, 0x00, 0xff),
-        "purple" => (0x80, 0x00, 0x80, 0xff),
-        "navy" => (0x00, 0x00, 0x80, 0xff),
-        "maroon" => (0x80, 0x00, 0x00, 0xff),
-        "olive" => (0x80, 0x80, 0x00, 0xff),
-        "teal" => (0x00, 0x80, 0x80, 0xff),
-        "silver" => (0xc0, 0xc0, 0xc0, 0xff),
-        "fuchsia" => (0xff, 0x00, 0xff, 0xff),
-        "aqua" => (0x00, 0xff, 0xff, 0xff),
-    )
-    
-    if haskey(named_colors, val)
-        return named_colors[val]
-    end
-    
-    # Hex color
+    haskey(NAMED_COLORS, val) && return NAMED_COLORS[val]
     if startswith(val, "#")
         hex = val[2:end]
         if length(hex) == 3
-            # #rgb -> #rrggbb
-            r = parse(UInt8, hex[1:1] * hex[1:1], base=16)
-            g = parse(UInt8, hex[2:2] * hex[2:2], base=16)
-            b = parse(UInt8, hex[3:3] * hex[3:3], base=16)
-            return (r, g, b, 0xff)
+            return (parse(UInt8, hex[1:1]*hex[1:1], base=16), parse(UInt8, hex[2:2]*hex[2:2], base=16), parse(UInt8, hex[3:3]*hex[3:3], base=16), 0xff)
         elseif length(hex) == 6
-            r = parse(UInt8, hex[1:2], base=16)
-            g = parse(UInt8, hex[3:4], base=16)
-            b = parse(UInt8, hex[5:6], base=16)
-            return (r, g, b, 0xff)
+            return (parse(UInt8, hex[1:2], base=16), parse(UInt8, hex[3:4], base=16), parse(UInt8, hex[5:6], base=16), 0xff)
         end
     end
-    
-    # rgb() and rgba() functions
     if startswith(val, "rgb")
         m = match(r"rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)", val)
-        if m !== nothing
-            r = parse(UInt8, m.captures[1])
-            g = parse(UInt8, m.captures[2])
-            b = parse(UInt8, m.captures[3])
-            a = m.captures[4] !== nothing ? round(UInt8, parse(Float64, m.captures[4]) * 255) : 0xff
-            return (r, g, b, a)
-        end
+        m !== nothing && return (parse(UInt8, m.captures[1]), parse(UInt8, m.captures[2]), parse(UInt8, m.captures[3]), 
+                                  m.captures[4] !== nothing ? round(UInt8, parse(Float64, m.captures[4]) * 255) : 0xff)
     end
-    
-    # Default to transparent
-    return (0x00, 0x00, 0x00, 0x00)
+    (0x00, 0x00, 0x00, 0x00)  # transparent default
 end
 
-"""
-    parse_length(value::AbstractString, container_size::Float32 = 0.0f0) -> Tuple{Float32, Bool}
-
-Parse a CSS length value and return (pixels, is_auto).
-Supports: px, %, auto.
-"""
+"Parse CSS length (px, %, em, mm, auto)."
 function parse_length(value::AbstractString, container_size::Float32 = 0.0f0)::Tuple{Float32, Bool}
     val = strip(lowercase(value))
-    
-    if val == "auto"
-        return (0.0f0, true)
-    end
+    val == "auto" && return (0.0f0, true)
     
     # Percentage
     if endswith(val, "%")
