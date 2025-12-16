@@ -2,9 +2,45 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "1314528643d3f2252838121c32c01d7cdbf852ad"
+project_hash = "864c526e887c1e23e7ac61583481a9942f1af596"
+
+[[deps.Blobs]]
+deps = ["MacroTools", "Preferences"]
+git-tree-sha1 = "ec7ffb3e74038c6cd3f5445cb56dd75970a02d22"
+uuid = "163b9779-6631-5f90-a265-3de947924de8"
+version = "1.2.0"
 
 [[deps.DOPBrowser]]
 path = "."
 uuid = "a1b2c3d4-5678-90ab-cdef-1234567890ab"
 version = "0.1.0"
+
+[[deps.Dates]]
+deps = ["Printf"]
+uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
+version = "1.11.0"
+
+[[deps.MacroTools]]
+git-tree-sha1 = "1e0228a030642014fe5cfe68c2c0a818f9e3f522"
+uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+version = "0.5.16"
+
+[[deps.Preferences]]
+deps = ["TOML"]
+git-tree-sha1 = "0f27480397253da18fe2c12a4ba4eb9eb208bf3d"
+uuid = "21216c6a-2e73-6563-6e65-726566657250"
+version = "1.5.0"
+
+[[deps.Printf]]
+deps = ["Unicode"]
+uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+version = "1.11.0"
+
+[[deps.TOML]]
+deps = ["Dates"]
+uuid = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+version = "1.0.3"
+
+[[deps.Unicode]]
+uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
+version = "1.11.0"
