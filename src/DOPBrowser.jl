@@ -15,6 +15,23 @@ traditional DOM & CSSOM with cache-efficient, SIMD-friendly data structures.
 - **SIMD-friendly Layout**: Contiguous float arrays for vectorized computation
 - **Linear Render Buffer**: Direct WebGPU upload-ready command buffer
 - **Cache Maximization**: Batch costly operations for optimal CPU cache usage
+
+## Content-- Language Support
+
+This browser implements the Content-- v6.0 specification:
+- **Hybrid AOT/JIT Model**: AOT for static structure, JIT for dynamic text
+- **Layout Primitives**: Stack, Grid, Scroll, Rect
+- **Text Primitives**: Paragraph, Span, Link (JIT-compiled TextClusters)
+- **Reactive System**: Environment switches, variable injection, event bindings
+- **Virtual JS Interface**: DOM-like API without actual DOM
+
+## Complete Browser Pipeline
+
+1. **Network** → Fetch HTML, CSS, images, fonts
+2. **Parse** → HTML tokenization → DOM construction
+3. **Style** → CSS parsing → Archetype resolution → Style flattening
+4. **Layout** → Content-- layout engine → Position computation
+5. **Render** → GPU command buffer → WebGPU rendering → PNG export
 """
 module DOPBrowser
 
@@ -27,6 +44,15 @@ include("LayoutArrays.jl")
 include("RenderBuffer.jl")
 include("CSSParser.jl")
 include("Core.jl")
+
+# Content-- IR modules
+include("ContentMM/ContentMM.jl")
+
+# Network layer
+include("Network/Network.jl")
+
+# Rendering pipeline
+include("Renderer/Renderer.jl")
 
 # Re-exports from submodules
 using .StringInterner: StringPool, intern!, get_string, get_id
@@ -62,5 +88,249 @@ export CSSStyles, parse_inline_style, parse_color, parse_length,
 # Core API
 using .Core: BrowserContext, create_context, parse_html!, apply_styles!, compute_layouts!, generate_render_commands!, process_document!
 export BrowserContext, create_context, parse_html!, apply_styles!, compute_layouts!, generate_render_commands!, process_document!
+
+# Content-- IR
+using .ContentMM
+export ContentMM
+
+# Network layer
+using .Network
+export Network
+
+# Rendering pipeline
+using .Renderer
+export Renderer
+
+# ============================================================================
+# Complete Browser Process
+# ============================================================================
+
+"""
+    Browser
+
+Complete browser instance with full pipeline:
+Network → Parse → Style → Layout → Render → GPU/PNG Output
+
+## Usage
+```julia
+browser = Browser(width=1920, height=1080)
+load!(browser, "https://example.com")
+render_to_png!(browser, "output.png")
+```
+"""
+mutable struct Browser
+    # Core context
+    context::BrowserContext
+    
+    # Content-- runtime
+    runtime::ContentMM.Runtime.RuntimeContext
+    
+    # Networking
+    network::Network.NetworkContext
+    
+    # Rendering
+    render_pipeline::Renderer.RenderPipeline
+    
+    # JS interface
+    js_interface::ContentMM.Runtime.JSInterface
+    
+    # State
+    current_url::String
+    title::String
+    is_loading::Bool
+    
+    function Browser(; width::UInt32 = UInt32(1920), height::UInt32 = UInt32(1080))
+        ctx = create_context(viewport_width=Float32(width), viewport_height=Float32(height))
+        runtime = ContentMM.Runtime.RuntimeContext(Float32(width), Float32(height))
+        network = Network.NetworkContext()
+        pipeline = Renderer.RenderPipeline(width, height)
+        js = ContentMM.Runtime.JSInterface(runtime)
+        
+        new(ctx, runtime, network, pipeline, js, "", "", false)
+    end
+end
+
+export Browser
+
+"""
+    load!(browser::Browser, url::String) -> Bool
+
+Load a URL and process the document.
+"""
+function load!(browser::Browser, url::String)::Bool
+    browser.is_loading = true
+    browser.current_url = url
+    
+    # Fetch the document
+    response = Network.fetch!(browser.network, url, 
+                               resource_type=Network.RESOURCE_HTML)
+    
+    if response.status_code != 200
+        browser.is_loading = false
+        return false
+    end
+    
+    # Parse HTML using traditional pipeline
+    html = String(response.body)
+    process_document!(browser.context, html)
+    
+    # Sync layout data to runtime for JS interface access
+    n = node_count(browser.context.dom)
+    resize!(browser.runtime.layout_x, n)
+    resize!(browser.runtime.layout_y, n)
+    resize!(browser.runtime.layout_width, n)
+    resize!(browser.runtime.layout_height, n)
+    
+    for i in 1:n
+        browser.runtime.layout_x[i] = browser.context.layout.x[i]
+        browser.runtime.layout_y[i] = browser.context.layout.y[i]
+        browser.runtime.layout_width[i] = browser.context.layout.width[i]
+        browser.runtime.layout_height[i] = browser.context.layout.height[i]
+    end
+    
+    browser.is_loading = false
+    return true
+end
+
+export load!
+
+"""
+    load_html!(browser::Browser, html::String)
+
+Load HTML directly (for testing).
+"""
+function load_html!(browser::Browser, html::String)
+    browser.is_loading = true
+    browser.current_url = "about:blank"
+    
+    process_document!(browser.context, html)
+    
+    # Sync layout data to runtime for JS interface access
+    n = node_count(browser.context.dom)
+    if n > 0
+        resize!(browser.runtime.layout_x, n)
+        resize!(browser.runtime.layout_y, n)
+        resize!(browser.runtime.layout_width, n)
+        resize!(browser.runtime.layout_height, n)
+        
+        for i in 1:n
+            browser.runtime.layout_x[i] = browser.context.layout.x[i]
+            browser.runtime.layout_y[i] = browser.context.layout.y[i]
+            browser.runtime.layout_width[i] = browser.context.layout.width[i]
+            browser.runtime.layout_height[i] = browser.context.layout.height[i]
+        end
+    end
+    
+    browser.is_loading = false
+end
+
+export load_html!
+
+"""
+    render!(browser::Browser)
+
+Render the current document.
+"""
+function render!(browser::Browser)
+    # Update runtime
+    ContentMM.Runtime.update!(browser.runtime, 0.016f0)  # ~60fps
+    
+    # Render to pipeline
+    Renderer.render_frame!(browser.render_pipeline, browser.context.render_buffer)
+end
+
+export render!
+
+"""
+    render_to_png!(browser::Browser, filename::String)
+
+Render and export to PNG.
+"""
+function render_to_png!(browser::Browser, filename::String)
+    render!(browser)
+    Renderer.export_png!(browser.render_pipeline, filename)
+end
+
+export render_to_png!
+
+"""
+    get_png_data(browser::Browser) -> Vector{UInt8}
+
+Render and get PNG data as bytes.
+"""
+function get_png_data(browser::Browser)::Vector{UInt8}
+    render!(browser)
+    return Renderer.get_png_data(browser.render_pipeline)
+end
+
+export get_png_data
+
+"""
+    set_viewport!(browser::Browser, width::UInt32, height::UInt32)
+
+Resize the browser viewport.
+"""
+function set_viewport!(browser::Browser, width::UInt32, height::UInt32)
+    browser.context.viewport_width = Float32(width)
+    browser.context.viewport_height = Float32(height)
+    browser.runtime.viewport_width = Float32(width)
+    browser.runtime.viewport_height = Float32(height)
+    Renderer.resize!(browser.render_pipeline, width, height)
+end
+
+export set_viewport!
+
+"""
+    scroll_to!(browser::Browser, x::Float32, y::Float32)
+
+Scroll the viewport.
+"""
+function scroll_to!(browser::Browser, x::Float32, y::Float32)
+    browser.runtime.scroll_x = x
+    browser.runtime.scroll_y = y
+    ContentMM.Runtime.resolve_sticky!(browser.runtime)
+end
+
+export scroll_to!
+
+"""
+    dispatch_event!(browser::Browser, node_id::UInt32, 
+                    event_type::ContentMM.Reactive.EventType,
+                    event_data::Dict{Symbol, Any}) -> Bool
+
+Dispatch an event to a node.
+"""
+function dispatch_event!(browser::Browser, node_id::UInt32,
+                         event_type::ContentMM.Reactive.EventType,
+                         event_data::Dict{Symbol, Any})::Bool
+    return ContentMM.Runtime.dispatch_event!(browser.runtime, node_id, 
+                                              event_type, event_data)
+end
+
+export dispatch_event!
+
+"""
+    js_eval(browser::Browser, node_id::UInt32, property::Symbol) -> Any
+
+Get a property value via the virtual JS interface.
+"""
+function js_eval(browser::Browser, node_id::UInt32, property::Symbol)::Any
+    return ContentMM.Runtime.js_get_property(browser.js_interface, node_id, property)
+end
+
+export js_eval
+
+"""
+    js_call(browser::Browser, node_id::UInt32, 
+            method::Symbol, args::Vector{Any}) -> Any
+
+Call a method via the virtual JS interface.
+"""
+function js_call(browser::Browser, node_id::UInt32,
+                 method::Symbol, args::Vector{Any})::Any
+    return ContentMM.Runtime.js_call_method(browser.js_interface, node_id, method, args)
+end
+
+export js_call
 
 end # module DOPBrowser
