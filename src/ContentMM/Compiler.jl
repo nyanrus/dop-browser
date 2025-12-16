@@ -20,7 +20,7 @@ The `.bin` files contain:
 module Compiler
 
 using ..Primitives: NodeTable, NodeType, NODE_ROOT, NODE_STACK, create_node!
-using ..Properties: PropertyTable, resize_properties!
+using ..Properties: PropertyTable, resize_properties!, PROPERTY_FIELDS
 using ..Styles: StyleTable, FlatStyle, flatten_styles!, StyleResolver, resolve_archetype!
 using ..Macros: MacroTable
 using ..Environment: EnvironmentTable, resolve_environment
@@ -138,11 +138,26 @@ function compile!(ctx::CompilerContext, source_nodes::NodeTable,
     return isempty(ctx.errors)
 end
 
+# ============================================================================
+# Property fields to copy during compilation
+# NOTE: This is a SUBSET of PROPERTY_FIELDS - only includes properties
+# that need to be copied from source to compiled output. Grid-specific and 
+# scroll-specific properties are handled separately in their respective contexts.
+# ============================================================================
+const COMPILE_PROPERTY_FIELDS = [
+    :direction, :pack, :align, :width, :height,
+    :gap_row, :gap_col,
+    :inset_top, :inset_right, :inset_bottom, :inset_left,
+    :offset_top, :offset_right, :offset_bottom, :offset_left,
+    :fill_r, :fill_g, :fill_b, :fill_a
+]
+
 """
     compile_unit(ctx::CompilerContext, source_nodes::NodeTable,
                  source_props::PropertyTable, env_id::UInt32) -> CompiledUnit
 
 Compile for a specific environment.
+Uses COMPILE_PROPERTY_FIELDS metadata for loop-based property copying.
 """
 function compile_unit(ctx::CompilerContext, source_nodes::NodeTable,
                       source_props::PropertyTable, env_id::UInt32)::CompiledUnit
@@ -160,27 +175,11 @@ function compile_unit(ctx::CompilerContext, source_nodes::NodeTable,
         
         new_id = create_node!(unit.nodes, node_type, parent=parent, style_id=style_id)
         
-        # Copy properties
+        # Copy properties using metadata-driven loop
         if i <= length(source_props.direction)
-            unit.properties.direction[new_id] = source_props.direction[i]
-            unit.properties.pack[new_id] = source_props.pack[i]
-            unit.properties.align[new_id] = source_props.align[i]
-            unit.properties.width[new_id] = source_props.width[i]
-            unit.properties.height[new_id] = source_props.height[i]
-            unit.properties.gap_row[new_id] = source_props.gap_row[i]
-            unit.properties.gap_col[new_id] = source_props.gap_col[i]
-            unit.properties.inset_top[new_id] = source_props.inset_top[i]
-            unit.properties.inset_right[new_id] = source_props.inset_right[i]
-            unit.properties.inset_bottom[new_id] = source_props.inset_bottom[i]
-            unit.properties.inset_left[new_id] = source_props.inset_left[i]
-            unit.properties.offset_top[new_id] = source_props.offset_top[i]
-            unit.properties.offset_right[new_id] = source_props.offset_right[i]
-            unit.properties.offset_bottom[new_id] = source_props.offset_bottom[i]
-            unit.properties.offset_left[new_id] = source_props.offset_left[i]
-            unit.properties.fill_r[new_id] = source_props.fill_r[i]
-            unit.properties.fill_g[new_id] = source_props.fill_g[i]
-            unit.properties.fill_b[new_id] = source_props.fill_b[i]
-            unit.properties.fill_a[new_id] = source_props.fill_a[i]
+            for field in COMPILE_PROPERTY_FIELDS
+                getfield(unit.properties, field)[new_id] = getfield(source_props, field)[i]
+            end
         end
     end
     

@@ -227,6 +227,31 @@ Benefits:
 - Cache-friendly traversal
 - Efficient batch updates
 
+### Metadata-Driven Property Operations
+
+Content-- uses metadata constants to define field operations, reducing code duplication and enabling efficient batch operations:
+
+```julia
+# Field metadata: (name, type, default_value)
+const FLAT_STYLE_FIELDS = [
+    (:direction, Direction, DIRECTION_DOWN),
+    (:pack, Pack, PACK_START),
+    (:width, Float32, 0.0f0),
+    # ... etc
+]
+
+# Enables loop-based operations instead of repetitive code
+for (name, T, default) in FLAT_STYLE_FIELDS
+    getfield(table, name)[i] = default
+end
+```
+
+Benefits:
+- Single source of truth for field definitions
+- Automatic type conversion via metadata
+- Easy to add/remove fields across the system
+- Reduced maintenance burden
+
 ### Zero Runtime CSS Cost
 
 | Operation | CSS + DOM | Content-- |

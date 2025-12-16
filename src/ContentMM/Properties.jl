@@ -25,8 +25,9 @@ export Pack, PACK_START, PACK_END, PACK_CENTER, PACK_BETWEEN, PACK_AROUND, PACK_
 export Align, ALIGN_START, ALIGN_END, ALIGN_CENTER, ALIGN_STRETCH, ALIGN_BASELINE
 export Size, SizeSpec, SIZE_AUTO, SIZE_FIXED, SIZE_PERCENT, SIZE_MIN, SIZE_MAX, SIZE_FILL
 export Inset, Offset, Gap
-export PropertyValue, PropertyTable, set_property!, get_property
+export PropertyValue, PropertyTable, set_property!, get_property, resize_properties!
 export Color, parse_color, color_to_rgba
+export PROPERTY_FIELDS
 
 """
     Direction
