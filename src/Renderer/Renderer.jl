@@ -6,17 +6,20 @@ Complete rendering pipeline from Content-- to GPU and PNG output.
 This module integrates:
 - GPURenderer: WebGPU-style GPU rendering
 - PNGExport: Lossless PNG image export
+- CairoRenderer: Cairo-based native rendering with text support
 - RenderPipeline: Orchestrates the full render pass
 """
 module Renderer
 
 include("GPURenderer.jl")
 include("PNGExport.jl")
+include("CairoRenderer.jl")
 
 using .GPURenderer
 using .PNGExport
+using .CairoRenderer
 
-export GPURenderer, PNGExport
+export GPURenderer, PNGExport, CairoRenderer
 export RenderPipeline, create_pipeline, render_frame!, export_png!
 
 # Import RenderBuffer types

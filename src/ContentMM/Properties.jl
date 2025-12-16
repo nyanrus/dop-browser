@@ -265,7 +265,9 @@ const PROPERTY_FIELDS = [
     (:fill_r, UInt8, 0x00), (:fill_g, UInt8, 0x00), (:fill_b, UInt8, 0x00), (:fill_a, UInt8, 0x00),
     (:round_tl, Float32, 0.0f0), (:round_tr, Float32, 0.0f0), (:round_br, Float32, 0.0f0), (:round_bl, Float32, 0.0f0),
     (:grid_cols, UInt16, UInt16(1)), (:grid_rows, UInt16, UInt16(1)),
-    (:scroll_x, Float32, 0.0f0), (:scroll_y, Float32, 0.0f0)
+    (:scroll_x, Float32, 0.0f0), (:scroll_y, Float32, 0.0f0),
+    (:font_size, Float32, 16.0f0),
+    (:text_color_r, UInt8, 0x00), (:text_color_g, UInt8, 0x00), (:text_color_b, UInt8, 0x00), (:text_color_a, UInt8, 0xff)
 ]
 
 "PropertyTable - Structure of Arrays for node properties (SIMD-friendly)."
@@ -282,6 +284,8 @@ mutable struct PropertyTable
     round_tl::Vector{Float32}; round_tr::Vector{Float32}; round_br::Vector{Float32}; round_bl::Vector{Float32}
     grid_cols::Vector{UInt16}; grid_rows::Vector{UInt16}
     scroll_x::Vector{Float32}; scroll_y::Vector{Float32}
+    font_size::Vector{Float32}
+    text_color_r::Vector{UInt8}; text_color_g::Vector{UInt8}; text_color_b::Vector{UInt8}; text_color_a::Vector{UInt8}
     
     function PropertyTable(capacity::Int = 0)
         args = [Vector{t}(undef, capacity) for (_, t, _) in PROPERTY_FIELDS]

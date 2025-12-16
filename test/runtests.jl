@@ -1470,3 +1470,128 @@ end
     end
 
 end
+
+# ============================================================================
+# Cairo Rendering Tests
+# ============================================================================
+
+@testset "Cairo Rendering" begin
+    
+    @testset "Cairo Context Creation" begin
+        ctx = DOPBrowser.Renderer.CairoRenderer.create_cairo_context(200, 150)
+        @test ctx.width == 200
+        @test ctx.height == 150
+    end
+    
+    @testset "Cairo Rectangle Rendering" begin
+        ctx = DOPBrowser.Renderer.CairoRenderer.create_cairo_context(100, 100)
+        
+        # Clear with white
+        DOPBrowser.Renderer.CairoRenderer.clear!(ctx, 1.0, 1.0, 1.0, 1.0)
+        
+        # Draw red rectangle
+        DOPBrowser.Renderer.CairoRenderer.render_rect!(ctx, 10.0, 10.0, 80.0, 80.0, (1.0, 0.0, 0.0, 1.0))
+        
+        # Get pixel data
+        data = DOPBrowser.Renderer.CairoRenderer.get_surface_data(ctx)
+        
+        @test length(data) == 100 * 100 * 4  # RGBA
+        
+        # Check that we have some red pixels (center of the rectangle)
+        # Pixel at (50, 50) should be red
+        idx = (50 * 100 + 50) * 4 + 1
+        @test data[idx] > 200  # R should be high
+        @test data[idx + 1] < 50  # G should be low
+        @test data[idx + 2] < 50  # B should be low
+    end
+    
+    @testset "Cairo Text Rendering" begin
+        ctx = DOPBrowser.Renderer.CairoRenderer.create_cairo_context(200, 50)
+        
+        # Clear with white
+        DOPBrowser.Renderer.CairoRenderer.clear!(ctx, 1.0, 1.0, 1.0, 1.0)
+        
+        # Render some text
+        DOPBrowser.Renderer.CairoRenderer.render_text!(ctx, "Hello", 10.0, 30.0, font_size=16.0)
+        
+        # Just verify it doesn't crash - text rendering depends on system fonts
+        @test true
+    end
+    
+    @testset "Cairo PNG Export" begin
+        ctx = DOPBrowser.Renderer.CairoRenderer.create_cairo_context(50, 50)
+        
+        DOPBrowser.Renderer.CairoRenderer.clear!(ctx, 0.0, 0.0, 1.0, 1.0)  # Blue
+        
+        temp_file = tempname() * ".png"
+        DOPBrowser.Renderer.CairoRenderer.save_png(ctx, temp_file)
+        
+        @test isfile(temp_file)
+        @test filesize(temp_file) > 0
+        
+        # Cleanup
+        rm(temp_file)
+    end
+    
+    @testset "NativeUI Cairo Rendering" begin
+        source = """
+        Stack(Direction: Down, Fill: #FFFFFF) {
+            Rect(Size: (100, 50), Fill: #FF0000);
+        }
+        """
+        
+        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
+        
+        # Render with Cairo
+        DOPBrowser.ContentMM.NativeUI.render_cairo!(ui, width=150, height=100)
+        
+        @test ui.cairo_context !== nothing
+        @test ui.use_cairo == true
+    end
+    
+    @testset "NativeUI Cairo PNG Export" begin
+        source = """
+        Rect(Size: (50, 50), Fill: #00FF00)
+        """
+        
+        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
+        
+        temp_file = tempname() * ".png"
+        DOPBrowser.ContentMM.NativeUI.render_to_png_cairo!(ui, temp_file, width=100, height=100)
+        
+        @test isfile(temp_file)
+        @test filesize(temp_file) > 0
+        
+        # Cleanup
+        rm(temp_file)
+    end
+    
+    @testset "NativeUI Cairo Buffer" begin
+        source = """
+        Rect(Size: (50, 50), Fill: #0000FF)
+        """
+        
+        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
+        buffer = DOPBrowser.ContentMM.NativeUI.render_to_buffer_cairo(ui, width=100, height=100)
+        
+        @test length(buffer) == 100 * 100 * 4  # RGBA
+    end
+    
+    @testset "Cairo Text in Content--" begin
+        source = """
+        Stack(Direction: Down, Fill: #FFFFFF, Inset: 10) {
+            Paragraph {
+                Span(Text: "Hello World");
+            }
+        }
+        """
+        
+        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
+        
+        # This should not error even if font is not available
+        DOPBrowser.ContentMM.NativeUI.render_cairo!(ui, width=200, height=100)
+        
+        @test ui.cairo_context !== nothing
+    end
+
+end
