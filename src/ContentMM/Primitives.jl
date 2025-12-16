@@ -143,6 +143,7 @@ function create_node!(table::NodeTable, node_type::NodeType;
                       parent::UInt32=UInt32(0),
                       style_id::UInt32=UInt32(0),
                       text_id::UInt32=UInt32(0))::UInt32
+    # Add new node to all arrays in parallel
     push!(table.node_types, node_type)
     push!(table.parents, parent)
     push!(table.first_children, UInt32(0))

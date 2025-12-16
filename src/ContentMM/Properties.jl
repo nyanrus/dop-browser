@@ -306,30 +306,42 @@ end
 "Set a property value for a node."
 function set_property!(table::PropertyTable, id::Int, prop::Symbol, value)
     valid_prop_id(table, id) || return
-    if prop == :direction;  table.direction[id] = value
-    elseif prop == :pack;   table.pack[id] = value
-    elseif prop == :align;  table.align[id] = value
-    elseif prop == :gap_row; table.gap_row[id] = Float32(value)
-    elseif prop == :gap_col; table.gap_col[id] = Float32(value)
-    elseif prop == :width;  table.width[id] = Float32(value)
-    elseif prop == :height; table.height[id] = Float32(value)
-    elseif prop == :fill;   c = value::Color; table.fill_r[id], table.fill_g[id], table.fill_b[id], table.fill_a[id] = c.r, c.g, c.b, c.a
-    elseif prop == :inset;  i = value::Inset; table.inset_top[id], table.inset_right[id], table.inset_bottom[id], table.inset_left[id] = i.top, i.right, i.bottom, i.left
-    elseif prop == :offset; o = value::Offset; table.offset_top[id], table.offset_right[id], table.offset_bottom[id], table.offset_left[id] = o.top, o.right, o.bottom, o.left
+    
+    # Handle compound properties
+    if prop == :fill
+        c = value::Color
+        table.fill_r[id], table.fill_g[id], table.fill_b[id], table.fill_a[id] = c.r, c.g, c.b, c.a
+    elseif prop == :inset
+        i = value::Inset
+        table.inset_top[id], table.inset_right[id], table.inset_bottom[id], table.inset_left[id] = i.top, i.right, i.bottom, i.left
+    elseif prop == :offset
+        o = value::Offset
+        table.offset_top[id], table.offset_right[id], table.offset_bottom[id], table.offset_left[id] = o.top, o.right, o.bottom, o.left
+    # Handle simple properties with explicit type conversion
+    elseif hasfield(PropertyTable, prop)
+        field = getfield(table, prop)
+        # Convert numeric types explicitly to match field type
+        converted_val = eltype(field) <: Number ? convert(eltype(field), value) : value
+        field[id] = converted_val
     end
 end
 
 "Get a property value for a node."
 function get_property(table::PropertyTable, id::Int, prop::Symbol)::PropertyValue
     valid_prop_id(table, id) || return nothing
-    prop == :direction && return table.direction[id]
-    prop == :pack && return table.pack[id]
-    prop == :align && return table.align[id]
-    prop == :width && return table.width[id]
-    prop == :height && return table.height[id]
-    prop == :fill && return Color(table.fill_r[id], table.fill_g[id], table.fill_b[id], table.fill_a[id])
-    prop == :inset && return Inset(table.inset_top[id], table.inset_right[id], table.inset_bottom[id], table.inset_left[id])
-    prop == :offset && return Offset(table.offset_top[id], table.offset_right[id], table.offset_bottom[id], table.offset_left[id])
+    
+    # Handle compound properties
+    if prop == :fill
+        return Color(table.fill_r[id], table.fill_g[id], table.fill_b[id], table.fill_a[id])
+    elseif prop == :inset
+        return Inset(table.inset_top[id], table.inset_right[id], table.inset_bottom[id], table.inset_left[id])
+    elseif prop == :offset
+        return Offset(table.offset_top[id], table.offset_right[id], table.offset_bottom[id], table.offset_left[id])
+    # Handle simple properties
+    elseif hasfield(PropertyTable, prop)
+        return getfield(table, prop)[id]
+    end
+    
     nothing
 end
 

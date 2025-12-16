@@ -589,58 +589,30 @@ function merge_styles!(target::CSSStyles, source::CSSStyles)
         target.position = source.position
     end
     
-    if !source.top_auto
-        target.top = source.top
-        target.top_auto = false
-    end
-    if !source.right_auto
-        target.right = source.right
-        target.right_auto = false
-    end
-    if !source.bottom_auto
-        target.bottom = source.bottom
-        target.bottom_auto = false
-    end
-    if !source.left_auto
-        target.left = source.left
-        target.left_auto = false
+    # Position offsets with auto flags
+    for (val_field, auto_field) in [(:top, :top_auto), (:right, :right_auto), 
+                                     (:bottom, :bottom_auto), (:left, :left_auto)]
+        if !getfield(source, auto_field)
+            setfield!(target, val_field, getfield(source, val_field))
+            setfield!(target, auto_field, false)
+        end
     end
     
-    # Dimensions
-    if !source.width_auto
-        target.width = source.width
-        target.width_auto = false
-    end
-    if !source.height_auto
-        target.height = source.height
-        target.height_auto = false
+    # Dimensions with auto flags
+    for (val_field, auto_field) in [(:width, :width_auto), (:height, :height_auto)]
+        if !getfield(source, auto_field)
+            setfield!(target, val_field, getfield(source, val_field))
+            setfield!(target, auto_field, false)
+        end
     end
     
-    # Box model
-    if source.margin_top != 0
-        target.margin_top = source.margin_top
-    end
-    if source.margin_right != 0
-        target.margin_right = source.margin_right
-    end
-    if source.margin_bottom != 0
-        target.margin_bottom = source.margin_bottom
-    end
-    if source.margin_left != 0
-        target.margin_left = source.margin_left
-    end
-    
-    if source.padding_top != 0
-        target.padding_top = source.padding_top
-    end
-    if source.padding_right != 0
-        target.padding_right = source.padding_right
-    end
-    if source.padding_bottom != 0
-        target.padding_bottom = source.padding_bottom
-    end
-    if source.padding_left != 0
-        target.padding_left = source.padding_left
+    # Box model: margins and paddings
+    for field in [:margin_top, :margin_right, :margin_bottom, :margin_left,
+                  :padding_top, :padding_right, :padding_bottom, :padding_left]
+        src_val = getfield(source, field)
+        if src_val != 0
+            setfield!(target, field, src_val)
+        end
     end
     
     # Display
@@ -648,16 +620,16 @@ function merge_styles!(target::CSSStyles, source::CSSStyles)
         target.display = source.display
     end
     
+    # Always copy these properties
     target.visibility = source.visibility
     target.overflow = source.overflow
     target.z_index = source.z_index
     
     # Colors
     if source.has_background
-        target.background_r = source.background_r
-        target.background_g = source.background_g
-        target.background_b = source.background_b
-        target.background_a = source.background_a
+        for field in [:background_r, :background_g, :background_b, :background_a]
+            setfield!(target, field, getfield(source, field))
+        end
         target.has_background = true
     end
 end
@@ -775,31 +747,14 @@ function apply_properties!(ctx::HTMLLoweringContext)
     
     resize_properties!(ctx.cm_props, n)
     
+    # Copy node properties to property table using metadata
     for (i, node) in enumerate(ctx.nodes)
-        # Layout
-        ctx.cm_props.direction[i] = node.direction
-        ctx.cm_props.pack[i] = node.pack
-        ctx.cm_props.align[i] = node.align
-        
-        # Dimensions
-        ctx.cm_props.width[i] = node.width
-        ctx.cm_props.height[i] = node.height
-        
-        # Box model
-        ctx.cm_props.inset_top[i] = node.inset_top
-        ctx.cm_props.inset_right[i] = node.inset_right
-        ctx.cm_props.inset_bottom[i] = node.inset_bottom
-        ctx.cm_props.inset_left[i] = node.inset_left
-        ctx.cm_props.offset_top[i] = node.offset_top
-        ctx.cm_props.offset_right[i] = node.offset_right
-        ctx.cm_props.offset_bottom[i] = node.offset_bottom
-        ctx.cm_props.offset_left[i] = node.offset_left
-        
-        # Colors
-        ctx.cm_props.fill_r[i] = node.fill_r
-        ctx.cm_props.fill_g[i] = node.fill_g
-        ctx.cm_props.fill_b[i] = node.fill_b
-        ctx.cm_props.fill_a[i] = node.fill_a
+        for field in [:direction, :pack, :align, :width, :height,
+                      :inset_top, :inset_right, :inset_bottom, :inset_left,
+                      :offset_top, :offset_right, :offset_bottom, :offset_left,
+                      :fill_r, :fill_g, :fill_b, :fill_a]
+            getfield(ctx.cm_props, field)[i] = getfield(node, field)
+        end
     end
 end
 

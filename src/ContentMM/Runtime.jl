@@ -472,24 +472,32 @@ Get a property value (virtual DOM API).
 function js_get_property(iface::JSInterface, node_id::UInt32, prop::Symbol)::Any
     # Check cache
     key = (node_id, prop)
-    if haskey(iface.property_cache, key)
-        return iface.property_cache[key]
+    haskey(iface.property_cache, key) && return iface.property_cache[key]
+    
+    # Property to layout field mapping
+    ctx = iface.runtime
+    
+    # Handle array-based layout properties
+    array_props = Dict(
+        :offsetLeft => ctx.layout_x,
+        :offsetTop => ctx.layout_y,
+        :offsetWidth => ctx.layout_width,
+        :offsetHeight => ctx.layout_height
+    )
+    
+    if haskey(array_props, prop)
+        arr = array_props[prop]
+        return node_id <= length(arr) ? arr[node_id] : nothing
     end
     
-    # Read from layout
-    ctx = iface.runtime
-    if prop == :offsetLeft && node_id <= length(ctx.layout_x)
-        return ctx.layout_x[node_id]
-    elseif prop == :offsetTop && node_id <= length(ctx.layout_y)
-        return ctx.layout_y[node_id]
-    elseif prop == :offsetWidth && node_id <= length(ctx.layout_width)
-        return ctx.layout_width[node_id]
-    elseif prop == :offsetHeight && node_id <= length(ctx.layout_height)
-        return ctx.layout_height[node_id]
-    elseif prop == :scrollLeft
-        return ctx.scroll_x
-    elseif prop == :scrollTop
-        return ctx.scroll_y
+    # Handle scalar scroll properties
+    scalar_props = Dict(
+        :scrollLeft => ctx.scroll_x,
+        :scrollTop => ctx.scroll_y
+    )
+    
+    if haskey(scalar_props, prop)
+        return scalar_props[prop]
     end
     
     return nothing
@@ -503,11 +511,9 @@ Set a property value (virtual DOM API).
 function js_set_property!(iface::JSInterface, node_id::UInt32, prop::Symbol, value)
     ctx = iface.runtime
     
-    if prop == :scrollLeft
-        ctx.scroll_x = Float32(value)
-        resolve_sticky!(ctx)
-    elseif prop == :scrollTop
-        ctx.scroll_y = Float32(value)
+    if prop in [:scrollLeft, :scrollTop]
+        field = prop == :scrollLeft ? :scroll_x : :scroll_y
+        setfield!(ctx, field, Float32(value))
         resolve_sticky!(ctx)
     else
         # Cache for later retrieval
