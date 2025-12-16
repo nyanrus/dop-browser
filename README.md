@@ -4,6 +4,24 @@ A **Data-Oriented Programming (DOP)** browser engine base implementation in Juli
 
 This project provides a render-friendly Intermediate Representation (IR) that replaces traditional DOM & CSSOM with cache-efficient, SIMD-friendly data structures.
 
+## Modular Architecture
+
+DOPBrowser is organized into well-defined modules for better maintainability:
+
+| Module | Purpose |
+|--------|---------|
+| **HTMLParser** | HTML tokenization and string interning |
+| **CSSParserModule** | CSS parsing and style computation |
+| **Layout** | SIMD-friendly layout calculation |
+| **DOMCSSOM** | Virtual DOM/CSSOM representation |
+| **Compiler** | HTML+CSS to Content-- compilation |
+| **ContentMM** | Content-- IR and runtime |
+| **Network** | HTTP/HTTPS networking layer |
+| **Renderer** | GPU rendering and PNG export |
+| **EventLoop** | Browser main event loop |
+
+See [docs/MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md) for detailed information about the module structure.
+
 ## Acid2 Test Support
 
 DOPBrowser now includes **enhanced CSS 2.1 support** for processing the real Acid2 test from webstandards.org. The browser includes:

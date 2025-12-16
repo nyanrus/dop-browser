@@ -35,7 +35,26 @@ This browser implements the Content-- v6.0 specification:
 """
 module DOPBrowser
 
-# Core modules
+# =============================================================================
+# New Modular Architecture
+# =============================================================================
+# The browser engine is organized into the following modules:
+# 1. HTMLParser - HTML tokenization and string interning
+# 2. CSSParserModule - CSS parsing and style computation  
+# 3. Layout - SIMD-friendly layout calculation
+# 4. DOMCSSOM - Virtual DOM/CSSOM representation
+# 5. Compiler - HTML+CSS to Content-- compilation
+# 6. ContentMM - Content-- IR and runtime
+# 7. Network - HTTP/HTTPS networking layer
+# 8. Renderer - GPU rendering and PNG export
+# 9. EventLoop - Browser main event loop
+
+# =============================================================================
+# Legacy Core Modules (for backward compatibility)
+# These are the original flat modules that Core.jl depends on
+# =============================================================================
+
+# Core modules (legacy - still used by Core.jl)
 include("StringInterner.jl")
 include("TokenTape.jl")
 include("NodeTable.jl")
@@ -54,6 +73,32 @@ include("Network/Network.jl")
 # Rendering pipeline
 include("Renderer/Renderer.jl")
 
+# =============================================================================
+# Include New Module Structure (for new modular access)
+# =============================================================================
+
+# HTML Parser module (StringInterner + TokenTape)
+include("HTMLParser/HTMLParser.jl")
+
+# CSS Parser module (new modular version)
+include("CSSParser/CSSParserModule.jl")
+
+# Layout module (LayoutArrays)
+include("Layout/Layout.jl")
+
+# DOM/CSSOM module (NodeTable + StyleArchetypes + RenderBuffer + StringInterner)
+include("DOMCSSOM/DOMCSSOM.jl")
+
+# Compiler module (HTML+CSS to Content--)
+include("Compiler/Compiler.jl")
+
+# Event Loop module
+include("EventLoop/EventLoop.jl")
+
+# =============================================================================
+# Re-exports from Legacy Submodules (Backward Compatibility)
+# =============================================================================
+
 # Re-exports from submodules
 using .StringInterner: StringPool, intern!, get_string, get_id
 using .TokenTape: TokenType, Token, Tokenizer, tokenize!, reset!, get_tokens
@@ -65,6 +110,7 @@ using .LayoutArrays: LayoutData, resize_layout!, set_bounds!, get_bounds, set_po
                     set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!,
                     set_background_color!, get_background_color, set_borders!, has_border
 using .RenderBuffer: RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, emit_stroke!, clear!, get_commands, command_count
+# CSSParser is the legacy module included from CSSParser.jl
 using .CSSParser: CSSStyles, parse_inline_style, parse_color, parse_length,
                   POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
                   OVERFLOW_VISIBLE, OVERFLOW_HIDDEN,
@@ -106,6 +152,13 @@ export Network
 # Rendering pipeline
 using .Renderer
 export Renderer
+
+# =============================================================================
+# New Module Exports
+# =============================================================================
+
+# Export new modules for direct access
+export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
 
 # ============================================================================
 # Complete Browser Process
