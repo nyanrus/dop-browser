@@ -327,5 +327,105 @@ using DOPBrowser
             end
         end
     end
+    
+    @testset "Acid2 - Complete Face Test" begin
+        # This test simulates the Acid2 smiley face structure
+        # Using positioned divs to create facial features
+        ctx = create_context(viewport_width=400.0f0, viewport_height=400.0f0)
+        
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Acid2 Test</title>
+        </head>
+        <body>
+            <!-- Face container -->
+            <div style="position: relative; width: 200px; height: 200px; background-color: yellow; overflow: hidden;">
+                <!-- Left eye -->
+                <div style="position: absolute; top: 40px; left: 40px; width: 20px; height: 20px; background-color: black;"></div>
+                <!-- Right eye -->
+                <div style="position: absolute; top: 40px; left: 140px; width: 20px; height: 20px; background-color: black;"></div>
+                <!-- Nose -->
+                <div style="position: absolute; top: 80px; left: 90px; width: 20px; height: 40px; background-color: orange;"></div>
+                <!-- Mouth -->
+                <div style="position: absolute; top: 140px; left: 40px; width: 120px; height: 20px; background-color: red;"></div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        result = process_document!(ctx, html)
+        
+        @test result.node_count > 0
+        @test result.command_count >= 5  # Face + 2 eyes + nose + mouth
+        
+        # Verify face is positioned correctly
+        commands = get_commands(ctx.render_buffer)
+        
+        # Check we have multiple colored elements
+        colors = Set{Tuple{Float32, Float32, Float32}}()
+        for cmd in commands
+            push!(colors, (cmd.color_r, cmd.color_g, cmd.color_b))
+        end
+        
+        # Should have at least yellow (face), black (eyes), orange (nose), red (mouth)
+        @test length(colors) >= 4
+    end
+    
+    @testset "Acid2 - Margin and Padding" begin
+        ctx = create_context(viewport_width=400.0f0, viewport_height=400.0f0)
+        
+        html = """
+        <div style="margin: 20px; padding: 10px; width: 100px; height: 100px; background-color: blue;">
+            <div style="width: 50px; height: 50px; background-color: red;"></div>
+        </div>
+        """
+        
+        result = process_document!(ctx, html)
+        
+        @test result.node_count > 0
+        
+        # Find the outer div
+        for i in 1:result.node_count
+            if ctx.layout.margin_top[i] == 20.0f0
+                @test ctx.layout.padding_top[i] == 10.0f0
+                @test ctx.layout.padding_left[i] == 10.0f0
+                @test ctx.layout.x[i] == 20.0f0  # Margin left
+                @test ctx.layout.y[i] == 20.0f0  # Margin top
+                break
+            end
+        end
+    end
+    
+    @testset "Acid2 - Relative Positioning" begin
+        ctx = create_context(viewport_width=300.0f0, viewport_height=300.0f0)
+        
+        html = """
+        <div style="width: 100px; height: 100px; background-color: blue;"></div>
+        <div style="position: relative; top: -50px; left: 50px; width: 100px; height: 100px; background-color: red;"></div>
+        """
+        
+        result = process_document!(ctx, html)
+        
+        @test result.node_count > 0
+        @test result.command_count >= 2
+        
+        # The relative positioned element should be offset
+        # First div at (0, 0), second at (50, 50) due to relative offset
+        commands = get_commands(ctx.render_buffer)
+        
+        # Find the red element (relative positioned)
+        red_cmd = nothing
+        for cmd in commands
+            if cmd.color_r > cmd.color_b
+                red_cmd = cmd
+                break
+            end
+        end
+        
+        @test red_cmd !== nothing
+        @test red_cmd.x == 50.0f0  # left: 50px
+    end
 
 end
