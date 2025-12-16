@@ -14,6 +14,7 @@ using ..StringInterner: StringPool
 export NodeKind, DOMTable, add_node!, get_parent, get_first_child, get_next_sibling
 export get_tag, set_parent!, set_first_child!, set_next_sibling!, node_count
 export NODE_ELEMENT, NODE_TEXT, NODE_COMMENT, NODE_DOCUMENT, NODE_DOCTYPE
+export get_id_attr, get_class_attr, get_style_attr, set_attributes!
 
 """
     NodeKind
@@ -44,6 +45,9 @@ All arrays are 1-indexed, so node ID 1 corresponds to index 1 in each array.
 - `next_siblings::Vector{UInt32}` - Next sibling node ID (0 if last)
 - `text_content::Vector{UInt32}` - Interned text content ID (for text/comment nodes)
 - `archetype_ids::Vector{UInt32}` - Style archetype ID (0 if none)
+- `id_attrs::Vector{UInt32}` - Interned id attribute (0 if none)
+- `class_attrs::Vector{UInt32}` - Interned class attribute (0 if none)
+- `style_attrs::Vector{UInt32}` - Interned style attribute (0 if none)
 - `strings::StringPool` - Reference to string pool
 """
 mutable struct DOMTable
@@ -54,11 +58,17 @@ mutable struct DOMTable
     next_siblings::Vector{UInt32}
     text_content::Vector{UInt32}
     archetype_ids::Vector{UInt32}
+    id_attrs::Vector{UInt32}
+    class_attrs::Vector{UInt32}
+    style_attrs::Vector{UInt32}
     strings::StringPool
     
     function DOMTable(pool::StringPool)
         new(
             NodeKind[],
+            UInt32[],
+            UInt32[],
+            UInt32[],
             UInt32[],
             UInt32[],
             UInt32[],
@@ -106,6 +116,9 @@ function add_node!(table::DOMTable, kind::NodeKind;
     push!(table.next_siblings, UInt32(0))
     push!(table.text_content, text)
     push!(table.archetype_ids, UInt32(0))
+    push!(table.id_attrs, UInt32(0))
+    push!(table.class_attrs, UInt32(0))
+    push!(table.style_attrs, UInt32(0))
     
     new_id = UInt32(length(table.kinds))
     
@@ -204,6 +217,67 @@ Set the next sibling of a node.
 function set_next_sibling!(table::DOMTable, id::UInt32, sibling::UInt32)
     if id != 0 && id <= length(table.next_siblings)
         table.next_siblings[id] = sibling
+    end
+end
+
+"""
+    get_id_attr(table::DOMTable, id::UInt32) -> UInt32
+
+Get the interned id attribute for a node.
+"""
+function get_id_attr(table::DOMTable, id::UInt32)::UInt32
+    if id == 0 || id > length(table.id_attrs)
+        return UInt32(0)
+    end
+    return table.id_attrs[id]
+end
+
+"""
+    get_class_attr(table::DOMTable, id::UInt32) -> UInt32
+
+Get the interned class attribute for a node.
+"""
+function get_class_attr(table::DOMTable, id::UInt32)::UInt32
+    if id == 0 || id > length(table.class_attrs)
+        return UInt32(0)
+    end
+    return table.class_attrs[id]
+end
+
+"""
+    get_style_attr(table::DOMTable, id::UInt32) -> UInt32
+
+Get the interned style attribute for a node.
+"""
+function get_style_attr(table::DOMTable, id::UInt32)::UInt32
+    if id == 0 || id > length(table.style_attrs)
+        return UInt32(0)
+    end
+    return table.style_attrs[id]
+end
+
+"""
+    set_attributes!(table::DOMTable, id::UInt32; 
+                    id_attr::UInt32=UInt32(0), 
+                    class_attr::UInt32=UInt32(0), 
+                    style_attr::UInt32=UInt32(0))
+
+Set attributes for a node.
+"""
+function set_attributes!(table::DOMTable, id::UInt32; 
+                         id_attr::UInt32=UInt32(0), 
+                         class_attr::UInt32=UInt32(0), 
+                         style_attr::UInt32=UInt32(0))
+    if id != 0 && id <= length(table.id_attrs)
+        if id_attr != 0
+            table.id_attrs[id] = id_attr
+        end
+        if class_attr != 0
+            table.class_attrs[id] = class_attr
+        end
+        if style_attr != 0
+            table.style_attrs[id] = style_attr
+        end
     end
 end
 

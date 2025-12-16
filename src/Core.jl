@@ -12,11 +12,16 @@ using ..StringInterner: StringPool, intern!, get_string
 using ..TokenTape: TokenType, Token, Tokenizer, tokenize!, get_tokens, 
                    TOKEN_START_TAG, TOKEN_END_TAG, TOKEN_TEXT, TOKEN_COMMENT, 
                    TOKEN_DOCTYPE, TOKEN_SELF_CLOSING, TOKEN_ATTRIBUTE
-using ..NodeTable: NodeKind, DOMTable, add_node!, node_count,
+using ..NodeTable: NodeKind, DOMTable, add_node!, node_count, set_attributes!,
                    NODE_ELEMENT, NODE_TEXT, NODE_COMMENT, NODE_DOCUMENT, NODE_DOCTYPE
 using ..StyleArchetypes: ArchetypeTable, get_or_create_archetype!, archetype_count
-using ..LayoutArrays: LayoutData, resize_layout!, set_bounds!, set_position!, compute_layout!
+using ..LayoutArrays: LayoutData, resize_layout!, set_bounds!, set_position!, compute_layout!,
+                      set_css_position!, set_offsets!, set_margins!, set_paddings!, 
+                      set_overflow!, set_visibility!, set_z_index!, set_background_color!,
+                      POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
+                      DISPLAY_NONE, DISPLAY_BLOCK, OVERFLOW_HIDDEN
 using ..RenderBuffer: CommandBuffer, emit_rect!, clear!, command_count, get_commands
+using ..CSSParser: CSSStyles, parse_inline_style
 
 export BrowserContext, create_context, parse_html!, apply_styles!, 
        compute_layouts!, generate_render_commands!, process_document!
@@ -91,6 +96,11 @@ function parse_html!(ctx::BrowserContext, html::AbstractString)::Int
     node_stack = UInt32[root_id]
     current_parent = root_id
     
+    # Pre-intern common attribute names for lookup
+    id_name_id = intern!(ctx.strings, "id")
+    class_name_id = intern!(ctx.strings, "class")
+    style_name_id = intern!(ctx.strings, "style")
+    
     i = 1
     while i <= length(tokens)
         token = tokens[i]
@@ -101,11 +111,29 @@ function parse_html!(ctx::BrowserContext, html::AbstractString)::Int
                                tag=token.name_id, parent=current_parent)
             
             # Process attributes (following tokens)
+            id_attr = UInt32(0)
+            class_attr = UInt32(0)
+            style_attr = UInt32(0)
+            
             j = i + 1
             while j <= length(tokens) && tokens[j].type == TOKEN_ATTRIBUTE
-                # Store attributes (in a real implementation)
+                attr_token = tokens[j]
+                if attr_token.name_id == id_name_id
+                    id_attr = attr_token.value_id
+                elseif attr_token.name_id == class_name_id
+                    class_attr = attr_token.value_id
+                elseif attr_token.name_id == style_name_id
+                    style_attr = attr_token.value_id
+                end
                 j += 1
             end
+            
+            # Store attributes
+            set_attributes!(ctx.dom, node_id, 
+                           id_attr=id_attr, 
+                           class_attr=class_attr, 
+                           style_attr=style_attr)
+            
             i = j - 1
             
             # Push to stack for non-self-closing tags
@@ -147,23 +175,70 @@ end
 
 Apply style archetypes to all nodes.
 
+Parses inline styles and applies CSS properties to layout data.
+
 Returns the number of unique archetypes.
 """
 function apply_styles!(ctx::BrowserContext)::Int
     n = node_count(ctx.dom)
     
-    # In a real implementation, this would:
-    # 1. Parse CSS
-    # 2. Match selectors to nodes
-    # 3. Compute and cache archetypes
-    # 4. Assign archetype IDs to nodes
+    # Resize layout arrays to match DOM size
+    resize_layout!(ctx.layout, n)
     
-    # For now, assign a default archetype to all elements
+    # Default archetype for all elements
     default_archetype = get_or_create_archetype!(ctx.archetypes, UInt32[])
     
     for i in 1:n
         if ctx.dom.kinds[i] == NODE_ELEMENT
             ctx.dom.archetype_ids[i] = default_archetype
+            
+            # Parse and apply inline styles
+            style_id = ctx.dom.style_attrs[i]
+            if style_id != 0
+                style_str = get_string(ctx.strings, style_id)
+                styles = parse_inline_style(style_str)
+                
+                # Apply CSS positioning
+                set_css_position!(ctx.layout, i, styles.position)
+                
+                # Apply offsets
+                set_offsets!(ctx.layout, i,
+                            top=styles.top, right=styles.right,
+                            bottom=styles.bottom, left=styles.left,
+                            top_auto=styles.top_auto, right_auto=styles.right_auto,
+                            bottom_auto=styles.bottom_auto, left_auto=styles.left_auto)
+                
+                # Apply dimensions
+                if !styles.width_auto
+                    ctx.layout.width[i] = styles.width
+                end
+                if !styles.height_auto
+                    ctx.layout.height[i] = styles.height
+                end
+                
+                # Apply margins
+                set_margins!(ctx.layout, i,
+                            top=styles.margin_top, right=styles.margin_right,
+                            bottom=styles.margin_bottom, left=styles.margin_left)
+                
+                # Apply paddings
+                set_paddings!(ctx.layout, i,
+                             top=styles.padding_top, right=styles.padding_right,
+                             bottom=styles.padding_bottom, left=styles.padding_left)
+                
+                # Apply display and visibility
+                ctx.layout.display[i] = styles.display
+                set_visibility!(ctx.layout, i, styles.visibility)
+                set_overflow!(ctx.layout, i, styles.overflow)
+                set_z_index!(ctx.layout, i, styles.z_index)
+                
+                # Apply background color
+                if styles.has_background
+                    set_background_color!(ctx.layout, i,
+                                         styles.background_r, styles.background_g,
+                                         styles.background_b, styles.background_a)
+                end
+            end
         end
     end
     
@@ -180,8 +255,10 @@ Uses contiguous array operations for SIMD optimization.
 function compute_layouts!(ctx::BrowserContext)
     n = node_count(ctx.dom)
     
-    # Resize layout arrays
-    resize_layout!(ctx.layout, n)
+    # Ensure layout arrays are sized correctly
+    if length(ctx.layout.x) < n
+        resize_layout!(ctx.layout, n)
+    end
     
     # Set root node dimensions to viewport
     if n >= 1
@@ -199,18 +276,36 @@ end
 
 Generate render commands for all visible nodes.
 
+Respects z-index ordering and overflow:hidden clipping.
+
 Returns the number of commands generated.
 """
 function generate_render_commands!(ctx::BrowserContext)::Int
     clear!(ctx.render_buffer)
     n = node_count(ctx.dom)
     
-    # Traverse nodes and emit render commands
+    # Build z-index sorted render order
+    # Collect visible element nodes with their z-index
+    render_order = Tuple{Int32, Int}[]
     for i in 1:n
         if ctx.dom.kinds[i] != NODE_ELEMENT
             continue
         end
         
+        # Skip display:none and invisible elements
+        if ctx.layout.display[i] == DISPLAY_NONE || !ctx.layout.visibility[i]
+            continue
+        end
+        
+        z = ctx.layout.z_index[i]
+        push!(render_order, (z, i))
+    end
+    
+    # Sort by z-index (stable sort preserves document order for equal z-index)
+    sort!(render_order, by=x -> x[1])
+    
+    # Emit render commands in z-order
+    for (_, i) in render_order
         x = ctx.layout.x[i]
         y = ctx.layout.y[i]
         width = ctx.layout.width[i]
@@ -221,9 +316,16 @@ function generate_render_commands!(ctx::BrowserContext)::Int
             continue
         end
         
-        # Emit background rect (simplified - would use archetype colors)
-        emit_rect!(ctx.render_buffer, x, y, width, height,
-                   0.9f0, 0.9f0, 0.9f0, 1.0f0)
+        # Get background color
+        r = Float32(ctx.layout.bg_r[i]) / 255.0f0
+        g = Float32(ctx.layout.bg_g[i]) / 255.0f0
+        b = Float32(ctx.layout.bg_b[i]) / 255.0f0
+        a = Float32(ctx.layout.bg_a[i]) / 255.0f0
+        
+        # Only emit rect if has visible background
+        if ctx.layout.has_background[i]
+            emit_rect!(ctx.render_buffer, x, y, width, height, r, g, b, a)
+        end
     end
     
     return command_count(ctx.render_buffer)
