@@ -863,6 +863,9 @@ function generate_render_commands!(ctx::BrowserContext)::Int
     # Sort by z-index (stable sort preserves document order for equal z-index)
     sort!(render_order, by=x -> x[1])
     
+    # Helper to convert UInt8 color to Float32 (0-1 range)
+    to_float = c -> Float32(c) / 255.0f0
+    
     # Emit render commands in z-order
     for (_, i) in render_order
         x = ctx.layout.x[i]
@@ -876,10 +879,10 @@ function generate_render_commands!(ctx::BrowserContext)::Int
         end
         
         # Get background color
-        r = Float32(ctx.layout.bg_r[i]) / 255.0f0
-        g = Float32(ctx.layout.bg_g[i]) / 255.0f0
-        b = Float32(ctx.layout.bg_b[i]) / 255.0f0
-        a = Float32(ctx.layout.bg_a[i]) / 255.0f0
+        r = to_float(ctx.layout.bg_r[i])
+        g = to_float(ctx.layout.bg_g[i])
+        b = to_float(ctx.layout.bg_b[i])
+        a = to_float(ctx.layout.bg_a[i])
         
         # Only emit rect if has visible background
         if ctx.layout.has_background[i]
@@ -895,25 +898,25 @@ function generate_render_commands!(ctx::BrowserContext)::Int
                 ctx.layout.border_bottom_width[i],
                 ctx.layout.border_left_width[i],
                 # Top color
-                Float32(ctx.layout.border_top_r[i]) / 255.0f0,
-                Float32(ctx.layout.border_top_g[i]) / 255.0f0,
-                Float32(ctx.layout.border_top_b[i]) / 255.0f0,
-                Float32(ctx.layout.border_top_a[i]) / 255.0f0,
+                to_float(ctx.layout.border_top_r[i]),
+                to_float(ctx.layout.border_top_g[i]),
+                to_float(ctx.layout.border_top_b[i]),
+                to_float(ctx.layout.border_top_a[i]),
                 # Right color
-                Float32(ctx.layout.border_right_r[i]) / 255.0f0,
-                Float32(ctx.layout.border_right_g[i]) / 255.0f0,
-                Float32(ctx.layout.border_right_b[i]) / 255.0f0,
-                Float32(ctx.layout.border_right_a[i]) / 255.0f0,
+                to_float(ctx.layout.border_right_r[i]),
+                to_float(ctx.layout.border_right_g[i]),
+                to_float(ctx.layout.border_right_b[i]),
+                to_float(ctx.layout.border_right_a[i]),
                 # Bottom color
-                Float32(ctx.layout.border_bottom_r[i]) / 255.0f0,
-                Float32(ctx.layout.border_bottom_g[i]) / 255.0f0,
-                Float32(ctx.layout.border_bottom_b[i]) / 255.0f0,
-                Float32(ctx.layout.border_bottom_a[i]) / 255.0f0,
+                to_float(ctx.layout.border_bottom_r[i]),
+                to_float(ctx.layout.border_bottom_g[i]),
+                to_float(ctx.layout.border_bottom_b[i]),
+                to_float(ctx.layout.border_bottom_a[i]),
                 # Left color
-                Float32(ctx.layout.border_left_r[i]) / 255.0f0,
-                Float32(ctx.layout.border_left_g[i]) / 255.0f0,
-                Float32(ctx.layout.border_left_b[i]) / 255.0f0,
-                Float32(ctx.layout.border_left_a[i]) / 255.0f0)
+                to_float(ctx.layout.border_left_r[i]),
+                to_float(ctx.layout.border_left_g[i]),
+                to_float(ctx.layout.border_left_b[i]),
+                to_float(ctx.layout.border_left_a[i]))
         end
     end
     

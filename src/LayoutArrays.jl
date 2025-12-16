@@ -605,17 +605,21 @@ end
     has_border(layout::LayoutData, id::Int) -> Bool
 
 Check if a node has any visible border.
+A border side is visible if width > 0, style != none (0), and alpha > 0.
 """
 function has_border(layout::LayoutData, id::Int)::Bool
     if id < 1 || id > length(layout.border_top_width)
         return false
     end
     
-    # Check if any side has a visible border (width > 0, style != none, alpha > 0)
-    return (layout.border_top_width[id] > 0 && layout.border_top_style[id] != 0 && layout.border_top_a[id] > 0) ||
-           (layout.border_right_width[id] > 0 && layout.border_right_style[id] != 0 && layout.border_right_a[id] > 0) ||
-           (layout.border_bottom_width[id] > 0 && layout.border_bottom_style[id] != 0 && layout.border_bottom_a[id] > 0) ||
-           (layout.border_left_width[id] > 0 && layout.border_left_style[id] != 0 && layout.border_left_a[id] > 0)
+    # Helper to check if a single border side is visible
+    is_side_visible(width, style, alpha) = width > 0 && style != 0 && alpha > 0
+    
+    # Check if any side has a visible border
+    return is_side_visible(layout.border_top_width[id], layout.border_top_style[id], layout.border_top_a[id]) ||
+           is_side_visible(layout.border_right_width[id], layout.border_right_style[id], layout.border_right_a[id]) ||
+           is_side_visible(layout.border_bottom_width[id], layout.border_bottom_style[id], layout.border_bottom_a[id]) ||
+           is_side_visible(layout.border_left_width[id], layout.border_left_style[id], layout.border_left_a[id])
 end
 
 """

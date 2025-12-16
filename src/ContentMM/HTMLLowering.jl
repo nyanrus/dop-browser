@@ -399,10 +399,13 @@ function lower_element!(ctx::HTMLLoweringContext, dom_id::UInt32)
     push!(ctx.nodes, node)
     
     # Add source mapping
+    # TODO: Track actual source line/column during HTML parsing for proper source mapping.
+    # Currently using DOM ID as a placeholder index. In a full implementation,
+    # the HTML parser would record (line, column) for each element start tag.
     source_loc = SourceLocation(
         source_type = SOURCE_HTML_ELEMENT,
-        line = UInt32(dom_id),  # Using DOM ID as line proxy (real impl would track actual line)
-        column = UInt32(1),
+        line = UInt32(dom_id),  # Placeholder: should be actual source line
+        column = UInt32(1),     # Placeholder: should be actual source column
         file_id = UInt32(0)
     )
     add_mapping!(ctx.sourcemap, cm_id, source_loc)

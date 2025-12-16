@@ -233,6 +233,9 @@ The stroke is drawn as 4 rectangles forming a frame:
     - Right:  (x + width - stroke_width, y, stroke_width, height)
     - Bottom: (x, y + height - stroke_width, width, stroke_width)
     - Left:   (x, y, stroke_width, height)
+
+Note: This function is for simple strokes with uniform width.
+For per-side stroke widths, use emit_stroke_sides! instead.
 """
 function emit_stroke!(buffer::CommandBuffer, x::Float32, y::Float32,
                       width::Float32, height::Float32,
@@ -242,7 +245,9 @@ function emit_stroke!(buffer::CommandBuffer, x::Float32, y::Float32,
         return buffer
     end
     
-    # Encode stroke_width as extra_data (multiplied by 100 to preserve precision)
+    # Encode stroke_width as extra_data (multiplied by 100 to preserve precision).
+    # Precision limit: 0.01px minimum, 42949672.95px maximum.
+    # For typical web use (1-10px borders), this is more than sufficient.
     extra = UInt32(round(stroke_width * 100))
     
     cmd = RenderCommand(CMD_STROKE, x, y, width, height, r, g, b, a, UInt32(0), extra)
