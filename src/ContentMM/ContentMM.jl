@@ -37,6 +37,7 @@ include("Compiler.jl")
 include("TextJIT.jl")
 include("Reactive.jl")
 include("Runtime.jl")
+include("HTMLLowering.jl")
 
 # Re-export core types
 using .Primitives
@@ -48,7 +49,8 @@ using .Compiler
 using .TextJIT
 using .Reactive
 using .Runtime
+using .HTMLLowering
 
-export Primitives, Properties, Styles, Macros, Environment, Compiler, TextJIT, Reactive, Runtime
+export Primitives, Properties, Styles, Macros, Environment, Compiler, TextJIT, Reactive, Runtime, HTMLLowering
 
 end # module ContentMM

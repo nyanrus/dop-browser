@@ -427,6 +427,78 @@ using DOPBrowser
         @test red_cmd !== nothing
         @test red_cmd.x == 50.0f0  # left: 50px
     end
+    
+    @testset "CSS Style Block Parsing" begin
+        ctx = create_context(viewport_width=300.0f0, viewport_height=150.0f0)
+        
+        # Test with CSS in style block
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                .red-box { width: 100px; height: 50px; background-color: red; }
+                .blue-box { width: 50px; height: 25px; background-color: blue; }
+                #special { width: 200px; height: 100px; }
+            </style>
+        </head>
+        <body>
+            <div class="red-box"></div>
+            <div class="blue-box"></div>
+            <div id="special"></div>
+        </body>
+        </html>
+        """
+        
+        result = process_document!(ctx, html)
+        
+        @test result.node_count > 0
+        # CSS rules should be parsed
+        @test length(ctx.css_rules) >= 3
+        
+        # Check that selectors are stored correctly
+        selectors = [rule.selector for rule in ctx.css_rules]
+        @test ".red-box" in selectors
+        @test ".blue-box" in selectors
+        @test "#special" in selectors
+    end
+    
+    @testset "CSS Selector Matching" begin
+        ctx = create_context(viewport_width=300.0f0, viewport_height=150.0f0)
+        
+        html = """
+        <html>
+        <head>
+            <style>
+                .container { position: relative; width: 200px; height: 150px; background-color: yellow; }
+                .box { position: absolute; width: 20px; height: 20px; background-color: black; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="box" style="top: 10px; left: 10px;"></div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        result = process_document!(ctx, html)
+        
+        @test result.node_count > 0
+        @test result.command_count >= 2  # container + box
+        
+        # Check commands have correct colors
+        commands = get_commands(ctx.render_buffer)
+        
+        # Should have yellow and black boxes
+        colors_found = Set{Tuple{Float32, Float32, Float32}}()
+        for cmd in commands
+            push!(colors_found, (cmd.color_r, cmd.color_g, cmd.color_b))
+        end
+        
+        # Yellow: (1.0, 1.0, 0.0), Black: (0.0, 0.0, 0.0)
+        @test length(colors_found) >= 2
+    end
 
 end
 

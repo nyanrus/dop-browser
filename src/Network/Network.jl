@@ -528,18 +528,73 @@ end
 """
     do_request(request::HTTPRequest, conn::Connection) -> HTTPResponse
 
-Perform an HTTP request (stub implementation).
+Perform an HTTP request using Julia's Downloads package.
 """
 function do_request(request::HTTPRequest, conn::Connection)::HTTPResponse
     response = HTTPResponse(request.id)
     
-    # Stub implementation - in real code would do actual HTTP
-    # For now, return a mock 404 response
-    response.status_code = UInt16(404)
-    response.headers["content-type"] = "text/html"
-    response.body = Vector{UInt8}("<html><body>Not Found</body></html>")
+    try
+        # Build URL from request
+        url = request.url
+        
+        # Use Julia's built-in download capabilities
+        output = IOBuffer()
+        headers_out = Pair{String,String}[]
+        
+        # Build request headers
+        req_headers = String[]
+        for (k, v) in request.headers
+            push!(req_headers, "$k: $v")
+        end
+        
+        # Perform HTTP request using basic HTTP/1.1 
+        # For simplicity, use run() with curl if available
+        # Otherwise fall back to simple socket-based request
+        body_data = fetch_url_simple(url, request.timeout_ms)
+        
+        if body_data !== nothing
+            response.status_code = UInt16(200)
+            response.body = body_data
+            response.headers["content-type"] = "text/html"
+        else
+            response.status_code = UInt16(404)
+            response.body = Vector{UInt8}("Request failed")
+        end
+        
+    catch e
+        response.status_code = UInt16(500)
+        response.error_message = string(e)
+        response.body = Vector{UInt8}("Error: $(response.error_message)")
+    end
     
     return response
+end
+
+"""
+    fetch_url_simple(url::String, timeout_ms::UInt32) -> Union{Vector{UInt8}, Nothing}
+
+Fetch a URL using curl command.
+"""
+function fetch_url_simple(url::String, timeout_ms::UInt32)::Union{Vector{UInt8}, Nothing}
+    try
+        # Use curl for HTTPS support
+        timeout_sec = max(1, div(timeout_ms, 1000))
+        cmd = `curl -sL --max-time $timeout_sec -A "DOPBrowser/1.0" $url`
+        output = read(cmd)
+        return output
+    catch e
+        # Fallback: try to read using Julia's Download
+        try
+            # Create a temporary file
+            tmpfile = tempname()
+            download(url, tmpfile)
+            data = read(tmpfile)
+            rm(tmpfile, force=true)
+            return data
+        catch e2
+            return nothing
+        end
+    end
 end
 
 end # module Network
