@@ -9,7 +9,7 @@ vectorized operations.
 """
 module NodeTable
 
-using ..StringInterner: StringPool
+using ...HTMLParser.StringInterner: StringPool
 
 export NodeKind, DOMTable, add_node!, get_parent, get_first_child, get_next_sibling
 export get_tag, set_parent!, set_first_child!, set_next_sibling!, node_count

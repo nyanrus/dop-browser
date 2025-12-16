@@ -8,22 +8,22 @@ providing a unified API for document processing.
 """
 module Core
 
-using ..StringInterner: StringPool, intern!, get_string
-using ..TokenTape: TokenType, Token, Tokenizer, tokenize!, get_tokens, 
+using ..HTMLParser.StringInterner: StringPool, intern!, get_string
+using ..HTMLParser.TokenTape: TokenType, Token, Tokenizer, tokenize!, get_tokens, 
                    TOKEN_START_TAG, TOKEN_END_TAG, TOKEN_TEXT, TOKEN_COMMENT, 
                    TOKEN_DOCTYPE, TOKEN_SELF_CLOSING, TOKEN_ATTRIBUTE
-using ..NodeTable: NodeKind, DOMTable, add_node!, node_count, set_attributes!,
+using ..DOMCSSOM.NodeTable: NodeKind, DOMTable, add_node!, node_count, set_attributes!,
                    NODE_ELEMENT, NODE_TEXT, NODE_COMMENT, NODE_DOCUMENT, NODE_DOCTYPE
-using ..StyleArchetypes: ArchetypeTable, get_or_create_archetype!, archetype_count
-using ..LayoutArrays: LayoutData, resize_layout!, set_bounds!, set_position!, compute_layout!,
+using ..DOMCSSOM.StyleArchetypes: ArchetypeTable, get_or_create_archetype!, archetype_count
+using ..Layout.LayoutArrays: LayoutData, resize_layout!, set_bounds!, set_position!, compute_layout!,
                       set_css_position!, set_offsets!, set_margins!, set_paddings!, 
                       set_overflow!, set_visibility!, set_z_index!, set_background_color!,
                       set_borders!, has_border, set_float!, set_clear!,
                       POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
                       DISPLAY_NONE, DISPLAY_BLOCK, OVERFLOW_HIDDEN,
                       FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT, CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH
-using ..RenderBuffer: CommandBuffer, emit_rect!, emit_stroke_sides!, clear!, command_count, get_commands
-using ..CSSParser: CSSStyles, parse_inline_style,
+using ..DOMCSSOM.RenderBuffer: CommandBuffer, emit_rect!, emit_stroke_sides!, clear!, command_count, get_commands
+using ..CSSParserModule.CSSCore: CSSStyles, parse_inline_style,
                    BORDER_STYLE_NONE, OVERFLOW_VISIBLE
 
 export BrowserContext, create_context, parse_html!, apply_styles!, 

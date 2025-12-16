@@ -20,7 +20,7 @@ export GPURenderer, PNGExport
 export RenderPipeline, create_pipeline, render_frame!, export_png!
 
 # Import RenderBuffer types
-using ..RenderBuffer: CommandBuffer, RenderCommand, get_commands
+using ..DOMCSSOM.RenderBuffer: CommandBuffer, RenderCommand, get_commands
 
 """
     RenderPipeline

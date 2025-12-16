@@ -7,7 +7,8 @@ This module provides the Structure of Arrays (SoA) representation of:
 - DOM nodes (NodeTable)
 - Style archetypes (StyleArchetypes) 
 - Render commands (RenderBuffer)
-- String interning (StringInterner)
+
+Note: StringInterner is imported from HTMLParser module to avoid duplication.
 
 ## Architecture
 
@@ -21,6 +22,7 @@ The module represents the "view" of Content-- as a virtual DOM/CSSOM:
 
 ```julia
 using DOPBrowser.DOMCSSOM
+using DOPBrowser.HTMLParser: StringPool
 
 pool = StringPool()
 dom = DOMTable(pool)
@@ -29,14 +31,15 @@ root_id = add_node!(dom, NODE_DOCUMENT)
 """
 module DOMCSSOM
 
-# Include StringInterner first (dependency for NodeTable)
-include("StringInterner.jl")
+# Import StringInterner from HTMLParser to avoid duplication
+using ..HTMLParser.StringInterner: StringPool, intern!, get_string, get_id
+
+# Include modules
 include("NodeTable.jl")
 include("StyleArchetypes.jl")
 include("RenderBuffer.jl")
 
 # Re-export from submodules
-using .StringInterner: StringPool, intern!, get_string, get_id
 using .NodeTable: NodeKind, DOMTable, add_node!, get_parent, get_first_child, 
                   get_next_sibling, get_tag, set_parent!, set_first_child!, 
                   set_next_sibling!, node_count,
@@ -49,7 +52,7 @@ using .RenderBuffer: RenderCommand, CommandBuffer, emit_rect!, emit_text!,
                      emit_image!, emit_stroke!, emit_stroke_sides!, clear!, 
                      get_commands, command_count
 
-# Export StringInterner API
+# Export StringInterner API (re-exported from HTMLParser)
 export StringPool, intern!, get_string, get_id
 
 # Export NodeTable API
@@ -67,6 +70,6 @@ export RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!
 export emit_stroke!, emit_stroke_sides!, clear!, get_commands, command_count
 
 # Re-export submodules
-export StringInterner, NodeTable, StyleArchetypes, RenderBuffer
+export NodeTable, StyleArchetypes, RenderBuffer
 
 end # module DOMCSSOM
