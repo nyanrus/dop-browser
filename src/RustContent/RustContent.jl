@@ -11,13 +11,14 @@ module RustContent
 using Libdl
 
 export ContentBuilder
-export begin_stack!, end!, rect!, begin_paragraph!, span!
+export begin_stack!, end_container!, rect!, begin_paragraph!, span!
 export direction!, pack!, align!, width!, height!, gap!
 export fill!, fill_hex!, inset!, inset_trbl!, border_radius!
 export font_size!, text_color_hex!, node_count
 
 # Load the Rust library
-const LIBPATH = Ref{String}("")
+const LIB = Ref{Ptr{Cvoid}}(C_NULL)
+const FUNCTIONS = Dict{Symbol, Ptr{Cvoid}}()
 
 function __init__()
     # Try to find the library
@@ -35,15 +36,45 @@ function __init__()
         joinpath(@__DIR__, "..", "..", "rust", "dop-content", "target", "release", lib_name),
     ]
     
+    lib_path = nothing
     for path in search_paths
         if isfile(path)
-            LIBPATH[] = path
-            @info "Loaded RustContent library from: $path"
-            return
+            lib_path = path
+            break
         end
     end
     
-    error("Could not find dop-content library. Please build it first using: julia deps/build.jl")
+    if lib_path === nothing
+        error("Could not find dop-content library. Please build it first using: julia deps/build.jl")
+    end
+    
+    # Load the library
+    LIB[] = dlopen(lib_path)
+    
+    # Load all function symbols
+    FUNCTIONS[:new] = dlsym(LIB[], :content_builder_new)
+    FUNCTIONS[:free] = dlsym(LIB[], :content_builder_free)
+    FUNCTIONS[:begin_stack] = dlsym(LIB[], :content_builder_begin_stack)
+    FUNCTIONS[:end] = dlsym(LIB[], :content_builder_end)
+    FUNCTIONS[:rect] = dlsym(LIB[], :content_builder_rect)
+    FUNCTIONS[:begin_paragraph] = dlsym(LIB[], :content_builder_begin_paragraph)
+    FUNCTIONS[:span] = dlsym(LIB[], :content_builder_span)
+    FUNCTIONS[:direction] = dlsym(LIB[], :content_builder_direction)
+    FUNCTIONS[:pack] = dlsym(LIB[], :content_builder_pack)
+    FUNCTIONS[:align] = dlsym(LIB[], :content_builder_align)
+    FUNCTIONS[:width] = dlsym(LIB[], :content_builder_width)
+    FUNCTIONS[:height] = dlsym(LIB[], :content_builder_height)
+    FUNCTIONS[:gap] = dlsym(LIB[], :content_builder_gap)
+    FUNCTIONS[:fill_hex] = dlsym(LIB[], :content_builder_fill_hex)
+    FUNCTIONS[:fill_rgba] = dlsym(LIB[], :content_builder_fill_rgba)
+    FUNCTIONS[:inset] = dlsym(LIB[], :content_builder_inset)
+    FUNCTIONS[:inset_trbl] = dlsym(LIB[], :content_builder_inset_trbl)
+    FUNCTIONS[:border_radius] = dlsym(LIB[], :content_builder_border_radius)
+    FUNCTIONS[:font_size] = dlsym(LIB[], :content_builder_font_size)
+    FUNCTIONS[:text_color_hex] = dlsym(LIB[], :content_builder_text_color_hex)
+    FUNCTIONS[:node_count] = dlsym(LIB[], :content_builder_node_count)
+    
+    @info "Loaded RustContent library from: $lib_path"
 end
 
 """
@@ -55,7 +86,7 @@ mutable struct ContentBuilder
     handle::Ptr{Cvoid}
     
     function ContentBuilder()
-        handle = @ccall $(LIBPATH[]).content_builder_new()::Ptr{Cvoid}
+        handle = ccall(FUNCTIONS[:new], Ptr{Cvoid}, ())
         builder = new(handle)
         finalizer(free_builder, builder)
         return builder
@@ -64,7 +95,7 @@ end
 
 function free_builder(builder::ContentBuilder)
     if builder.handle != C_NULL
-        @ccall $(LIBPATH[]).content_builder_free(builder.handle::Ptr{Cvoid})::Cvoid
+        ccall(FUNCTIONS[:free], Cvoid, (Ptr{Cvoid},), builder.handle)
         builder.handle = C_NULL
     end
 end
@@ -75,17 +106,17 @@ end
 Begin a Stack container.
 """
 function begin_stack!(builder::ContentBuilder)
-    @ccall $(LIBPATH[]).content_builder_begin_stack(builder.handle::Ptr{Cvoid})::Cvoid
+    ccall(FUNCTIONS[:begin_stack], Cvoid, (Ptr{Cvoid},), builder.handle)
     return builder
 end
 
 """
-    end!(builder::ContentBuilder) -> ContentBuilder
+    end_container!(builder::ContentBuilder) -> ContentBuilder
 
 End the current container.
 """
-function Base.end!(builder::ContentBuilder)
-    @ccall $(LIBPATH[]).content_builder_end(builder.handle::Ptr{Cvoid})::Cvoid
+function end_container!(builder::ContentBuilder)
+    ccall(FUNCTIONS[:end], Cvoid, (Ptr{Cvoid},), builder.handle)
     return builder
 end
 
@@ -95,7 +126,7 @@ end
 Add a Rect node.
 """
 function rect!(builder::ContentBuilder)
-    @ccall $(LIBPATH[]).content_builder_rect(builder.handle::Ptr{Cvoid})::Cvoid
+    ccall(FUNCTIONS[:rect], Cvoid, (Ptr{Cvoid},), builder.handle)
     return builder
 end
 
@@ -105,7 +136,7 @@ end
 Begin a Paragraph node.
 """
 function begin_paragraph!(builder::ContentBuilder)
-    @ccall $(LIBPATH[]).content_builder_begin_paragraph(builder.handle::Ptr{Cvoid})::Cvoid
+    ccall(FUNCTIONS[:begin_paragraph], Cvoid, (Ptr{Cvoid},), builder.handle)
     return builder
 end
 
@@ -115,7 +146,7 @@ end
 Add a Span node with text.
 """
 function span!(builder::ContentBuilder, text::String)
-    @ccall $(LIBPATH[]).content_builder_span(builder.handle::Ptr{Cvoid}, text::Cstring)::Cvoid
+    ccall(FUNCTIONS[:span], Cvoid, (Ptr{Cvoid}, Cstring), builder.handle, text)
     return builder
 end
 
@@ -136,7 +167,7 @@ function direction!(builder::ContentBuilder, dir::Symbol)
     else
         UInt8(0)
     end
-    @ccall $(LIBPATH[]).content_builder_direction(builder.handle::Ptr{Cvoid}, dir_code::UInt8)::Cvoid
+    ccall(FUNCTIONS[:direction], Cvoid, (Ptr{Cvoid}, UInt8), builder.handle, dir_code)
     return builder
 end
 
@@ -161,7 +192,7 @@ function pack!(builder::ContentBuilder, pack::Symbol)
     else
         UInt8(0)
     end
-    @ccall $(LIBPATH[]).content_builder_pack(builder.handle::Ptr{Cvoid}, pack_code::UInt8)::Cvoid
+    ccall(FUNCTIONS[:pack], Cvoid, (Ptr{Cvoid}, UInt8), builder.handle, pack_code)
     return builder
 end
 
@@ -182,7 +213,7 @@ function align!(builder::ContentBuilder, align::Symbol)
     else
         UInt8(0)
     end
-    @ccall $(LIBPATH[]).content_builder_align(builder.handle::Ptr{Cvoid}, align_code::UInt8)::Cvoid
+    ccall(FUNCTIONS[:align], Cvoid, (Ptr{Cvoid}, UInt8), builder.handle, align_code)
     return builder
 end
 
@@ -192,7 +223,7 @@ end
 Set width.
 """
 function width!(builder::ContentBuilder, w::Real)
-    @ccall $(LIBPATH[]).content_builder_width(builder.handle::Ptr{Cvoid}, Float32(w)::Float32)::Cvoid
+    ccall(FUNCTIONS[:width], Cvoid, (Ptr{Cvoid}, Float32), builder.handle, Float32(w))
     return builder
 end
 
@@ -202,7 +233,7 @@ end
 Set height.
 """
 function height!(builder::ContentBuilder, h::Real)
-    @ccall $(LIBPATH[]).content_builder_height(builder.handle::Ptr{Cvoid}, Float32(h)::Float32)::Cvoid
+    ccall(FUNCTIONS[:height], Cvoid, (Ptr{Cvoid}, Float32), builder.handle, Float32(h))
     return builder
 end
 
@@ -212,7 +243,7 @@ end
 Set gap.
 """
 function gap!(builder::ContentBuilder, g::Real)
-    @ccall $(LIBPATH[]).content_builder_gap(builder.handle::Ptr{Cvoid}, Float32(g)::Float32)::Cvoid
+    ccall(FUNCTIONS[:gap], Cvoid, (Ptr{Cvoid}, Float32), builder.handle, Float32(g))
     return builder
 end
 
@@ -222,7 +253,7 @@ end
 Set fill color from hex string (e.g., "#FF0000").
 """
 function fill_hex!(builder::ContentBuilder, hex::String)
-    @ccall $(LIBPATH[]).content_builder_fill_hex(builder.handle::Ptr{Cvoid}, hex::Cstring)::Cvoid
+    ccall(FUNCTIONS[:fill_hex], Cvoid, (Ptr{Cvoid}, Cstring), builder.handle, hex)
     return builder
 end
 
@@ -232,13 +263,8 @@ end
 Set fill color from RGBA values.
 """
 function fill!(builder::ContentBuilder, r::Integer, g::Integer, b::Integer, a::Integer=255)
-    @ccall $(LIBPATH[]).content_builder_fill_rgba(
-        builder.handle::Ptr{Cvoid}, 
-        UInt8(r)::UInt8, 
-        UInt8(g)::UInt8, 
-        UInt8(b)::UInt8, 
-        UInt8(a)::UInt8
-    )::Cvoid
+    ccall(FUNCTIONS[:fill_rgba], Cvoid, (Ptr{Cvoid}, UInt8, UInt8, UInt8, UInt8),
+          builder.handle, UInt8(r), UInt8(g), UInt8(b), UInt8(a))
     return builder
 end
 
@@ -248,7 +274,7 @@ end
 Set inset (padding) on all sides.
 """
 function inset!(builder::ContentBuilder, i::Real)
-    @ccall $(LIBPATH[]).content_builder_inset(builder.handle::Ptr{Cvoid}, Float32(i)::Float32)::Cvoid
+    ccall(FUNCTIONS[:inset], Cvoid, (Ptr{Cvoid}, Float32), builder.handle, Float32(i))
     return builder
 end
 
@@ -258,13 +284,8 @@ end
 Set inset (padding) with individual sides.
 """
 function inset_trbl!(builder::ContentBuilder, top::Real, right::Real, bottom::Real, left::Real)
-    @ccall $(LIBPATH[]).content_builder_inset_trbl(
-        builder.handle::Ptr{Cvoid}, 
-        Float32(top)::Float32, 
-        Float32(right)::Float32, 
-        Float32(bottom)::Float32, 
-        Float32(left)::Float32
-    )::Cvoid
+    ccall(FUNCTIONS[:inset_trbl], Cvoid, (Ptr{Cvoid}, Float32, Float32, Float32, Float32),
+          builder.handle, Float32(top), Float32(right), Float32(bottom), Float32(left))
     return builder
 end
 
@@ -274,7 +295,7 @@ end
 Set border radius.
 """
 function border_radius!(builder::ContentBuilder, r::Real)
-    @ccall $(LIBPATH[]).content_builder_border_radius(builder.handle::Ptr{Cvoid}, Float32(r)::Float32)::Cvoid
+    ccall(FUNCTIONS[:border_radius], Cvoid, (Ptr{Cvoid}, Float32), builder.handle, Float32(r))
     return builder
 end
 
@@ -284,7 +305,7 @@ end
 Set font size.
 """
 function font_size!(builder::ContentBuilder, size::Real)
-    @ccall $(LIBPATH[]).content_builder_font_size(builder.handle::Ptr{Cvoid}, Float32(size)::Float32)::Cvoid
+    ccall(FUNCTIONS[:font_size], Cvoid, (Ptr{Cvoid}, Float32), builder.handle, Float32(size))
     return builder
 end
 
@@ -294,7 +315,7 @@ end
 Set text color from hex string (e.g., "#000000").
 """
 function text_color_hex!(builder::ContentBuilder, hex::String)
-    @ccall $(LIBPATH[]).content_builder_text_color_hex(builder.handle::Ptr{Cvoid}, hex::Cstring)::Cvoid
+    ccall(FUNCTIONS[:text_color_hex], Cvoid, (Ptr{Cvoid}, Cstring), builder.handle, hex)
     return builder
 end
 
@@ -304,7 +325,7 @@ end
 Get the number of nodes in the builder.
 """
 function node_count(builder::ContentBuilder)
-    return @ccall $(LIBPATH[]).content_builder_node_count(builder.handle::Ptr{Cvoid})::Csize_t
+    return ccall(FUNCTIONS[:node_count], Csize_t, (Ptr{Cvoid},), builder.handle)
 end
 
 end # module RustContent

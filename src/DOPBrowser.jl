@@ -78,6 +78,9 @@ include("Compiler/Compiler.jl")
 # Event Loop module
 include("EventLoop/EventLoop.jl")
 
+# Content-- IR modules (DEPRECATED - use RustContent instead)
+include("ContentMM/ContentMM.jl")
+
 # Network layer
 include("Network/Network.jl")
 
