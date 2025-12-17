@@ -224,6 +224,178 @@ using DOPBrowser
         @test styles.left_auto == false
     end
     
+    # ========== CSS3 Color Tests ==========
+    @testset "CSS3 - HSL Color Parsing" begin
+        # HSL colors
+        color = parse_color("hsl(0, 100%, 50%)")  # Red
+        @test color[1] == 0xff  # R
+        @test color[2] == 0x00  # G
+        @test color[3] == 0x00  # B
+        @test color[4] == 0xff  # A
+        
+        color = parse_color("hsl(120, 100%, 50%)")  # Green
+        @test color[2] == 0xff  # G should be high
+        
+        color = parse_color("hsl(240, 100%, 50%)")  # Blue
+        @test color[3] == 0xff  # B should be high
+        
+        # HSLA with alpha
+        color = parse_color("hsla(0, 100%, 50%, 0.5)")
+        @test color[4] == 0x80  # ~50% alpha (127-128)
+    end
+    
+    @testset "CSS3 - Extended Named Colors" begin
+        # X11 colors
+        @test parse_color("coral") == (0xff, 0x7f, 0x50, 0xff)
+        @test parse_color("crimson") == (0xdc, 0x14, 0x3c, 0xff)
+        @test parse_color("darkblue") == (0x00, 0x00, 0x8b, 0xff)
+        @test parse_color("hotpink") == (0xff, 0x69, 0xb4, 0xff)
+        @test parse_color("rebeccapurple") == (0x66, 0x33, 0x99, 0xff)
+        @test parse_color("tomato") == (0xff, 0x63, 0x47, 0xff)
+    end
+    
+    @testset "CSS3 - RGBA Hex Colors" begin
+        # 4-character hex (RGBA)
+        color = parse_color("#f00f")  # Red, full alpha
+        @test color[1] == 0xff
+        @test color[4] == 0xff
+        
+        # 8-character hex (RRGGBBAA)
+        color = parse_color("#ff000080")  # Red, 50% alpha
+        @test color[1] == 0xff
+        @test color[4] == 0x80
+    end
+    
+    # ========== CSS3 Length Units Tests ==========
+    @testset "CSS3 - Length Units" begin
+        # Rem
+        (val, auto) = parse_length("2rem")
+        @test val == 32.0f0  # 2 * 16px
+        
+        # Viewport units
+        (val, auto) = parse_length("10vw")
+        @test val == 192.0f0  # 10 * 19.2px
+        
+        (val, auto) = parse_length("10vh")
+        @test val == 108.0f0  # 10 * 10.8px
+        
+        # Points
+        (val, auto) = parse_length("12pt")
+        @test val ≈ 16.0f0 atol=0.1f0  # 12 * 1.333
+        
+        # Inches
+        (val, auto) = parse_length("1in")
+        @test val == 96.0f0  # 1 * 96px
+        
+        # Centimeters
+        (val, auto) = parse_length("1cm")
+        @test val ≈ 37.795f0 atol=0.01f0
+    end
+    
+    # ========== CSS3 Flexbox Tests ==========
+    @testset "CSS3 - Flexbox Properties" begin
+        styles = parse_inline_style("display: flex; flex-direction: column; justify-content: center; align-items: center;")
+        
+        @test styles.display == DOPBrowser.CSSParserModule.CSSCore.DISPLAY_FLEX
+        @test styles.flex_direction == DOPBrowser.CSSParserModule.CSSCore.FLEX_DIRECTION_COLUMN
+        @test styles.justify_content == DOPBrowser.CSSParserModule.CSSCore.JUSTIFY_CONTENT_CENTER
+        @test styles.align_items == DOPBrowser.CSSParserModule.CSSCore.ALIGN_ITEMS_CENTER
+    end
+    
+    @testset "CSS3 - Flex Shorthand" begin
+        styles = parse_inline_style("flex: 1 0 auto;")
+        @test styles.flex_grow == 1.0f0
+        @test styles.flex_shrink == 0.0f0
+        @test styles.flex_basis_auto == true
+        
+        styles = parse_inline_style("flex: 2;")
+        @test styles.flex_grow == 2.0f0
+    end
+    
+    @testset "CSS3 - Gap Property" begin
+        styles = parse_inline_style("gap: 10px 20px;")
+        @test styles.gap_row == 10.0f0
+        @test styles.gap_column == 20.0f0
+        
+        styles = parse_inline_style("gap: 15px;")
+        @test styles.gap_row == 15.0f0
+        @test styles.gap_column == 15.0f0
+    end
+    
+    # ========== CSS3 Visual Effects Tests ==========
+    @testset "CSS3 - Opacity" begin
+        styles = parse_inline_style("opacity: 0.5;")
+        @test styles.opacity == 0.5f0
+        
+        styles = parse_inline_style("opacity: 1;")
+        @test styles.opacity == 1.0f0
+    end
+    
+    @testset "CSS3 - Border Radius" begin
+        styles = parse_inline_style("border-radius: 10px;")
+        @test styles.border_radius_tl == 10.0f0
+        @test styles.border_radius_tr == 10.0f0
+        @test styles.border_radius_br == 10.0f0
+        @test styles.border_radius_bl == 10.0f0
+        
+        styles = parse_inline_style("border-top-left-radius: 5px;")
+        @test styles.border_radius_tl == 5.0f0
+    end
+    
+    @testset "CSS3 - Box Shadow" begin
+        styles = parse_inline_style("box-shadow: 5px 10px 15px black;")
+        @test styles.has_box_shadow == true
+        @test styles.box_shadow_offset_x == 5.0f0
+        @test styles.box_shadow_offset_y == 10.0f0
+        @test styles.box_shadow_blur == 15.0f0
+        
+        styles = parse_inline_style("box-shadow: none;")
+        @test styles.has_box_shadow == false
+    end
+    
+    @testset "CSS3 - Transform" begin
+        styles = parse_inline_style("transform: translateX(50px);")
+        @test styles.has_transform == true
+        @test styles.transform_translate_x == 50.0f0
+        
+        styles = parse_inline_style("transform: rotate(45deg);")
+        @test styles.has_transform == true
+        @test styles.transform_rotate == 45.0f0
+        
+        styles = parse_inline_style("transform: scale(2);")
+        @test styles.has_transform == true
+        @test styles.transform_scale_x == 2.0f0
+        @test styles.transform_scale_y == 2.0f0
+    end
+    
+    # ========== CSS3 Text Properties Tests ==========
+    @testset "CSS3 - Text Properties" begin
+        styles = parse_inline_style("text-align: center;")
+        @test styles.text_align == DOPBrowser.CSSParserModule.CSSCore.TEXT_ALIGN_CENTER
+        
+        styles = parse_inline_style("text-decoration: underline;")
+        @test styles.text_decoration == DOPBrowser.CSSParserModule.CSSCore.TEXT_DECORATION_UNDERLINE
+        
+        styles = parse_inline_style("font-weight: bold;")
+        @test styles.font_weight == UInt16(700)
+        
+        styles = parse_inline_style("font-weight: 600;")
+        @test styles.font_weight == UInt16(600)
+    end
+    
+    @testset "CSS3 - Box Sizing" begin
+        styles = parse_inline_style("box-sizing: border-box;")
+        @test styles.box_sizing == DOPBrowser.CSSParserModule.CSSCore.BOX_SIZING_BORDER_BOX
+        
+        styles = parse_inline_style("box-sizing: content-box;")
+        @test styles.box_sizing == DOPBrowser.CSSParserModule.CSSCore.BOX_SIZING_CONTENT_BOX
+    end
+    
+    @testset "CSS3 - Sticky Positioning" begin
+        styles = parse_inline_style("position: sticky;")
+        @test styles.position == DOPBrowser.CSSParserModule.CSSCore.POSITION_STICKY
+    end
+    
     @testset "Acid2 - Basic Features" begin
         ctx = create_context(viewport_width=800.0f0, viewport_height=600.0f0)
         

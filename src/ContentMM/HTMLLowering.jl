@@ -484,22 +484,48 @@ end
     apply_element_defaults!(styles::CSSStyles, tag_name::String)
 
 Apply default styles based on element type.
+Supports HTML5 semantic elements.
 """
 function apply_element_defaults!(styles::CSSStyles, tag_name::String)
-    # Block elements
+    # Block elements (HTML5 complete set)
     if tag_name in ["div", "p", "h1", "h2", "h3", "h4", "h5", "h6", 
-                    "section", "article", "header", "footer", "main",
-                    "ul", "ol", "li", "table", "tr", "td", "th"]
+                    # HTML5 semantic elements
+                    "section", "article", "header", "footer", "main", "aside", "nav",
+                    "figure", "figcaption", "details", "summary", "dialog", "hgroup",
+                    # Lists
+                    "ul", "ol", "li", "dl", "dt", "dd",
+                    # Tables
+                    "table", "tr", "td", "th", "thead", "tbody", "tfoot", "caption", "colgroup",
+                    # Forms
+                    "form", "fieldset", "legend", "output",
+                    # Media
+                    "video", "audio", "canvas",
+                    # Other block elements
+                    "pre", "blockquote", "address", "hr", "noscript"]
         styles.display = DISPLAY_BLOCK
     end
     
-    # Inline elements
-    if tag_name in ["span", "a", "em", "strong", "b", "i", "u", "code"]
+    # Inline elements (HTML5 complete set)
+    if tag_name in ["span", "a", "em", "strong", "b", "i", "u", "code",
+                    # HTML5 semantic inline elements
+                    "mark", "time", "abbr", "cite", "q", "dfn", "kbd", "samp", "var",
+                    "sub", "sup", "small", "s", "del", "ins",
+                    # Interactive
+                    "button", "label", "select", "textarea",
+                    # Ruby text
+                    "ruby", "rt", "rp",
+                    # Other inline elements
+                    "bdi", "bdo", "wbr", "data", "meter", "progress"]
         styles.display = DISPLAY_INLINE
     end
     
-    # Special elements
-    if tag_name in ["head", "script", "style", "meta", "link", "title"]
+    # Inline-block elements
+    if tag_name in ["img", "input", "object", "embed", "iframe"]
+        styles.display = DISPLAY_INLINE_BLOCK
+    end
+    
+    # Hidden elements
+    if tag_name in ["head", "script", "style", "meta", "link", "title", "template", "base"]
         styles.display = DISPLAY_NONE
     end
 end
@@ -638,29 +664,53 @@ end
     element_to_cm_type(tag_name::String, styles::CSSStyles) -> NodeType
 
 Map HTML element to Content-- node type.
+Supports HTML5 elements with proper mapping.
 """
 function element_to_cm_type(tag_name::String, styles::CSSStyles)::NodeType
-    # Scroll elements with overflow:hidden
-    if styles.overflow == OVERFLOW_HIDDEN
+    # Flexbox/Grid display modes
+    if styles.display == DISPLAY_FLEX || styles.display == DISPLAY_INLINE_FLEX
+        return NODE_STACK
+    end
+    if styles.display == DISPLAY_GRID || styles.display == DISPLAY_INLINE_GRID
+        return NODE_GRID
+    end
+    
+    # Scroll elements with overflow:hidden/scroll/auto
+    if styles.overflow == OVERFLOW_HIDDEN || styles.overflow == OVERFLOW_SCROLL || styles.overflow == OVERFLOW_AUTO
         return NODE_SCROLL
     end
     
-    # Text elements
-    if tag_name in ["p", "h1", "h2", "h3", "h4", "h5", "h6"]
+    # Text elements (paragraphs and headings)
+    if tag_name in ["p", "h1", "h2", "h3", "h4", "h5", "h6", 
+                    "blockquote", "figcaption", "legend", "dt", "dd", "caption"]
         return NODE_PARAGRAPH
     end
     
-    if tag_name in ["span", "a", "em", "strong", "b", "i", "u"]
+    # Inline text elements
+    if tag_name in ["span", "a", "em", "strong", "b", "i", "u", "code",
+                    "mark", "time", "abbr", "cite", "q", "dfn", "kbd", "samp", "var",
+                    "sub", "sup", "small", "s", "del", "ins", "label",
+                    "bdi", "bdo", "wbr", "data"]
         return NODE_SPAN
     end
     
     # Grid for tables
-    if tag_name in ["table"]
+    if tag_name in ["table", "colgroup"]
         return NODE_GRID
     end
     
     # Simple colored rectangles when only used for color/positioning
     if styles.has_background && tag_name in ["hr", "br"]
+        return NODE_RECT
+    end
+    
+    # Media elements (canvas, video, audio) are rectangles
+    if tag_name in ["canvas", "video", "audio", "img", "iframe", "embed", "object"]
+        return NODE_RECT
+    end
+    
+    # Progress and meter are rectangles
+    if tag_name in ["progress", "meter"]
         return NODE_RECT
     end
     
