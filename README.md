@@ -43,6 +43,11 @@ node_id = hit_test(doc, vec2(50.0f0, 25.0f0))  # Returns 2 (the div)
 using DOPBrowser.Pipeline: position, bounds
 pos = position(doc, 2)     # Vec2(0, 0)
 (p, s) = bounds(doc, 2)    # (Vec2(0,0), Vec2(100, 50))
+
+# Check if Rust implementations are available (for production use)
+rust = rust_available()
+rust.parser    # true if RustParser is available
+rust.renderer  # true if RustRenderer is available
 ```
 
 ## Interactive UI Library

@@ -13,6 +13,15 @@ with math-style operators for layout computation.
 3. **Math-Style**: Layout uses intuitive Vec2, Box4 operations
 4. **Minimal API**: Essential operations only, no redundancy
 
+## Note on Rust Implementations
+
+For production use, prefer the Rust-based implementations when available:
+- **RustParser**: Uses html5ever and cssparser crates for standards-compliant parsing
+- **RustRenderer**: Uses winit/wgpu for GPU-accelerated rendering
+
+This Pipeline module uses the Julia implementations for maximum portability.
+Use `Pipeline.rust_available()` to check if Rust implementations are available.
+
 ## Quick Start
 
 ```julia
@@ -56,6 +65,53 @@ using ..ContentMM.MathOps: Vec2, Box4, vec2, box4
 export Document, RenderBuffer
 export parse_doc, layout, render, to_png, save_png
 export with_viewport, render_html
+export rust_available
+
+# ============================================================================
+# Rust Implementation Check
+# ============================================================================
+
+"""
+    rust_available() -> NamedTuple{(:parser, :renderer), Tuple{Bool, Bool}}
+
+Check if Rust implementations are available.
+
+# Returns
+- `parser`: true if RustParser is available
+- `renderer`: true if RustRenderer is available
+
+# Example
+```julia
+if Pipeline.rust_available().parser
+    println("Rust parser available for high-performance parsing")
+end
+```
+"""
+function rust_available()
+    parser_available = false
+    renderer_available = false
+    
+    # Use parentmodule to get DOPBrowser module without tight coupling to Main
+    try
+        dop = parentmodule(@__MODULE__)
+        if isdefined(dop, :RustParser) && isdefined(dop.RustParser, :is_available)
+            parser_available = dop.RustParser.is_available()
+        end
+    catch
+        # RustParser not loaded or not available
+    end
+    
+    try
+        dop = parentmodule(@__MODULE__)
+        if isdefined(dop, :RustRenderer) && isdefined(dop.RustRenderer, :is_available)
+            renderer_available = dop.RustRenderer.is_available()
+        end
+    catch
+        # RustRenderer not loaded or not available
+    end
+    
+    return (parser=parser_available, renderer=renderer_available)
+end
 
 # ============================================================================
 # Core Types (Immutable where possible for FP purity)
