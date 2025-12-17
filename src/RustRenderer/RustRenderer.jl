@@ -98,7 +98,8 @@ Check if the Rust renderer library is available.
 function is_available()::Bool
     path = get_lib_path()
     if isempty(path) || !isfile(path)
-        error("Rust renderer library not found. Please build it with: cd rust/dop-renderer && cargo build --release")
+        rust_dir = joinpath("rust", "dop-renderer")
+        error("Rust renderer library not found. Please build it with: cd $(rust_dir) && cargo build --release")
     end
     return true
 end

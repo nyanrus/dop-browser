@@ -81,7 +81,8 @@ function is_available()::Bool
     
     path = find_library()
     if path === nothing
-        error("Rust parser library not found. Please build it with: cd rust/dop-parser && cargo build --release")
+        rust_dir = joinpath("rust", "dop-parser")
+        error("Rust parser library not found. Please build it with: cd $(rust_dir) && cargo build --release")
     end
     
     try

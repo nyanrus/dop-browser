@@ -443,7 +443,8 @@ function __init__()
         RustParser.is_available()
         @info "RustParser library loaded successfully"
     catch e
-        @error "Failed to load RustParser library. Please build it with: cd rust/dop-parser && cargo build --release" exception=e
+        rust_dir = joinpath("rust", "dop-parser")
+        @error "Failed to load RustParser library. Please build it with: cd $(rust_dir) && cargo build --release" exception=e
         rethrow(e)
     end
     
@@ -451,7 +452,8 @@ function __init__()
         RustRenderer.is_available()
         @info "RustRenderer library loaded successfully"
     catch e
-        @error "Failed to load RustRenderer library. Please build it with: cd rust/dop-renderer && cargo build --release" exception=e
+        rust_dir = joinpath("rust", "dop-renderer")
+        @error "Failed to load RustRenderer library. Please build it with: cd $(rust_dir) && cargo build --release" exception=e
         rethrow(e)
     end
 end
