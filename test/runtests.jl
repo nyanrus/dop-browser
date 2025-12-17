@@ -1595,3 +1595,422 @@ end
     end
 
 end
+
+# ============================================================================
+# Interactive UI Library Tests
+# ============================================================================
+
+@testset "State Management" begin
+    
+    @testset "Signal Basics" begin
+        count = DOPBrowser.State.signal(0)
+        
+        @test count[] == 0
+        
+        count[] = 5
+        @test count[] == 5
+        
+        count[] = count[] + 1
+        @test count[] == 6
+    end
+    
+    @testset "Signal Equality Check" begin
+        sig = DOPBrowser.State.signal(10)
+        
+        # Setting same value shouldn't trigger observers
+        observer_called = Ref(0)
+        
+        eff = DOPBrowser.State.effect(() -> begin
+            _ = sig[]  # Read to create dependency
+            observer_called[] += 1
+        end)
+        
+        initial_count = observer_called[]
+        sig[] = 10  # Same value
+        @test observer_called[] == initial_count  # Should not increase
+        
+        sig[] = 20  # Different value
+        @test observer_called[] == initial_count + 1
+        
+        DOPBrowser.State.dispose!(eff)
+    end
+    
+    @testset "Computed Values" begin
+        a = DOPBrowser.State.signal(2)
+        b = DOPBrowser.State.signal(3)
+        
+        sum_ab = DOPBrowser.State.computed(() -> a[] + b[])
+        
+        @test sum_ab[] == 5
+        
+        a[] = 10
+        @test sum_ab[] == 13
+        
+        b[] = 7
+        @test sum_ab[] == 17
+    end
+    
+    @testset "Effect Side Effects" begin
+        count = DOPBrowser.State.signal(0)
+        effect_count = Ref(0)
+        
+        eff = DOPBrowser.State.effect(() -> begin
+            _ = count[]
+            effect_count[] += 1
+        end)
+        
+        # Effect runs once on creation
+        @test effect_count[] == 1
+        
+        # Effect runs when signal changes
+        count[] = 1
+        @test effect_count[] == 2
+        
+        count[] = 2
+        @test effect_count[] == 3
+        
+        # Dispose effect
+        DOPBrowser.State.dispose!(eff)
+        
+        # Effect should not run after disposal
+        count[] = 3
+        @test effect_count[] == 3
+    end
+    
+    @testset "Batch Updates" begin
+        a = DOPBrowser.State.signal(0)
+        b = DOPBrowser.State.signal(0)
+        effect_count = Ref(0)
+        
+        eff = DOPBrowser.State.effect(() -> begin
+            _ = a[]
+            _ = b[]
+            effect_count[] += 1
+        end)
+        
+        initial = effect_count[]
+        
+        # Batch updates should only trigger one effect run
+        DOPBrowser.State.batch(() -> begin
+            a[] = 1
+            b[] = 2
+        end)
+        
+        @test effect_count[] == initial + 1
+        
+        DOPBrowser.State.dispose!(eff)
+    end
+    
+    @testset "Store Pattern" begin
+        store = DOPBrowser.State.create_store(
+            Dict(:count => 0, :name => "test"),
+            Dict(
+                :increment => (state, _) -> Dict(:count => state[:count] + 1),
+                :set_name => (state, name) -> Dict(:name => name)
+            )
+        )
+        
+        @test DOPBrowser.State.get_state(store)[:count] == 0
+        @test DOPBrowser.State.get_state(store)[:name] == "test"
+        
+        # Dispatch increment
+        DOPBrowser.State.dispatch(store, :increment)
+        @test DOPBrowser.State.get_state(store)[:count] == 1
+        
+        DOPBrowser.State.dispatch(store, :increment)
+        @test DOPBrowser.State.get_state(store)[:count] == 2
+        
+        # Dispatch set_name
+        DOPBrowser.State.dispatch(store, :set_name, "updated")
+        @test DOPBrowser.State.get_state(store)[:name] == "updated"
+    end
+    
+    @testset "Store Subscription" begin
+        store = DOPBrowser.State.create_store(
+            Dict{Symbol, Any}(:value => 0),
+            Dict{Symbol, Function}(:set => (_, val) -> Dict{Symbol, Any}(:value => val))
+        )
+        
+        received_values = Int[]
+        
+        unsubscribe = DOPBrowser.State.subscribe(store) do state
+            push!(received_values, state[:value])
+        end
+        
+        DOPBrowser.State.dispatch(store, :set, 10)
+        DOPBrowser.State.dispatch(store, :set, 20)
+        
+        @test received_values == [10, 20]
+        
+        # Unsubscribe
+        unsubscribe()
+        
+        DOPBrowser.State.dispatch(store, :set, 30)
+        @test received_values == [10, 20]  # No new value
+    end
+
+end
+
+@testset "Window Module" begin
+    
+    @testset "Window Configuration" begin
+        config = DOPBrowser.Window.WindowConfig(
+            title = "Test Window",
+            width = 1024,
+            height = 768,
+            resizable = true
+        )
+        
+        @test config.title == "Test Window"
+        @test config.width == 1024
+        @test config.height == 768
+        @test config.resizable == true
+    end
+    
+    @testset "Window Creation" begin
+        window = DOPBrowser.Window.create_window()
+        
+        @test window !== nothing
+        @test DOPBrowser.Window.is_open(window) == true
+        
+        # Check default size
+        width, height = DOPBrowser.Window.get_size(window)
+        @test width == 800
+        @test height == 600
+        
+        # Close window
+        DOPBrowser.Window.close!(window)
+        @test DOPBrowser.Window.is_open(window) == false
+    end
+    
+    @testset "Window Resize" begin
+        window = DOPBrowser.Window.create_window()
+        
+        DOPBrowser.Window.set_size!(window, 1280, 720)
+        width, height = DOPBrowser.Window.get_size(window)
+        
+        @test width == 1280
+        @test height == 720
+        
+        DOPBrowser.Window.destroy!(window)
+    end
+    
+    @testset "Event Injection" begin
+        window = DOPBrowser.Window.create_window()
+        
+        # Inject a key event
+        event = DOPBrowser.Window.WindowEvent(
+            DOPBrowser.Window.EVENT_KEY_DOWN,
+            key = Int32(65)  # 'A' key
+        )
+        DOPBrowser.Window.inject_event!(window, event)
+        
+        # Poll events
+        events = DOPBrowser.Window.poll_events!(window)
+        @test length(events) == 1
+        @test events[1].type == DOPBrowser.Window.EVENT_KEY_DOWN
+        @test events[1].key == 65
+        
+        DOPBrowser.Window.destroy!(window)
+    end
+    
+    @testset "Mouse State" begin
+        window = DOPBrowser.Window.create_window()
+        
+        # Inject mouse move
+        move_event = DOPBrowser.Window.WindowEvent(
+            DOPBrowser.Window.EVENT_MOUSE_MOVE,
+            x = 100.0,
+            y = 200.0
+        )
+        DOPBrowser.Window.inject_event!(window, move_event)
+        
+        x, y = DOPBrowser.Window.get_mouse_position(window)
+        @test x == 100.0
+        @test y == 200.0
+        
+        DOPBrowser.Window.destroy!(window)
+    end
+    
+    @testset "Clipboard" begin
+        window = DOPBrowser.Window.create_window()
+        
+        DOPBrowser.Window.set_clipboard!(window, "Hello, clipboard!")
+        @test DOPBrowser.Window.get_clipboard(window) == "Hello, clipboard!"
+        
+        DOPBrowser.Window.destroy!(window)
+    end
+
+end
+
+@testset "Widgets Module" begin
+    
+    @testset "Widget Props" begin
+        props = DOPBrowser.Widgets.WidgetProps(
+            width = 100.0f0,
+            height = 50.0f0,
+            padding = 10.0f0,
+            background = "#FF0000"
+        )
+        
+        @test props.width == 100.0f0
+        @test props.height == 50.0f0
+        @test props.padding == 10.0f0
+        @test props.background == "#FF0000"
+    end
+    
+    @testset "Build UI" begin
+        tree = DOPBrowser.Widgets.build_ui() do
+            DOPBrowser.Widgets.container(direction=:column, gap=10.0f0) do
+                DOPBrowser.Widgets.label(text="Hello")
+                DOPBrowser.Widgets.button(text="Click me")
+            end
+        end
+        
+        @test tree !== nothing
+        @test tree.root !== nothing
+        @test tree.root isa DOPBrowser.Widgets.ContainerWidget
+        # Root contains the inner container
+        @test length(tree.root.children) >= 1
+        # Inner container has the label and button
+        if length(tree.root.children) >= 1
+            inner_container = tree.root.children[1]
+            @test inner_container isa DOPBrowser.Widgets.ContainerWidget
+            @test length(inner_container.children) == 2
+        end
+    end
+    
+    @testset "Button Widget" begin
+        btn = DOPBrowser.Widgets.ButtonWidget(
+            text = "Test Button",
+            variant = :primary
+        )
+        
+        @test DOPBrowser.Widgets.get_text(btn) == "Test Button"
+        @test btn.variant == :primary
+        @test btn.is_hovered == false
+        @test btn.is_pressed == false
+        
+        # Test hover state affects background
+        bg1 = DOPBrowser.Widgets.get_button_background(btn)
+        btn.is_hovered = true
+        bg2 = DOPBrowser.Widgets.get_button_background(btn)
+        @test bg1 != bg2
+    end
+    
+    @testset "Label Widget" begin
+        lbl = DOPBrowser.Widgets.LabelWidget(
+            text = "Test Label",
+            font_size = 16.0f0,
+            color = "#333333"
+        )
+        
+        @test lbl.text == "Test Label"
+        @test lbl.font_size == 16.0f0
+        @test lbl.color == "#333333"
+    end
+    
+    @testset "TextInput Widget" begin
+        input = DOPBrowser.Widgets.TextInputWidget(
+            value = "initial",
+            placeholder = "Enter text"
+        )
+        
+        @test input.value[] == "initial"
+        @test input.placeholder == "Enter text"
+        
+        # Update value
+        input.value[] = "updated"
+        @test input.value[] == "updated"
+    end
+    
+    @testset "Checkbox Widget" begin
+        cb = DOPBrowser.Widgets.CheckboxWidget(
+            checked = false,
+            label = "Enable feature"
+        )
+        
+        @test cb.checked[] == false
+        @test cb.label == "Enable feature"
+        
+        # Toggle
+        cb.checked[] = true
+        @test cb.checked[] == true
+    end
+    
+    @testset "Slider Widget" begin
+        slider = DOPBrowser.Widgets.SliderWidget(
+            value = 50.0f0,
+            min = 0.0f0,
+            max = 100.0f0
+        )
+        
+        @test slider.value[] == 50.0f0
+        @test slider.min == 0.0f0
+        @test slider.max == 100.0f0
+    end
+    
+    @testset "ProgressBar Widget" begin
+        pb = DOPBrowser.Widgets.ProgressBarWidget(
+            value = 75.0f0,
+            max = 100.0f0,
+            color = "#00FF00"
+        )
+        
+        @test pb.value == 75.0f0
+        @test pb.max == 100.0f0
+        @test pb.color == "#00FF00"
+    end
+
+end
+
+@testset "Application Module" begin
+    
+    @testset "Create Headless App" begin
+        app = DOPBrowser.Application.create_app(
+            title = "Test App",
+            width = 400,
+            height = 300,
+            headless = true
+        )
+        
+        @test app !== nothing
+        @test app.is_headless == true
+        @test app.config.title == "Test App"
+        @test app.config.width == 400
+        @test app.config.height == 300
+    end
+    
+    @testset "Set UI Builder" begin
+        app = DOPBrowser.Application.create_app(headless = true)
+        
+        called = Ref(false)
+        DOPBrowser.Application.set_ui!(app) do
+            called[] = true
+            DOPBrowser.Widgets.label(text="Test")
+        end
+        
+        @test app.callbacks.ui_builder !== nothing
+    end
+    
+    @testset "App Statistics" begin
+        app = DOPBrowser.Application.create_app(headless = true)
+        
+        @test DOPBrowser.Application.is_running(app) == false
+        @test DOPBrowser.Application.get_frame_count(app) == 0
+    end
+    
+    @testset "Lifecycle Callbacks" begin
+        app = DOPBrowser.Application.create_app(headless = true)
+        
+        init_called = Ref(false)
+        cleanup_called = Ref(false)
+        
+        DOPBrowser.Application.on_init(app, () -> init_called[] = true)
+        DOPBrowser.Application.on_cleanup(app, () -> cleanup_called[] = true)
+        
+        @test app.callbacks.on_init !== nothing
+        @test app.callbacks.on_cleanup !== nothing
+    end
+
+end
