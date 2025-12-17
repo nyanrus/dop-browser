@@ -82,6 +82,7 @@ export App, create_app, run!, stop!
 export set_ui!, render_frame!
 export on_init, on_update, on_cleanup
 export is_running, get_fps, get_frame_count
+export is_display_available
 
 # ============================================================================
 # Application State
@@ -191,7 +192,7 @@ function create_app(;
     actual_headless = headless
     if !headless && !is_display_available()
         @warn "No display server detected. Running in headless mode. " *
-              "Set DISPLAY environment variable or run with headless=true to suppress this warning."
+              "To suppress this warning, set headless=true when creating the app."
         actual_headless = true
     end
     

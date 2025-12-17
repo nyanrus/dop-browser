@@ -59,7 +59,7 @@ function run_onscreen_counter()
     # Check if running in headless mode
     if app.is_headless
         println("Running in headless mode (no display server available)...")
-        println("Rendering a single frame and saving screenshot...")
+        println("Note: Rendering functionality is limited in headless mode.")
         
         # Initialize and render
         Application.initialize!(app)
@@ -73,10 +73,14 @@ function run_onscreen_counter()
             render_frame!(app)
         end
         
-        # Save a screenshot
-        screenshot_path = joinpath(tempdir(), "counter_app_demo.png")
-        save_app_screenshot(app, screenshot_path)
-        println("Screenshot saved to: $screenshot_path")
+        # Try to save screenshot (may not work fully in headless mode)
+        if app.window !== nothing
+            screenshot_path = joinpath(pwd(), "counter_app_demo.png")
+            save_app_screenshot(app, screenshot_path)
+            println("Screenshot saved to: $screenshot_path")
+        else
+            println("Screenshot not available in headless mode without window backend.")
+        end
         
         # Cleanup
         Application.cleanup!(app)
@@ -129,10 +133,14 @@ function run_headless_demo()
         println("  Count: $(count[])")
     end
     
-    # Save a screenshot
-    screenshot_path = joinpath(tempdir(), "onscreen_demo.png")
-    save_app_screenshot(app, screenshot_path)
-    println("Screenshot saved to: $screenshot_path")
+    # Try to save a screenshot
+    if app.window !== nothing
+        screenshot_path = joinpath(pwd(), "headless_demo.png")
+        save_app_screenshot(app, screenshot_path)
+        println("Screenshot saved to: $screenshot_path")
+    else
+        println("Screenshot not available in headless mode without window backend.")
+    end
     
     println("\nHeadless demo complete!")
 end
