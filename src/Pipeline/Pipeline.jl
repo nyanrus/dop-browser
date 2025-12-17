@@ -81,15 +81,18 @@ export rust_available
 
 Check if Rust implementations are available.
 
+**Note**: As of this version, Rust implementations are REQUIRED.
+This function is maintained for backward compatibility but will always return true
+or throw an error if libraries are not available.
+
 # Returns
-- `parser`: true if RustParser is available
-- `renderer`: true if RustRenderer is available
+- `parser`: true if RustParser is available (always true or throws error)
+- `renderer`: true if RustRenderer is available (always true or throws error)
 
 # Example
 ```julia
-if Pipeline.rust_available().parser
-    println("Rust parser available for high-performance parsing")
-end
+# This will always return (parser=true, renderer=true) or throw an error
+rust = Pipeline.rust_available()
 ```
 """
 function rust_available()
@@ -102,8 +105,9 @@ function rust_available()
         if isdefined(dop, :RustParser) && isdefined(dop.RustParser, :is_available)
             parser_available = dop.RustParser.is_available()
         end
-    catch
-        # RustParser not loaded or not available
+    catch e
+        # RustParser not available - this will throw an error since Rust is now required
+        rethrow(e)
     end
     
     try
@@ -111,8 +115,9 @@ function rust_available()
         if isdefined(dop, :RustRenderer) && isdefined(dop.RustRenderer, :is_available)
             renderer_available = dop.RustRenderer.is_available()
         end
-    catch
-        # RustRenderer not loaded or not available
+    catch e
+        # RustRenderer not available - this will throw an error since Rust is now required
+        rethrow(e)
     end
     
     return (parser=parser_available, renderer=renderer_available)
