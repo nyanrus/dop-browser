@@ -7,8 +7,12 @@
 use std::ffi::{c_char, c_float, c_int, CStr};
 use std::ptr;
 
-use crate::renderer::{RenderCommand, WgpuRenderer};
-use crate::text::{FontManager, TextShaper};
+use crate::renderer::RenderCommand;
+#[cfg(feature = "software")]
+use crate::software::{SoftwareRenderer, TextCommand};
+#[cfg(not(feature = "software"))]
+use crate::text::FontManager;
+use crate::text::TextShaper;
 use crate::window::{DopEvent, MouseButtonId, WindowConfig, WindowHandle};
 
 /// Initialize the rendering engine
@@ -200,10 +204,16 @@ pub extern "C" fn dop_window_get_mouse_y(handle: *const WindowHandle) -> c_float
 // Renderer FFI
 // ============================================================================
 
-/// Renderer handle for FFI
+/// Renderer handle for FFI - uses software rendering by default
+#[cfg(feature = "software")]
+pub struct RendererHandle {
+    renderer: SoftwareRenderer,
+}
+
+/// Renderer handle for FFI - fallback when software feature is disabled
+#[cfg(not(feature = "software"))]
 #[allow(dead_code)]
 pub struct RendererHandle {
-    renderer: Option<WgpuRenderer>,
     commands: Vec<RenderCommand>,
     text_commands: Vec<TextCommandFFI>,
     framebuffer: Vec<u8>,
@@ -212,7 +222,8 @@ pub struct RendererHandle {
     font_manager: FontManager,
 }
 
-/// Text command for FFI
+/// Text command for FFI (used when software feature is disabled)
+#[cfg(not(feature = "software"))]
 #[derive(Debug, Clone)]
 struct TextCommandFFI {
     text: String,
@@ -226,7 +237,16 @@ struct TextCommandFFI {
     font_id: u32,
 }
 
-/// Create a headless renderer (software rendering for PNG export)
+/// Create a headless renderer using software rendering (tiny-skia)
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_create_headless(width: c_int, height: c_int) -> *mut RendererHandle {
+    let renderer = SoftwareRenderer::new(width as u32, height as u32);
+    Box::into_raw(Box::new(RendererHandle { renderer }))
+}
+
+/// Create a headless renderer (fallback implementation)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_create_headless(width: c_int, height: c_int) -> *mut RendererHandle {
     let w = width as u32;
@@ -234,7 +254,6 @@ pub extern "C" fn dop_renderer_create_headless(width: c_int, height: c_int) -> *
     let framebuffer = vec![255u8; (w * h * 4) as usize]; // White background
 
     Box::into_raw(Box::new(RendererHandle {
-        renderer: None,
         commands: Vec::new(),
         text_commands: Vec::new(),
         framebuffer,
@@ -255,6 +274,19 @@ pub extern "C" fn dop_renderer_free(handle: *mut RendererHandle) {
 }
 
 /// Clear the renderer
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_clear(handle: *mut RendererHandle) {
+    if handle.is_null() {
+        return;
+    }
+    unsafe {
+        (*handle).renderer.clear();
+    }
+}
+
+/// Clear the renderer (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_clear(handle: *mut RendererHandle) {
     if handle.is_null() {
@@ -267,6 +299,25 @@ pub extern "C" fn dop_renderer_clear(handle: *mut RendererHandle) {
 }
 
 /// Set clear color
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_set_clear_color(
+    handle: *mut RendererHandle,
+    r: c_float,
+    g: c_float,
+    b: c_float,
+    a: c_float,
+) {
+    if handle.is_null() {
+        return;
+    }
+    unsafe {
+        (*handle).renderer.set_clear_color(r, g, b, a);
+    }
+}
+
+/// Set clear color (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_set_clear_color(
     handle: *mut RendererHandle,
@@ -298,6 +349,41 @@ pub extern "C" fn dop_renderer_set_clear_color(
 }
 
 /// Add a rectangle render command
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_add_rect(
+    handle: *mut RendererHandle,
+    x: c_float,
+    y: c_float,
+    width: c_float,
+    height: c_float,
+    r: c_float,
+    g: c_float,
+    b: c_float,
+    a: c_float,
+    z_index: c_int,
+) {
+    if handle.is_null() {
+        return;
+    }
+    unsafe {
+        (*handle).renderer.add_rect(RenderCommand {
+            x,
+            y,
+            width,
+            height,
+            color_r: r,
+            color_g: g,
+            color_b: b,
+            color_a: a,
+            texture_id: 0,
+            z_index,
+        });
+    }
+}
+
+/// Add a rectangle render command (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_add_rect(
     handle: *mut RendererHandle,
@@ -330,7 +416,20 @@ pub extern "C" fn dop_renderer_add_rect(
     }
 }
 
-/// Render the frame (software rasterization for headless mode)
+/// Render the frame using software rendering (tiny-skia)
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_render(handle: *mut RendererHandle) {
+    if handle.is_null() {
+        return;
+    }
+    unsafe {
+        (*handle).renderer.render();
+    }
+}
+
+/// Render the frame (fallback software rasterization)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_render(handle: *mut RendererHandle) {
     if handle.is_null() {
@@ -436,6 +535,17 @@ pub extern "C" fn dop_renderer_render(handle: *mut RendererHandle) {
 }
 
 /// Get framebuffer pointer
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_get_framebuffer(handle: *const RendererHandle) -> *const u8 {
+    if handle.is_null() {
+        return ptr::null();
+    }
+    unsafe { (*handle).renderer.get_framebuffer().as_ptr() }
+}
+
+/// Get framebuffer pointer (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_get_framebuffer(handle: *const RendererHandle) -> *const u8 {
     if handle.is_null() {
@@ -445,6 +555,17 @@ pub extern "C" fn dop_renderer_get_framebuffer(handle: *const RendererHandle) ->
 }
 
 /// Get framebuffer size
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_get_framebuffer_size(handle: *const RendererHandle) -> c_int {
+    if handle.is_null() {
+        return 0;
+    }
+    unsafe { (*handle).renderer.get_framebuffer_size() as c_int }
+}
+
+/// Get framebuffer size (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_get_framebuffer_size(handle: *const RendererHandle) -> c_int {
     if handle.is_null() {
@@ -454,6 +575,19 @@ pub extern "C" fn dop_renderer_get_framebuffer_size(handle: *const RendererHandl
 }
 
 /// Resize the renderer
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_resize(handle: *mut RendererHandle, width: c_int, height: c_int) {
+    if handle.is_null() {
+        return;
+    }
+    unsafe {
+        (*handle).renderer.resize(width as u32, height as u32);
+    }
+}
+
+/// Resize the renderer (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_resize(handle: *mut RendererHandle, width: c_int, height: c_int) {
     if handle.is_null() {
@@ -568,7 +702,49 @@ pub extern "C" fn dop_version() -> *const c_char {
 // Text rendering FFI
 // ============================================================================
 
-/// Add a text render command
+/// Add a text render command (software)
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_add_text(
+    handle: *mut RendererHandle,
+    text: *const c_char,
+    x: c_float,
+    y: c_float,
+    font_size: c_float,
+    r: c_float,
+    g: c_float,
+    b: c_float,
+    a: c_float,
+    _font_id: c_int,
+) {
+    if handle.is_null() || text.is_null() {
+        return;
+    }
+    
+    let text_str = unsafe {
+        match CStr::from_ptr(text).to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => return,
+        }
+    };
+    
+    unsafe {
+        (*handle).renderer.add_text(TextCommand {
+            text: text_str,
+            x,
+            y,
+            font_size,
+            color_r: r,
+            color_g: g,
+            color_b: b,
+            color_a: a,
+            font_id: _font_id as u32,
+        });
+    }
+}
+
+/// Add a text render command (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_add_text(
     handle: *mut RendererHandle,
@@ -608,7 +784,41 @@ pub extern "C" fn dop_renderer_add_text(
     }
 }
 
-/// Measure text width and height
+/// Measure text width and height (software)
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_measure_text(
+    handle: *const RendererHandle,
+    text: *const c_char,
+    font_size: c_float,
+    font_id: c_int,
+    out_width: *mut c_float,
+    out_height: *mut c_float,
+) {
+    if handle.is_null() || text.is_null() || out_width.is_null() || out_height.is_null() {
+        return;
+    }
+    
+    let text_str = unsafe {
+        match CStr::from_ptr(text).to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                *out_width = 0.0;
+                *out_height = 0.0;
+                return;
+            }
+        }
+    };
+    
+    unsafe {
+        let (w, h) = (*handle).renderer.font_manager().measure_text(text_str, font_size, font_id as u32);
+        *out_width = w;
+        *out_height = h;
+    }
+}
+
+/// Measure text width and height (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_measure_text(
     handle: *const RendererHandle,
@@ -640,7 +850,34 @@ pub extern "C" fn dop_renderer_measure_text(
     }
 }
 
-/// Load a font from file, returns font ID or -1 on failure
+/// Load a font from file, returns font ID or -1 on failure (software)
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_load_font(
+    handle: *mut RendererHandle,
+    path: *const c_char,
+) -> c_int {
+    if handle.is_null() || path.is_null() {
+        return -1;
+    }
+    
+    let path_str = unsafe {
+        match CStr::from_ptr(path).to_str() {
+            Ok(s) => s,
+            Err(_) => return -1,
+        }
+    };
+    
+    unsafe {
+        match (*handle).renderer.font_manager_mut().load_font(path_str) {
+            Some(id) => id as c_int,
+            None => -1,
+        }
+    }
+}
+
+/// Load a font from file, returns font ID or -1 on failure (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_load_font(
     handle: *mut RendererHandle,
@@ -665,7 +902,20 @@ pub extern "C" fn dop_renderer_load_font(
     }
 }
 
-/// Check if a default font is available
+/// Check if a default font is available (software)
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_has_default_font(handle: *const RendererHandle) -> c_int {
+    if handle.is_null() {
+        return 0;
+    }
+    unsafe {
+        if (*handle).renderer.font_manager().get_font(0).is_some() { 1 } else { 0 }
+    }
+}
+
+/// Check if a default font is available (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_has_default_font(handle: *const RendererHandle) -> c_int {
     if handle.is_null() {
@@ -788,7 +1038,34 @@ pub extern "C" fn dop_text_shaper_has_font(handle: *const TextShaperHandle) -> c
 // PNG export FFI
 // ============================================================================
 
-/// Export framebuffer to PNG file
+/// Export framebuffer to PNG file (software)
+#[cfg(feature = "software")]
+#[no_mangle]
+pub extern "C" fn dop_renderer_export_png(
+    handle: *const RendererHandle,
+    path: *const c_char,
+) -> c_int {
+    if handle.is_null() || path.is_null() {
+        return 0;
+    }
+    
+    let path_str = unsafe {
+        match CStr::from_ptr(path).to_str() {
+            Ok(s) => s,
+            Err(_) => return 0,
+        }
+    };
+    
+    unsafe {
+        match (*handle).renderer.export_png(path_str) {
+            Ok(_) => 1,
+            Err(_) => 0,
+        }
+    }
+}
+
+/// Export framebuffer to PNG file (fallback)
+#[cfg(not(feature = "software"))]
 #[no_mangle]
 pub extern "C" fn dop_renderer_export_png(
     handle: *const RendererHandle,
