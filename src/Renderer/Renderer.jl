@@ -29,14 +29,18 @@ module Renderer
 
 include("GPURenderer.jl")
 include("PNGExport.jl")
-include("CairoRenderer.jl")
+include("SoftwareRenderer.jl")
 
 using .GPURenderer
 using .PNGExport
-using .CairoRenderer
+using .SoftwareRenderer
 
-export GPURenderer, PNGExport, CairoRenderer
+export GPURenderer, PNGExport, SoftwareRenderer
 export RenderPipeline, create_pipeline, render_frame!, export_png!
+
+# Re-export SoftwareRenderer as CairoRenderer for backward compatibility
+const CairoRenderer = SoftwareRenderer
+export CairoRenderer
 
 # Import RenderBuffer types
 using ..DOMCSSOM.RenderBuffer: CommandBuffer, RenderCommand, get_commands

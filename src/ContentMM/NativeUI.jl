@@ -67,10 +67,15 @@ import ...DOMCSSOM.RenderBuffer: clear! as clear_buffer!
 using ...Renderer: RenderPipeline, create_pipeline, render_frame!, get_png_data, export_png!
 using ...Renderer.PNGExport: encode_png, decode_png, write_png_file
 using ...Renderer.GPURenderer: get_framebuffer
-using ...Renderer.CairoRenderer: CairoRenderContext, create_cairo_context, render_rect!, render_text!, 
-                                  render_stroke_rect!, save_png, get_surface_data, 
-                                  measure_text, load_font!, push_clip!, pop_clip!
-import ...Renderer.CairoRenderer: clear! as clear_cairo!
+using ...Renderer.SoftwareRenderer: SoftwareRenderContext, create_software_context
+using ...Renderer.SoftwareRenderer: render_rect! as sw_render_rect!, render_text! as sw_render_text!
+using ...Renderer.SoftwareRenderer: save_png as sw_save_png, get_surface_data as sw_get_surface_data
+using ...Renderer.SoftwareRenderer: measure_text as sw_measure_text
+import ...Renderer.SoftwareRenderer: clear! as clear_software!
+
+# Aliases for backward compatibility
+const CairoRenderContext = SoftwareRenderContext
+const create_cairo_context = create_software_context
 
 export UIContext, create_ui, render!, render_to_png!, render_to_buffer
 export UIBuilder, with_stack!, with_paragraph!, rect!, span!
@@ -97,13 +102,13 @@ mutable struct UIContext
     # Rendering
     command_buffer::CommandBuffer
     render_pipeline::Union{RenderPipeline, Nothing}
-    cairo_context::Union{CairoRenderContext, Nothing}
+    software_context::Union{SoftwareRenderContext, Nothing}
     
     # State
     viewport_width::Float32
     viewport_height::Float32
     dirty::Bool
-    use_cairo::Bool
+    use_software::Bool
     
     function UIContext()
         new(
@@ -120,6 +125,10 @@ mutable struct UIContext
         )
     end
 end
+
+# Backward compatibility alias
+const cairo_context = software_context
+const use_cairo = use_software
 
 """
     create_ui(source::String) -> UIContext

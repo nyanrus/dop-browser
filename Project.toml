@@ -5,15 +5,9 @@ authors = ["DOP Browser Contributors"]
 
 [deps]
 Blobs = "163b9779-6631-5f90-a265-3de947924de8"
-Cairo = "159f3aea-2a34-519c-b102-8c37f9878175"
-FreeTypeAbstraction = "663a7486-cb36-511b-a19d-713bb74d65c9"
-Gtk4 = "9db2cae5-386f-4011-9d63-a5602296539b"
 
 [compat]
 Blobs = "1.2.0"
-Cairo = "1.0"
-FreeTypeAbstraction = "0.10"
-Gtk4 = "0.7"
 julia = "1.10"
 
 [extras]
