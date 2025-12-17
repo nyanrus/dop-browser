@@ -9,7 +9,8 @@ and renders it to acid2.png.
 
 using DOPBrowser
 using DOPBrowser.Network: fetch!, NetworkContext, RESOURCE_HTML
-using DOPBrowser.Renderer: RenderPipeline, render_frame!, export_png!
+# Renderer module has been removed - use RustRenderer instead
+# using DOPBrowser.Renderer: RenderPipeline, render_frame!, export_png!
 
 # Acid2 test URL
 const ACID2_URL = "https://www.webstandards.org/files/acid2/test.html"

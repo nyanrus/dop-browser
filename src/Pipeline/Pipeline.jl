@@ -63,8 +63,6 @@ using ..DOMCSSOM.RenderBuffer: CommandBuffer, emit_rect!, command_count, get_com
 import ..DOMCSSOM.RenderBuffer: clear!
 using ..Layout.LayoutArrays: LayoutData, resize_layout!, set_bounds!, set_position!, compute_layout!
 using ..CSSParserModule.CSSCore: parse_inline_style
-using ..Renderer: RenderPipeline, create_pipeline, render_frame!
-using ..Renderer.PNGExport: encode_png, write_png_file
 using ..ContentMM.MathOps: Vec2, Box4, vec2, box4
 
 export Document, RenderBuffer
@@ -461,6 +459,155 @@ function render(doc::Document)::RenderBuffer
     end
     
     return RenderBuffer(commands, UInt32(doc_to_render.viewport.x), UInt32(doc_to_render.viewport.y))
+end
+
+# ============================================================================
+# PNG Encoding Helper
+# ============================================================================
+
+"""
+    encode_png(pixels::Vector{UInt8}, width::UInt32, height::UInt32) -> Vector{UInt8}
+
+Simple PNG encoder for RGBA pixel data.
+
+This is a minimal PNG encoder that creates valid PNG files. It uses no compression
+for simplicity and compatibility. For production use, consider using RustRenderer's
+export_png! function which uses optimized Rust libraries.
+
+# Arguments
+- `pixels`: RGBA pixel data (4 bytes per pixel, row-major order)
+- `width`: Image width in pixels
+- `height`: Image height in pixels
+
+# Returns
+PNG-encoded image data as a vector of bytes.
+"""
+function encode_png(pixels::Vector{UInt8}, width::UInt32, height::UInt32)::Vector{UInt8}
+    # Use a simple PPM format as intermediate, then convert to minimal PNG
+    # For production, RustRenderer provides proper PNG export
+    
+    # Actually, let's create a minimal valid PNG file structure
+    io = IOBuffer()
+    
+    # PNG signature
+    write(io, UInt8[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    
+    # Helper to write a PNG chunk
+    function write_chunk(chunk_type::String, data::Vector{UInt8})
+        # Length (4 bytes)
+        write(io, hton(UInt32(length(data))))
+        
+        # Type (4 bytes)
+        type_bytes = Vector{UInt8}(chunk_type)
+        write(io, type_bytes)
+        
+        # Data
+        write(io, data)
+        
+        # CRC32 (4 bytes) - simplified version
+        crc_data = vcat(type_bytes, data)
+        crc = simple_crc32(crc_data)
+        write(io, hton(crc))
+    end
+    
+    # IHDR chunk (Image header)
+    ihdr = IOBuffer()
+    write(ihdr, hton(width))        # Width
+    write(ihdr, hton(height))       # Height
+    write(ihdr, UInt8(8))           # Bit depth
+    write(ihdr, UInt8(6))           # Color type: RGBA (6)
+    write(ihdr, UInt8(0))           # Compression method
+    write(ihdr, UInt8(0))           # Filter method
+    write(ihdr, UInt8(0))           # Interlace method
+    write_chunk("IHDR", take!(ihdr))
+    
+    # IDAT chunk (Image data)
+    # Add filter byte (0 = no filter) before each scanline
+    filtered = IOBuffer()
+    bytes_per_row = Int(width) * 4
+    for y in 0:(height-1)
+        write(filtered, UInt8(0))  # Filter type: None
+        row_start = Int(y) * bytes_per_row + 1
+        row_end = row_start + bytes_per_row - 1
+        write(filtered, pixels[row_start:row_end])
+    end
+    
+    # For simplicity, store uncompressed (not ideal but works)
+    # Real PNG would use zlib compression
+    filtered_data = take!(filtered)
+    
+    # Try to use zlib compression if available via CodecZlib
+    compressed_data = filtered_data
+    try
+        # Try to load CodecZlib dynamically
+        @eval using CodecZlib
+        compressed_data = transcode(ZlibCompressor, filtered_data)
+    catch
+        # Fallback: Create a minimal zlib wrapper for uncompressed data
+        # zlib header for uncompressed data
+        comp_io = IOBuffer()
+        write(comp_io, UInt8(0x78))  # CMF
+        write(comp_io, UInt8(0x01))  # FLG (no compression)
+        
+        # Split data into blocks
+        data_len = length(filtered_data)
+        offset = 1
+        while offset <= data_len
+            chunk_size = min(65535, data_len - offset + 1)
+            is_last = (offset + chunk_size - 1 >= data_len)
+            
+            # Block header
+            write(comp_io, UInt8(is_last ? 0x01 : 0x00))
+            write(comp_io, UInt16(chunk_size))           # LEN (little-endian)
+            write(comp_io, UInt16(~chunk_size & 0xFFFF)) # NLEN (little-endian)
+            
+            # Block data
+            write(comp_io, filtered_data[offset:offset+chunk_size-1])
+            offset += chunk_size
+        end
+        
+        # Adler-32 checksum
+        adler = simple_adler32(filtered_data)
+        write(comp_io, hton(adler))
+        
+        compressed_data = take!(comp_io)
+    end
+    
+    write_chunk("IDAT", compressed_data)
+    
+    # IEND chunk (End of image)
+    write_chunk("IEND", UInt8[])
+    
+    return take!(io)
+end
+
+"""Simple CRC32 implementation for PNG chunks"""
+function simple_crc32(data::Vector{UInt8})::UInt32
+    # CRC32 polynomial used by PNG
+    crc = 0xffffffff
+    for byte in data
+        crc = xor(crc, UInt32(byte))
+        for _ in 1:8
+            if (crc & 1) != 0
+                crc = xor(crc >> 1, 0xedb88320)
+            else
+                crc = crc >> 1
+            end
+        end
+    end
+    return xor(crc, 0xffffffff)
+end
+
+"""Simple Adler-32 checksum for zlib"""
+function simple_adler32(data::Vector{UInt8})::UInt32
+    MOD_ADLER = 65521
+    a = UInt32(1)
+    b = UInt32(0)
+    for byte in data
+        a = (a + UInt32(byte)) % MOD_ADLER
+        b = (b + a) % MOD_ADLER
+    end
+    return (b << 16) | a
 end
 
 # ============================================================================
