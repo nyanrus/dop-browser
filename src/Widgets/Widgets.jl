@@ -50,13 +50,15 @@ using ..State: Signal, signal, computed, effect, batch
 using ..ContentMM.Properties: Color, parse_color, Direction, 
                               DIRECTION_DOWN, DIRECTION_RIGHT,
                               Pack, PACK_START, PACK_CENTER, PACK_END,
-                              Align, ALIGN_START, ALIGN_CENTER, ALIGN_STRETCH
+                              Align, ALIGN_START, ALIGN_END, ALIGN_CENTER, ALIGN_STRETCH
 using ..ContentMM.Primitives: NodeTable, NodeType, create_node!, node_count,
                                NODE_ROOT, NODE_STACK, NODE_RECT, NODE_PARAGRAPH, NODE_SPAN
 using ..ContentMM.Properties: PropertyTable, resize_properties!, set_property!
 using ..ContentMM.NativeUI: UIContext, create_ui, render!, render_cairo!
 
 export Widget, WidgetTree, WidgetProps
+export ContainerWidget, ButtonWidget, LabelWidget, TextInputWidget
+export CheckboxWidget, SliderWidget, ProgressBarWidget, SpacerWidget
 export button, label, text_input, checkbox, slider, progress_bar
 export container, row, column, spacer
 export build_ui, render_widgets!
