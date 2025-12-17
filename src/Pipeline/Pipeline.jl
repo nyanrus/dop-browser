@@ -204,6 +204,76 @@ function parse_doc(html::AbstractString)::Document
     # Simple state machine for parsing
     stack = UInt32[0]  # Parent stack
     
+    link_child!(parent_id::UInt32, child_id::UInt32,
+                first_children::Vector{UInt32}, next_siblings::Vector{UInt32}) = begin
+        parent_id == 0 && return
+        if first_children[parent_id] == 0
+            first_children[parent_id] = child_id
+            return
+        end
+        sibling = first_children[parent_id]
+        while next_siblings[sibling] != 0
+            sibling = next_siblings[sibling]
+        end
+        next_siblings[sibling] = child_id
+    end
+
+    function add_element!(
+        parent_id::UInt32, tag_id::UInt32,
+        node_types::Vector{UInt8}, parents::Vector{UInt32},
+        first_children::Vector{UInt32}, next_siblings::Vector{UInt32},
+        tags::Vector{UInt32}, widths::Vector{Float32}, heights::Vector{Float32},
+        bg_colors::Vector{NTuple{4, UInt8}}
+    )
+        new_id = UInt32(length(node_types) + 1)
+        push!(node_types, 0x02)  # Element
+        push!(parents, parent_id)
+        push!(first_children, 0)
+        push!(next_siblings, 0)
+        push!(tags, tag_id)
+        push!(widths, 0.0f0)
+        push!(heights, 0.0f0)
+        push!(bg_colors, (0x00, 0x00, 0x00, 0x00))
+        link_child!(parent_id, new_id, first_children, next_siblings)
+        return new_id
+    end
+
+    function apply_inline_styles!(
+        styles, idx::Integer,
+        widths::Vector{Float32}, heights::Vector{Float32},
+        bg_colors::Vector{NTuple{4, UInt8}}
+    )
+        if !styles.width_auto
+            widths[idx] = styles.width
+        end
+        if !styles.height_auto
+            heights[idx] = styles.height
+        end
+        if styles.has_background
+            bg_colors[idx] = (styles.background_r, styles.background_g,
+                              styles.background_b, styles.background_a)
+        end
+    end
+
+    function parse_attributes!(
+        token_index::Int, node_id::UInt32,
+        tokens, pool,
+        widths::Vector{Float32}, heights::Vector{Float32},
+        bg_colors::Vector{NTuple{4, UInt8}}
+    )
+        j = token_index + 1
+        while j <= length(tokens) && tokens[j].type == TOKEN_ATTRIBUTE
+            attr_token = tokens[j]
+            if get_string(pool, attr_token.name_id) == "style"
+                style_str = get_string(pool, attr_token.value_id)
+                apply_inline_styles!(parse_inline_style(style_str), Int(node_id),
+                                     widths, heights, bg_colors)
+            end
+            j += 1
+        end
+        return j
+    end
+
     # Add root
     push!(node_types, 0x01)  # Document
     push!(parents, 0)
@@ -222,54 +292,11 @@ function parse_doc(html::AbstractString)::Document
         
         if token.type == TOKEN_START_TAG  # Start tag
             parent_id = stack[end]
-            new_id = UInt32(length(node_types) + 1)
-            
-            push!(node_types, 0x02)  # Element
-            push!(parents, parent_id)
-            push!(first_children, 0)
-            push!(next_siblings, 0)
-            push!(tags, token.name_id)
-            push!(widths, 0.0f0)
-            push!(heights, 0.0f0)
-            push!(bg_colors, (0x00, 0x00, 0x00, 0x00))
-            
-            # Link to parent
-            if parent_id > 0
-                if first_children[parent_id] == 0
-                    first_children[parent_id] = new_id
-                else
-                    # Find last sibling
-                    sibling = first_children[parent_id]
-                    while next_siblings[sibling] != 0
-                        sibling = next_siblings[sibling]
-                    end
-                    next_siblings[sibling] = new_id
-                end
-            end
-            
-            # Parse inline styles from following attribute tokens
-            j = i + 1
-            while j <= length(tokens) && tokens[j].type == TOKEN_ATTRIBUTE  # Attribute
-                attr_token = tokens[j]
-                attr_name = get_string(pool, attr_token.name_id)
-                if attr_name == "style"
-                    style_str = get_string(pool, attr_token.value_id)
-                    styles = parse_inline_style(style_str)
-                    if !styles.width_auto
-                        widths[end] = styles.width
-                    end
-                    if !styles.height_auto
-                        heights[end] = styles.height
-                    end
-                    if styles.has_background
-                        bg_colors[end] = (styles.background_r, styles.background_g, 
-                                          styles.background_b, styles.background_a)
-                    end
-                end
-                j += 1
-            end
-            i = j - 1
-            
+            new_id = add_element!(parent_id, token.name_id,
+                                  node_types, parents, first_children, next_siblings,
+                                  tags, widths, heights, bg_colors)
+            i = parse_attributes!(i, new_id, tokens, pool,
+                                  widths, heights, bg_colors) - 1
             push!(stack, new_id)
             
         elseif token.type == TOKEN_END_TAG  # End tag
@@ -278,31 +305,11 @@ function parse_doc(html::AbstractString)::Document
             end
             
         elseif token.type == TOKEN_SELF_CLOSING  # Self-closing
-            parent_id = stack[end]
-            new_id = UInt32(length(node_types) + 1)
-            
-            push!(node_types, 0x02)
-            push!(parents, parent_id)
-            push!(first_children, 0)
-            push!(next_siblings, 0)
-            push!(tags, token.name_id)
-            push!(widths, 0.0f0)
-            push!(heights, 0.0f0)
-            push!(bg_colors, (0x00, 0x00, 0x00, 0x00))
-            
-            # Link to parent (same logic as start tags)
-            if parent_id > 0
-                if first_children[parent_id] == 0
-                    first_children[parent_id] = new_id
-                else
-                    # Find last sibling
-                    sibling = first_children[parent_id]
-                    while next_siblings[sibling] != 0
-                        sibling = next_siblings[sibling]
-                    end
-                    next_siblings[sibling] = new_id
-                end
-            end
+            new_id = add_element!(stack[end], token.name_id,
+                                  node_types, parents, first_children, next_siblings,
+                                  tags, widths, heights, bg_colors)
+            i = parse_attributes!(i, new_id, tokens, pool,
+                                  widths, heights, bg_colors) - 1
         end
         
         i += 1
@@ -373,14 +380,11 @@ function layout(doc::Document; viewport::Tuple{Int,Int}=(800, 600))::Document
         end
         
         # Position relative to parent
-        new_positions[idx] = Vec2(
-            new_positions[parent_id].x,
-            new_positions[parent_id].y + y_offset
-        )
+        new_positions[idx] = new_positions[parent_id] + vec2(0, y_offset)
         
         # Size from style or auto
         if doc.widths[idx] > 0
-            new_sizes[idx] = Vec2(doc.widths[idx], doc.heights[idx])
+            new_sizes[idx] = vec2(doc.widths[idx], doc.heights[idx])
         end
     end
     
@@ -424,18 +428,14 @@ buffer = doc |> render
 ```
 """
 function render(doc::Document)::RenderBuffer
-    local doc_to_render = doc
-    if !doc.layout_computed
-        # Auto-compute layout if needed
-        doc_to_render = layout(doc, viewport=(Int(doc.viewport.x), Int(doc.viewport.y)))
-    end
-    
+    doc_to_render = doc.layout_computed ? doc :
+        layout(doc, viewport=(Int(doc.viewport.x), Int(doc.viewport.y)))
+ 
     commands = NTuple{8, Float32}[]
     
-    n = length(doc_to_render.node_types)
-    for idx in 1:n
+    for (idx, node_type) in enumerate(doc_to_render.node_types)
         # Skip non-elements and zero-size nodes
-        if doc_to_render.node_types[idx] != 0x02
+        if node_type != 0x02
             continue
         end
         
@@ -752,8 +752,9 @@ function hit_test(doc::Document, point::Vec2{Float32})::Union{Int, Nothing}
         pos = doc.positions[idx]
         sz = doc.sizes[idx]
         
-        if point.x >= pos.x && point.x <= pos.x + sz.x &&
-           point.y >= pos.y && point.y <= pos.y + sz.y
+        rel = point - pos
+        if rel.x >= 0 && rel.y >= 0 &&
+           rel.x <= sz.x && rel.y <= sz.y
             return idx
         end
     end
