@@ -7,11 +7,17 @@ This module provides an abstraction layer for windowing systems, enabling
 the Content-- UI library to run as interactive desktop applications.
 
 ## Supported Backends
-- **Software** (default): In-memory rendering for headless/testing
-- **Cairo**: High-quality 2D rendering with Cairo
+- **Cairo** (default): High-quality 2D rendering with Cairo (headless/offscreen)
+- **Software**: In-memory rendering for headless/testing
 - Future: Native platform windows (X11, Wayland, Win32, Cocoa)
 
+Note: Currently only headless/offscreen rendering is supported. The Cairo and 
+software backends do not create actual desktop windows. Use `inject_event!` for 
+testing event handling.
+
 ## Usage
+
+### Basic Window with Event Loop (Headless/Testing)
 
 ```julia
 using DOPBrowser.Window
@@ -22,28 +28,55 @@ config = WindowConfig(
     width = 800,
     height = 600,
     resizable = true,
-    vsync = true
+    backend = :software  # Use software backend for testing
 )
 
 # Create a window
 window = create_window(config)
 
-# Main loop
-while is_open(window)
-    # Poll events
+# Simulate events for testing
+inject_event!(window, WindowEvent(EVENT_KEY_DOWN, key=Int32(65)))  # 'A' key
+
+# Process events
+events = poll_events!(window)
+for event in events
+    println("Received event: \$(event.type)")
+end
+
+# Get current state
+width, height = get_size(window)
+mx, my = get_mouse_position(window)
+
+# Clean up
+destroy!(window)
+```
+
+### Main Loop Example (with timeout for testing)
+
+```julia
+using DOPBrowser.Window
+
+window = create_window(WindowConfig(backend=:software))
+
+# Run loop with timeout (for testing/headless mode)
+start_time = time()
+max_duration = 5.0  # seconds
+
+while is_open(window) && (time() - start_time) < max_duration
     events = poll_events!(window)
     
     for event in events
         if event.type == EVENT_CLOSE
             close!(window)
         elseif event.type == EVENT_KEY_DOWN
-            # Handle key press
+            println("Key pressed: \$(event.key)")
         end
     end
     
-    # Render frame
-    render!(window, ui_context)
+    sleep(0.016)  # ~60 FPS
 end
+
+destroy!(window)
 ```
 """
 module Window
