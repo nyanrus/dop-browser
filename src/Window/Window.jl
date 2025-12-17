@@ -7,7 +7,8 @@ This module provides an abstraction layer for windowing systems, enabling
 the Content-- UI library to run as interactive desktop applications.
 
 ## Supported Backends
-- **Software** (default): In-memory rendering using Rust-based renderer for headless/testing
+- **rust** (default): Rust-based rendering using tiny-skia for software rendering
+  and winit for window management
 
 Note: Gtk4 and Cairo backends have been removed. Use the RustRenderer module
 for production window management with wgpu and winit.
@@ -19,13 +20,13 @@ for production window management with wgpu and winit.
 ```julia
 using DOPBrowser.Window
 
-# Create a window configuration with software backend
+# Create a window configuration with rust backend (default)
 config = WindowConfig(
     title = "My App",
     width = 800,
     height = 600,
     resizable = true,
-    backend = :software  # Use software renderer
+    backend = :rust  # Use Rust-based renderer (default)
 )
 
 # Create a window
@@ -57,12 +58,12 @@ destroy!(window)
 ```julia
 using DOPBrowser.Window
 
-# Create a window with software backend for testing
+# Create a window with rust backend for testing
 config = WindowConfig(
     title = "Test",
     width = 800,
     height = 600,
-    backend = :software  # Use software backend for headless testing
+    backend = :rust  # Use Rust backend for headless testing
 )
 
 window = create_window(config)
@@ -237,7 +238,7 @@ struct WindowConfig
     min_height::Int32
     max_width::Int32
     max_height::Int32
-    backend::Symbol               # :software, :cairo, :opengl, :vulkan
+    backend::Symbol               # :rust (default), :software (fallback)
     
     function WindowConfig(;
                           title::String = "DOP Browser",
@@ -255,7 +256,7 @@ struct WindowConfig
                           min_height::Integer = 1,
                           max_width::Integer = Int(typemax(Int32)),
                           max_height::Integer = Int(typemax(Int32)),
-                          backend::Symbol = :cairo)
+                          backend::Symbol = :rust)
         new(title, Int32(width), Int32(height),
             x === nothing ? nothing : Int32(x),
             y === nothing ? nothing : Int32(y),
@@ -345,16 +346,18 @@ Create a new window with the given configuration.
 function create_window(config::WindowConfig = WindowConfig())::WindowHandle
     handle = WindowHandle(config)
     
-    # Initialize backend - Gtk is no longer supported, use software or Rust
-    if config.backend == :gtk || config.backend == :rust
-        # Gtk removed - fall back to software rendering
-        @warn "Gtk backend is no longer available. Using software backend instead." maxlog=1
+    # Initialize backend - Rust is the default
+    if config.backend == :rust
+        initialize_rust_backend!(handle)
+    elseif config.backend == :software
         initialize_software_backend!(handle)
-    elseif config.backend == :cairo || config.backend == :software
-        initialize_software_backend!(handle)
+    elseif config.backend == :gtk || config.backend == :cairo
+        # Gtk/Cairo removed - fall back to Rust rendering
+        @warn "Gtk/Cairo backend is no longer available. Using Rust backend instead." maxlog=1
+        initialize_rust_backend!(handle)
     else
-        # Default to software backend
-        initialize_software_backend!(handle)
+        # Default to Rust backend
+        initialize_rust_backend!(handle)
     end
     
     return handle
@@ -362,10 +365,37 @@ end
 
 """
 Initialize Gtk windowing backend for onscreen rendering.
-NOTE: Gtk4 support has been removed. This function now uses software backend.
+NOTE: Gtk4 support has been removed. This function now uses Rust backend.
 """
 function initialize_gtk_backend!(handle::WindowHandle)
-    @warn "Gtk4 backend has been removed. Using software backend instead." maxlog=1
+    @warn "Gtk4 backend has been removed. Using Rust backend instead." maxlog=1
+    initialize_rust_backend!(handle)
+end
+
+"""
+Initialize Rust-based windowing and rendering backend.
+Uses tiny-skia for software rendering and winit for window management.
+"""
+function initialize_rust_backend!(handle::WindowHandle)
+    try
+        # Try to use RustRenderer for software rendering
+        RustRenderer = @eval begin
+            import ...RustRenderer as RR
+            RR
+        end
+        
+        if RustRenderer.is_available()
+            # Create a Rust renderer for this window
+            renderer = RustRenderer.create_renderer(handle.width, handle.height)
+            handle.backend_data = (:rust, renderer)
+            handle.framebuffer = zeros(UInt8, handle.width * handle.height * 4)
+            return
+        end
+    catch e
+        @warn "Failed to initialize Rust backend, falling back to software" exception=e
+    end
+    
+    # Fall back to software backend
     initialize_software_backend!(handle)
 end
 
@@ -435,6 +465,20 @@ Destroy a window and release its resources.
 """
 function destroy!(handle::WindowHandle)
     handle.is_open = false
+    
+    # Clean up Rust renderer if present
+    if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+        try
+            RustRenderer = @eval begin
+                import ...RustRenderer as RR
+                RR
+            end
+            RustRenderer.destroy!(handle.backend_data[2])
+        catch
+            # Ignore cleanup errors
+        end
+    end
+    
     handle.backend_data = nothing
     handle.cairo_context = nothing
     empty!(handle.framebuffer)
@@ -551,7 +595,19 @@ export inject_event!
 Resize the backend buffers when window size changes.
 """
 function resize_backend!(handle::WindowHandle)
-    if handle.backend_data == :software
+    if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+        try
+            RustRenderer = @eval begin
+                import ...RustRenderer as RR
+                RR
+            end
+            RustRenderer.renderer_resize!(handle.backend_data[2], handle.width, handle.height)
+            resize!(handle.framebuffer, handle.width * handle.height * 4)
+            fill!(handle.framebuffer, 0)
+        catch e
+            @warn "Failed to resize Rust backend" exception=e
+        end
+    elseif handle.backend_data == :software
         resize!(handle.framebuffer, handle.width * handle.height * 4)
         fill!(handle.framebuffer, 0)
     end
@@ -692,8 +748,66 @@ export is_key_pressed, is_mouse_button_pressed, get_mouse_position, get_modifier
 Render the UI context to the window.
 """
 function render!(handle::WindowHandle, ui_context)
-    # Always use software rendering
-    render_software!(handle, ui_context)
+    # Check backend type
+    if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+        render_rust!(handle, ui_context)
+    else
+        render_software!(handle, ui_context)
+    end
+end
+
+"""
+Render using Rust backend (tiny-skia software rendering).
+"""
+function render_rust!(handle::WindowHandle, ui_context)
+    try
+        RustRenderer = @eval begin
+            import ...RustRenderer as RR
+            RR
+        end
+        
+        if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+            renderer = handle.backend_data[2]
+            
+            # Clear the renderer
+            RustRenderer.clear!(renderer)
+            RustRenderer.set_clear_color!(renderer, 1.0f0, 1.0f0, 1.0f0, 1.0f0)
+            
+            # Try to get render commands from the UI context
+            try
+                NativeUI = @eval begin
+                    import ...ContentMM.NativeUI as NUI
+                    NUI
+                end
+                
+                # If ui_context has command buffer, render those commands
+                if hasproperty(ui_context, :command_buffer)
+                    commands = NativeUI.get_commands(ui_context.command_buffer)
+                    for cmd in commands
+                        RustRenderer.add_rect!(renderer, 
+                            Float32(cmd.x), Float32(cmd.y), 
+                            Float32(cmd.width), Float32(cmd.height),
+                            Float32(cmd.color_r), Float32(cmd.color_g), 
+                            Float32(cmd.color_b), Float32(cmd.color_a))
+                    end
+                end
+            catch
+                # Ignore if NativeUI is not available
+            end
+            
+            # Render
+            RustRenderer.render!(renderer)
+            
+            # Copy framebuffer
+            buffer = RustRenderer.get_framebuffer(renderer)
+            if length(buffer) == length(handle.framebuffer)
+                copyto!(handle.framebuffer, buffer)
+            end
+        end
+    catch e
+        @warn "Rust rendering failed, falling back to software" exception=e
+        render_software!(handle, ui_context)
+    end
 end
 
 """

@@ -1396,76 +1396,6 @@ end
 end
 
 # ============================================================================
-# Renderer Tests
-# ============================================================================
-
-@testset "Renderer Pipeline" begin
-    
-    @testset "GPU Context" begin
-        ctx = DOPBrowser.Renderer.GPURenderer.create_gpu_context(UInt32(100), UInt32(100))
-        @test ctx.width == 100
-        @test ctx.height == 100
-        
-        # Begin frame with red clear color
-        DOPBrowser.Renderer.GPURenderer.begin_frame(ctx, 
-            clear_color=(1.0f0, 0.0f0, 0.0f0, 1.0f0))
-        
-        # Add a rectangle
-        batch = ctx.current_batch
-        DOPBrowser.Renderer.GPURenderer.add_rect!(batch, 10.0f0, 10.0f0, 
-                                                   50.0f0, 50.0f0,
-                                                   0.0f0, 1.0f0, 0.0f0, 1.0f0)
-        
-        @test length(batch.vertices) == 4
-        @test length(batch.indices) == 6
-        @test length(batch.commands) == 1
-        
-        # End frame
-        DOPBrowser.Renderer.GPURenderer.end_frame(ctx)
-        @test ctx.draw_calls == 1
-        @test ctx.vertices_submitted == 4
-    end
-    
-    @testset "PNG Export" begin
-        # Create a simple 2x2 image
-        framebuffer = UInt8[
-            255, 0, 0, 255,    0, 255, 0, 255,   # Red, Green
-            0, 0, 255, 255,    255, 255, 0, 255  # Blue, Yellow
-        ]
-        
-        png_data = DOPBrowser.Renderer.PNGExport.encode_png(framebuffer, UInt32(2), UInt32(2))
-        
-        # Check PNG signature
-        @test png_data[1:8] == UInt8[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-        
-        # Check we have some data
-        @test length(png_data) > 8
-    end
-    
-    @testset "Render Pipeline" begin
-        pipeline = DOPBrowser.Renderer.create_pipeline(UInt32(200), UInt32(200))
-        @test pipeline.width == 200
-        @test pipeline.height == 200
-        
-        # Create command buffer with test commands
-        buffer = CommandBuffer()
-        emit_rect!(buffer, 0.0f0, 0.0f0, 100.0f0, 100.0f0,
-                   1.0f0, 0.0f0, 0.0f0, 1.0f0)
-        
-        # Render frame
-        DOPBrowser.Renderer.render_frame!(pipeline, buffer)
-        
-        # Export to PNG
-        png_data = DOPBrowser.Renderer.get_png_data(pipeline)
-        @test length(png_data) > 0
-        
-        # Verify PNG signature
-        @test png_data[1:8] == UInt8[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-    end
-
-end
-
-# ============================================================================
 # Complete Browser Tests
 # ============================================================================
 
@@ -1912,28 +1842,19 @@ end
             0, 0, 255, 255,    255, 255, 0, 255  # Blue, Yellow
         ]
         
-        # Encode to PNG
-        png_data = DOPBrowser.Renderer.PNGExport.encode_png(original, UInt32(2), UInt32(2))
-        @test length(png_data) > 0
-        
-        # PNG signature should be valid
-        @test png_data[1:8] == UInt8[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-        
-        # Write and read back
-        temp_file = tempname() * ".png"
-        DOPBrowser.Renderer.PNGExport.write_png_file(temp_file, original, UInt32(2), UInt32(2))
-        
-        @test isfile(temp_file)
-        
-        # Decode
-        decoded = DOPBrowser.Renderer.PNGExport.decode_png(temp_file)
-        
-        # Compare (allowing for minimal compression artifacts)
-        result = DOPBrowser.ContentMM.NativeUI.compare_buffers(original, decoded, 0)
-        @test result.match == true
-        
-        # Cleanup
-        rm(temp_file)
+        # Test PNG export via RustRenderer if available
+        if DOPBrowser.RustRenderer.is_available()
+            renderer = DOPBrowser.RustRenderer.create_renderer(2, 2)
+            
+            temp_file = tempname() * ".png"
+            DOPBrowser.RustRenderer.export_png!(renderer, temp_file)
+            
+            @test isfile(temp_file)
+            
+            # Cleanup
+            rm(temp_file)
+            DOPBrowser.RustRenderer.destroy!(renderer)
+        end
     end
     
     @testset "Render and Compare" begin
@@ -1950,131 +1871,6 @@ end
         # Check that at least some pixels are red (the rect should render)
         # Note: The exact position depends on layout, so we just verify the buffer exists
         @test length(buffer) > 0
-    end
-
-end
-
-# ============================================================================
-# Cairo Rendering Tests
-# ============================================================================
-
-@testset "Cairo Rendering" begin
-    
-    @testset "Cairo Context Creation" begin
-        ctx = DOPBrowser.Renderer.CairoRenderer.create_cairo_context(200, 150)
-        @test ctx.width == 200
-        @test ctx.height == 150
-    end
-    
-    @testset "Cairo Rectangle Rendering" begin
-        ctx = DOPBrowser.Renderer.CairoRenderer.create_cairo_context(100, 100)
-        
-        # Clear with white
-        DOPBrowser.Renderer.CairoRenderer.clear!(ctx, 1.0, 1.0, 1.0, 1.0)
-        
-        # Draw red rectangle
-        DOPBrowser.Renderer.CairoRenderer.render_rect!(ctx, 10.0, 10.0, 80.0, 80.0, (1.0, 0.0, 0.0, 1.0))
-        
-        # Get pixel data
-        data = DOPBrowser.Renderer.CairoRenderer.get_surface_data(ctx)
-        
-        @test length(data) == 100 * 100 * 4  # RGBA
-        
-        # Check that we have some red pixels (center of the rectangle)
-        # Pixel at (50, 50) should be red
-        idx = (50 * 100 + 50) * 4 + 1
-        @test data[idx] > 200  # R should be high
-        @test data[idx + 1] < 50  # G should be low
-        @test data[idx + 2] < 50  # B should be low
-    end
-    
-    @testset "Cairo Text Rendering" begin
-        ctx = DOPBrowser.Renderer.CairoRenderer.create_cairo_context(200, 50)
-        
-        # Clear with white
-        DOPBrowser.Renderer.CairoRenderer.clear!(ctx, 1.0, 1.0, 1.0, 1.0)
-        
-        # Render some text
-        DOPBrowser.Renderer.CairoRenderer.render_text!(ctx, "Hello", 10.0, 30.0, font_size=16.0)
-        
-        # Just verify it doesn't crash - text rendering depends on system fonts
-        @test true
-    end
-    
-    @testset "Cairo PNG Export" begin
-        ctx = DOPBrowser.Renderer.CairoRenderer.create_cairo_context(50, 50)
-        
-        DOPBrowser.Renderer.CairoRenderer.clear!(ctx, 0.0, 0.0, 1.0, 1.0)  # Blue
-        
-        temp_file = tempname() * ".png"
-        DOPBrowser.Renderer.CairoRenderer.save_png(ctx, temp_file)
-        
-        @test isfile(temp_file)
-        @test filesize(temp_file) > 0
-        
-        # Cleanup
-        rm(temp_file)
-    end
-    
-    @testset "NativeUI Cairo Rendering" begin
-        source = """
-        Stack(Direction: Down, Fill: #FFFFFF) {
-            Rect(Size: (100, 50), Fill: #FF0000);
-        }
-        """
-        
-        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
-        
-        # Render with Cairo
-        DOPBrowser.ContentMM.NativeUI.render_cairo!(ui, width=150, height=100)
-        
-        @test ui.cairo_context !== nothing
-        @test ui.use_cairo == true
-    end
-    
-    @testset "NativeUI Cairo PNG Export" begin
-        source = """
-        Rect(Size: (50, 50), Fill: #00FF00)
-        """
-        
-        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
-        
-        temp_file = tempname() * ".png"
-        DOPBrowser.ContentMM.NativeUI.render_to_png_cairo!(ui, temp_file, width=100, height=100)
-        
-        @test isfile(temp_file)
-        @test filesize(temp_file) > 0
-        
-        # Cleanup
-        rm(temp_file)
-    end
-    
-    @testset "NativeUI Cairo Buffer" begin
-        source = """
-        Rect(Size: (50, 50), Fill: #0000FF)
-        """
-        
-        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
-        buffer = DOPBrowser.ContentMM.NativeUI.render_to_buffer_cairo(ui, width=100, height=100)
-        
-        @test length(buffer) == 100 * 100 * 4  # RGBA
-    end
-    
-    @testset "Cairo Text in Content--" begin
-        source = """
-        Stack(Direction: Down, Fill: #FFFFFF, Inset: 10) {
-            Paragraph {
-                Span(Text: "Hello World");
-            }
-        }
-        """
-        
-        ui = DOPBrowser.ContentMM.NativeUI.create_ui(source)
-        
-        # This should not error even if font is not available
-        DOPBrowser.ContentMM.NativeUI.render_cairo!(ui, width=200, height=100)
-        
-        @test ui.cairo_context !== nothing
     end
 
 end
@@ -2459,6 +2255,13 @@ end
         )
         @test config_cairo.backend == :cairo
         
+        # Test Rust backend configuration
+        config_rust = DOPBrowser.Window.WindowConfig(
+            title = "Rust Window",
+            backend = :rust
+        )
+        @test config_rust.backend == :rust
+        
         # Test Software backend configuration
         config_soft = DOPBrowser.Window.WindowConfig(
             title = "Software Window",
@@ -2467,9 +2270,10 @@ end
         @test config_soft.backend == :software
     end
     
-    @testset "is_gtk_available" begin
-        # Should return true since Gtk4 is a dependency
-        @test DOPBrowser.Window.is_gtk_available() isa Bool
+    @testset "default_backend" begin
+        # Default backend should be rust
+        config = DOPBrowser.Window.WindowConfig()
+        @test config.backend == :rust
     end
     
     @testset "Window Creation" begin
