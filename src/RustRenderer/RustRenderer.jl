@@ -7,6 +7,8 @@ This module provides a high-performance rendering backend implemented in Rust,
 with window management via winit and GPU rendering via wgpu. It exposes
 FFI bindings to Julia for seamless integration with the DOP Browser.
 
+The Rust library is built using the unified BinaryBuilder configuration in deps/build.jl.
+
 ## Features
 - Cross-platform window management (Windows, Linux, macOS)
 - Hardware-accelerated GPU rendering via wgpu
@@ -43,6 +45,10 @@ export set_clear_color!, clear!
 export is_open, close!, poll_events!
 export get_lib_path, is_available
 
+# Include the build utilities
+const deps_dir = joinpath(dirname(dirname(@__DIR__)), "deps")
+include(joinpath(deps_dir, "build.jl"))
+
 # ============================================================================
 # Library Loading
 # ============================================================================
@@ -51,29 +57,36 @@ export get_lib_path, is_available
 const LIB_HANDLE = Ref{Ptr{Nothing}}(C_NULL)
 
 """
-Get the path to the Rust renderer library.
+Get the path to the Rust renderer library using the unified build system.
 """
 function get_lib_path()::String
-    # Try different possible locations
+    # Use the unified build system to find the library
+    path = get_library_path("dop-renderer")
+    if path !== nothing
+        return path
+    end
+    
+    # Fallback: try different possible locations
     possible_paths = String[]
+    
+    # Artifacts directory first
+    artifacts_dir = joinpath(dirname(dirname(@__DIR__)), "artifacts", "dop-renderer")
     
     # Local build path (development)
     local_path = joinpath(@__DIR__, "..", "..", "rust", "dop-renderer", "target", "release")
-    if Sys.iswindows()
-        push!(possible_paths, joinpath(local_path, "dop_renderer.dll"))
-    elseif Sys.isapple()
-        push!(possible_paths, joinpath(local_path, "libdop_renderer.dylib"))
-    else
-        push!(possible_paths, joinpath(local_path, "libdop_renderer.so"))
-    end
-    
-    # Debug build path
     debug_path = joinpath(@__DIR__, "..", "..", "rust", "dop-renderer", "target", "debug")
+    
     if Sys.iswindows()
+        push!(possible_paths, joinpath(artifacts_dir, "dop_renderer.dll"))
+        push!(possible_paths, joinpath(local_path, "dop_renderer.dll"))
         push!(possible_paths, joinpath(debug_path, "dop_renderer.dll"))
     elseif Sys.isapple()
+        push!(possible_paths, joinpath(artifacts_dir, "libdop_renderer.dylib"))
+        push!(possible_paths, joinpath(local_path, "libdop_renderer.dylib"))
         push!(possible_paths, joinpath(debug_path, "libdop_renderer.dylib"))
     else
+        push!(possible_paths, joinpath(artifacts_dir, "libdop_renderer.so"))
+        push!(possible_paths, joinpath(local_path, "libdop_renderer.so"))
         push!(possible_paths, joinpath(debug_path, "libdop_renderer.so"))
     end
     
