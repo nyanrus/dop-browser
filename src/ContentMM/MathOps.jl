@@ -22,11 +22,11 @@ Layout positions and sizes are represented as 2D vectors:
 | `-` | | Subtraction | `Vec2(10, 20) - Vec2(5, 5) = Vec2(5, 15)` |
 | `*` | | Scaling | `Vec2(10, 20) * 2 = Vec2(20, 40)` |
 | `/` | | Division | `Vec2(10, 20) / 2 = Vec2(5, 10)` |
-| `⊕` | `\oplus` | Box merge | Combine two Box4 values |
-| `⊗` | `\otimes` | Hadamard product | Component-wise multiply |
-| `⊙` | `\odot` | Dot product | `Vec2(1,0) ⊙ Vec2(0,1) = 0` |
-| `‖·‖` | `\|cdot\|` | Norm/magnitude | `‖Vec2(3,4)‖ = 5` |
-| `∘` | `\circ` | Function composition | For transforms |
+| `⊕` | oplus | Box merge | Combine two Box4 values |
+| `⊗` | otimes | Hadamard product | Component-wise multiply |
+| `⊙` | odot | Dot product | `Vec2(1,0) ⊙ Vec2(0,1) = 0` |
+| `‖·‖` | norm | Norm/magnitude | `‖Vec2(3,4)‖ = 5` |
+| `∘` | circ | Function composition | For transforms |
 
 ## Intuitive Property Syntax
 
