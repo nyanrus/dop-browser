@@ -39,21 +39,20 @@ module DOPBrowser
 # Modular Architecture
 # =============================================================================
 # The browser engine is organized into the following modules:
-# 1. HTMLParser - HTML tokenization and string interning
-# 2. CSSParserModule - CSS parsing and style computation  
+# 1. RustParser - Rust-based HTML/CSS parser (REQUIRED for production)
+# 2. RustRenderer - Rust-based GPU renderer (REQUIRED for production)
 # 3. Layout - SIMD-friendly layout calculation
 # 4. DOMCSSOM - Virtual DOM/CSSOM representation
 # 5. Compiler - HTML+CSS to Content-- compilation
 # 6. ContentMM - Content-- IR and runtime
 # 7. Network - HTTP/HTTPS networking layer
-# 8. Renderer - GPU rendering and PNG export
-# 9. EventLoop - Browser main event loop
+# 8. EventLoop - Browser main event loop
 
-# HTML Parser module (StringInterner + TokenTape)
-include("HTMLParser/HTMLParser.jl")
+# Rust-based HTML/CSS parser and Content-- compiler (REQUIRED)
+include("RustParser/RustParser.jl")
 
-# CSS Parser module
-include("CSSParser/CSSParserModule.jl")
+# Rust-based rendering engine (winit + wgpu) (REQUIRED)
+include("RustRenderer/RustRenderer.jl")
 
 # Layout module (LayoutArrays)
 include("Layout/Layout.jl")
@@ -61,14 +60,8 @@ include("Layout/Layout.jl")
 # DOM/CSSOM module (NodeTable + StyleArchetypes + RenderBuffer + StringInterner)
 include("DOMCSSOM/DOMCSSOM.jl")
 
-# Compiler module (HTML+CSS to Content--)
-include("Compiler/Compiler.jl")
-
 # Event Loop module
 include("EventLoop/EventLoop.jl")
-
-# Rendering pipeline (before ContentMM for NativeUI dependencies)
-include("Renderer/Renderer.jl")
 
 # Content-- IR modules
 include("ContentMM/ContentMM.jl")
@@ -92,12 +85,6 @@ include("Pipeline/Pipeline.jl")
 
 # Window management for platform integration
 include("Window/Window.jl")
-
-# Rust-based rendering engine (winit + wgpu)
-include("RustRenderer/RustRenderer.jl")
-
-# Rust-based HTML/CSS parser and Content-- compiler
-include("RustParser/RustParser.jl")
 
 # Reactive state management
 include("State/State.jl")

@@ -81,7 +81,7 @@ function is_available()::Bool
     
     path = find_library()
     if path === nothing
-        return false
+        error("Rust parser library not found. Please build it with: cd rust/dop-parser && cargo build --release")
     end
     
     try
@@ -93,8 +93,7 @@ function is_available()::Bool
         
         return true
     catch e
-        @warn "Failed to load Rust parser library" exception=e
-        return false
+        error("Failed to load Rust parser library: $e")
     end
 end
 
