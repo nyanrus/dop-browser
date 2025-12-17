@@ -7,6 +7,8 @@ This module provides a high-performance rendering backend implemented in Rust,
 with window management via winit and GPU rendering via wgpu. It exposes
 FFI bindings to Julia for seamless integration with the DOP Browser.
 
+The Rust library can be built using the unified build script in deps/build.jl.
+
 ## Features
 - Cross-platform window management (Windows, Linux, macOS)
 - Hardware-accelerated GPU rendering via wgpu
@@ -51,31 +53,42 @@ export get_lib_path, is_available
 const LIB_HANDLE = Ref{Ptr{Nothing}}(C_NULL)
 
 """
+    get_lib_name() -> String
+
+Get the platform-specific library filename.
+"""
+function get_lib_name()
+    if Sys.iswindows()
+        return "dop_renderer.dll"
+    elseif Sys.isapple()
+        return "libdop_renderer.dylib"
+    else
+        return "libdop_renderer.so"
+    end
+end
+
+"""
 Get the path to the Rust renderer library.
 """
 function get_lib_path()::String
-    # Try different possible locations
     possible_paths = String[]
     
-    # Local build path (development)
-    local_path = joinpath(@__DIR__, "..", "..", "rust", "dop-renderer", "target", "release")
-    if Sys.iswindows()
-        push!(possible_paths, joinpath(local_path, "dop_renderer.dll"))
-    elseif Sys.isapple()
-        push!(possible_paths, joinpath(local_path, "libdop_renderer.dylib"))
-    else
-        push!(possible_paths, joinpath(local_path, "libdop_renderer.so"))
-    end
+    # Get the source directory
+    src_dir = @__DIR__
+    project_dir = dirname(dirname(src_dir))
     
-    # Debug build path
-    debug_path = joinpath(@__DIR__, "..", "..", "rust", "dop-renderer", "target", "debug")
-    if Sys.iswindows()
-        push!(possible_paths, joinpath(debug_path, "dop_renderer.dll"))
-    elseif Sys.isapple()
-        push!(possible_paths, joinpath(debug_path, "libdop_renderer.dylib"))
-    else
-        push!(possible_paths, joinpath(debug_path, "libdop_renderer.so"))
-    end
+    # Artifacts directory first (built by deps/build.jl)
+    artifacts_dir = joinpath(project_dir, "artifacts", "dop-renderer")
+    
+    # Local build path (development)
+    rust_dir = joinpath(project_dir, "rust", "dop-renderer")
+    
+    lib_name = get_lib_name()
+    
+    # Add candidates in order of preference
+    push!(possible_paths, joinpath(artifacts_dir, lib_name))
+    push!(possible_paths, joinpath(rust_dir, "target", "release", lib_name))
+    push!(possible_paths, joinpath(rust_dir, "target", "debug", lib_name))
     
     # System-installed path
     if Sys.isunix()

@@ -1,7 +1,8 @@
 //! FFI module for Julia integration
 //!
 //! This module provides C-compatible functions that can be called from Julia
-//! using the `ccall` mechanism.
+//! using the `ccall` mechanism. The Rust library is built using the unified
+//! BinaryBuilder configuration for cross-platform distribution.
 
 use std::ffi::{c_char, c_float, c_int, CStr};
 use std::ptr;
