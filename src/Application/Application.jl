@@ -13,19 +13,23 @@ production-ready desktop applications with DOP Browser.
 - **Render Loop**: Efficient dirty-checking and rendering
 - **Error Handling**: Graceful error recovery
 - **Resource Management**: Automatic cleanup on exit
+- **Onscreen Rendering**: Native desktop windows using Gtk backend
 
 ## Usage
+
+### Onscreen Application (Desktop Window)
 
 ```julia
 using DOPBrowser.Application
 using DOPBrowser.Widgets
 using DOPBrowser.State
 
-# Create application
+# Create application with Gtk backend for onscreen rendering
 app = create_app(
     title = "My App",
     width = 800,
-    height = 600
+    height = 600,
+    backend = :gtk  # Creates a real desktop window
 )
 
 # Create state
@@ -42,7 +46,7 @@ set_ui!(app) do
     end
 end
 
-# Run application
+# Run application (opens window and runs event loop)
 run!(app)
 ```
 
@@ -65,7 +69,7 @@ module Application
 using ..State: Signal, signal, effect, batch, dispose!
 using ..Window: WindowHandle, WindowConfig, WindowEvent, EventType,
                 create_window, destroy!, is_open, close!,
-                poll_events!, inject_event!, render!,
+                poll_events!, inject_event!, render!, swap_buffers!,
                 get_size, set_size!, save_screenshot,
                 EVENT_CLOSE, EVENT_RESIZE, EVENT_KEY_DOWN, EVENT_KEY_UP,
                 EVENT_MOUSE_DOWN, EVENT_MOUSE_UP, EVENT_MOUSE_MOVE,
@@ -322,6 +326,11 @@ function main_loop!(app::App)
         # Render if needed
         if app.needs_render
             render_frame!(app)
+        end
+        
+        # Swap buffers (for double buffering)
+        if app.window !== nothing
+            swap_buffers!(app.window)
         end
         
         # Update stats
