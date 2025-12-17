@@ -21,7 +21,9 @@ The rendering engine understands **only** Content--, never HTML/CSS directly.
 
 ### 2. Mathematical Model
 
-Content-- uses a simple coordinate system:
+Content-- is designed with a **math-first** approach. Layout computation uses familiar mathematical concepts from linear algebra and coordinate geometry.
+
+#### Coordinate System
 
 ```
 Origin (0, 0) at top-left of viewport
@@ -29,6 +31,27 @@ Origin (0, 0) at top-left of viewport
 ├── Y-axis: Increases downward ↓
 └── All values: Float32 in device pixels
 ```
+
+#### Core Mathematical Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `Vec2` | 2D vector for position/size | `Vec2(100.0, 50.0)` |
+| `Box4` | 4-sided box for spacing | `Box4(10.0, 20.0, 10.0, 20.0)` |
+| `Rect` | Rectangle (origin + size) | `Rect(pos, size)` |
+| `Transform2D` | 2D affine transform | `translate(10, 20) * scale(2)` |
+
+#### Mathematical Operators
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `+` | Vector addition | `Vec2(10,20) + Vec2(5,5) = Vec2(15,25)` |
+| `-` | Vector subtraction | `Vec2(10,20) - Vec2(5,5) = Vec2(5,15)` |
+| `*` | Scalar multiply | `Vec2(10,20) * 2 = Vec2(20,40)` |
+| `/` | Scalar divide | `Vec2(10,20) / 2 = Vec2(5,10)` |
+| `⊕` | Box merge (max) | Combine constraint boxes |
+| `⊗` | Hadamard product | Component-wise multiply |
+| `⊙` | Dot product | `Vec2(1,0) ⊙ Vec2(0,1) = 0` |
 
 ### 3. Pre-calculation Guarantee
 
@@ -75,21 +98,43 @@ All CSS cascade computation happens at **lowering time**, not render time:
 
 ### Layout Computation
 
-For a node N with parent P in normal flow:
+Using vector notation, layout computation becomes intuitive and concise:
 
 ```julia
-# Position calculation
-N.x = P.content_x + N.offset_left + Σ(preceding_sibling.total_width)
-N.y = P.content_y + N.offset_top + Σ(preceding_sibling.total_height)
+using DOPBrowser.ContentMM.MathOps
 
-# Content box (where children are placed)
-P.content_x = P.x + P.inset_left + P.stroke_left
-P.content_y = P.y + P.inset_top + P.stroke_top
+# Position calculation (vector form)
+child.pos = parent.content_origin + Σ(preceding.total_size) ⊗ flow_dir + child.offset.start
 
-# Total size (for sibling calculation)
-N.total_width = N.width + N.offset_left + N.offset_right
-N.total_height = N.height + N.offset_top + N.offset_bottom
+# Where:
+content_origin = pos + inset.start      # Vec2 - content box origin
+flow_dir = direction_to_vec2(dir)       # Vec2 - unit vector (0,1) for :down
+total_size = size + inset.total + offset.total  # Vec2 - total box size
+
+# Example with actual values
+parent_pos = Vec2(0.0, 0.0)
+parent_inset = Box4(10.0)  # 10px all sides
+child_size = Vec2(100.0, 50.0)
+
+# Content origin (where children start)
+content_origin = parent_pos + Vec2(10.0, 10.0)  # Vec2(10, 10)
+
+# Child position for vertical stack
+child.pos = content_origin + Vec2(0.0, 0.0)  # First child
+child2.pos = content_origin + Vec2(0.0, child_size.y)  # Second child
+
+# Total size calculation
+total = child_size + total(Box4(10.0))  # Vec2(120, 70)
 ```
+
+### Layout Equations Summary
+
+| Equation | Vector Form | Description |
+|----------|-------------|-------------|
+| Position | `pos = parent.content + Σ(siblings) + offset.start` | Child placement |
+| Content Origin | `content = pos + inset.start` | Where children go |
+| Total Size | `total = size + inset.total + offset.total` | Full box size |
+| Content Size | `content_size = size - inset.total` | Inner dimensions |
 
 ### Absolute Positioning
 

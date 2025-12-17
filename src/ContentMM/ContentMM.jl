@@ -21,20 +21,43 @@ The rendering engine understands ONLY Content--, never HTML/CSS directly.
 
 ## Mathematical Model
 
-Content-- uses a simple coordinate system:
+Content-- uses a mathematically intuitive approach inspired by linear algebra
+and coordinate geometry:
+
+### Vector Types (MathOps)
+- `Vec2(x, y)` - 2D position/size vector
+- `Box4(top, right, bottom, left)` - 4-sided spacing
+- `Rect(origin, size)` - Axis-aligned rectangle
+- `Transform2D` - 2D affine transformation matrix
+
+### Layout Equations
+
+Position calculation using vector math:
+```julia
+child.pos = parent.content_origin + Σ(preceding.size) + child.offset
+parent.content_origin = parent.pos + parent.inset
+```
+
+Content box (where children are placed):
+```julia
+content_box = bounds - inset
+total_size = content_size + inset + offset
+```
+
+### Mathematical Operators
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `+` | Vector addition | `Vec2(10,20) + Vec2(5,5) = Vec2(15,25)` |
+| `*` | Scalar multiply | `Vec2(10,20) * 2 = Vec2(20,40)` |
+| `⊕` | Box merge (max) | Combine constraint boxes |
+| `⊗` | Hadamard product | Component-wise multiply |
+| `⊙` | Dot product | `Vec2(1,0) ⊙ Vec2(0,1) = 0` |
+
+### Coordinate System
 - Origin (0,0) at top-left
-- X increases rightward, Y increases downward
+- X increases rightward (→), Y increases downward (↓)
 - All values in device pixels (Float32)
-
-### Layout Computation (Pre-calculated)
-
-For node N with parent P:
-    N.x = P.content_x + N.offset_left + Σ(sibling.total_width)
-    N.y = P.content_y + N.offset_top + Σ(sibling.total_height)
-
-Where content box:
-    P.content_x = P.x + P.inset_left
-    P.content_y = P.y + P.inset_top
 
 ## Architecture
 
@@ -47,6 +70,7 @@ Where content box:
 
 ## Core Modules
 
+- `MathOps`: Mathematical types (Vec2, Box4, Rect) and operators
 - `Primitives`: Layout primitives (Stack, Grid, Scroll, Rect) and text primitives (Paragraph, Span, Link)
 - `Properties`: Layout semantics (Direction, Pack, Align, Inset, Offset, Size)
 - `Styles`: Declarative style system with inheritance flattening
@@ -60,6 +84,9 @@ Where content box:
 - `NativeUI`: Native UI library interface with pixel comparison testing
 """
 module ContentMM
+
+# Mathematical types and operators (must be loaded first)
+include("MathOps.jl")
 
 # Core primitive types and enums
 include("Primitives.jl")
@@ -81,6 +108,7 @@ include("TextParser.jl")
 include("NativeUI.jl")
 
 # Re-export core types
+using .MathOps
 using .Primitives
 using .Properties
 using .Styles
@@ -96,6 +124,6 @@ using .TextParser
 using .NativeUI
 
 export Primitives, Properties, Styles, Macros, Environment, SourceMap, Compiler, TextJIT, Reactive, Runtime, HTMLLowering
-export TextParser, NativeUI
+export TextParser, NativeUI, MathOps
 
 end # module ContentMM

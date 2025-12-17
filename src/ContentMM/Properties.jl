@@ -13,12 +13,25 @@ Content-- layout semantics and property types as specified in v6.0.
 | margin | Offset | Space outside the node |
 | width/height | Size | Dimensions with range syntax support |
 
+## Mathematical Integration
+
+Properties integrates with MathOps for mathematical operations:
+```julia
+# Using MathOps types
+size = Vec2(100, 50)           # Equivalent to Size(width=100, height=50)
+inset = Box4(10)               # Equivalent to Inset(10, 10, 10, 10)
+position = Vec2(20, 30)        # Position as a 2D vector
+bounds = Rect(position, size)  # Rectangle from origin and size
+```
+
 ## Data Structures
 - Scalar: Single value (Number, Color, String)
 - Named Tuple: Multi-value properties `(width: 100, height: 50)`
 - Value Shorthand: When all tuple members identical `Prop: 50`
 """
 module Properties
+
+using ..MathOps: Vec2, Box4, Rect, vec2, box4, rect
 
 export Direction, DIRECTION_DOWN, DIRECTION_UP, DIRECTION_RIGHT, DIRECTION_LEFT
 export Pack, PACK_START, PACK_END, PACK_CENTER, PACK_BETWEEN, PACK_AROUND, PACK_EVENLY
@@ -28,6 +41,7 @@ export Inset, Offset, Gap
 export PropertyValue, PropertyTable, set_property!, get_property, resize_properties!
 export Color, parse_color, color_to_rgba
 export PROPERTY_FIELDS
+export direction_to_vec2, to_vec2, to_box4
 
 """
     Direction
@@ -349,5 +363,92 @@ function get_property(table::PropertyTable, id::Int, prop::Symbol)::PropertyValu
     
     nothing
 end
+
+# =============================================================================
+# Mathematical Integration with MathOps
+# =============================================================================
+
+"""
+    direction_to_vec2(dir::Direction) -> Vec2
+
+Convert a Direction enum to a unit vector representing the flow direction.
+
+Mathematical interpretation:
+- `DIRECTION_DOWN`  → Vec2(0, 1)   # Y+ (downward)
+- `DIRECTION_UP`    → Vec2(0, -1)  # Y- (upward)
+- `DIRECTION_RIGHT` → Vec2(1, 0)   # X+ (rightward)
+- `DIRECTION_LEFT`  → Vec2(-1, 0)  # X- (leftward)
+
+# Example
+```julia
+dir = DIRECTION_DOWN
+flow = direction_to_vec2(dir)  # Vec2(0.0, 1.0)
+position += flow * child_height  # Move down by child height
+```
+"""
+function direction_to_vec2(dir::Direction)::Vec2{Float32}
+    if dir == DIRECTION_DOWN
+        Vec2(0.0f0, 1.0f0)
+    elseif dir == DIRECTION_UP
+        Vec2(0.0f0, -1.0f0)
+    elseif dir == DIRECTION_RIGHT
+        Vec2(1.0f0, 0.0f0)
+    else  # DIRECTION_LEFT
+        Vec2(-1.0f0, 0.0f0)
+    end
+end
+
+"""
+    to_vec2(inset::Inset, axis::Symbol) -> Vec2
+    to_vec2(offset::Offset, axis::Symbol) -> Vec2
+
+Extract a Vec2 from box values along an axis.
+
+- `:start` → Vec2(left, top)
+- `:end` → Vec2(right, bottom)
+- `:total` → Vec2(left+right, top+bottom)
+
+# Example
+```julia
+inset = Inset(10.0f0, 20.0f0, 30.0f0, 40.0f0)
+start_offset = to_vec2(inset, :start)  # Vec2(40.0, 10.0) - (left, top)
+total_inset = to_vec2(inset, :total)   # Vec2(60.0, 40.0) - (horizontal, vertical)
+```
+"""
+function to_vec2(box::Inset, axis::Symbol)::Vec2{Float32}
+    if axis == :start
+        Vec2(box.left, box.top)
+    elseif axis == :end
+        Vec2(box.right, box.bottom)
+    else  # :total
+        Vec2(box.left + box.right, box.top + box.bottom)
+    end
+end
+
+function to_vec2(box::Offset, axis::Symbol)::Vec2{Float32}
+    if axis == :start
+        Vec2(box.left, box.top)
+    elseif axis == :end
+        Vec2(box.right, box.bottom)
+    else  # :total
+        Vec2(box.left + box.right, box.top + box.bottom)
+    end
+end
+
+"""
+    to_box4(inset::Inset) -> Box4
+    to_box4(offset::Offset) -> Box4
+
+Convert Inset/Offset to MathOps Box4 for mathematical operations.
+
+# Example
+```julia
+inset = Inset(10.0f0)
+box = to_box4(inset)  # Box4(10.0, 10.0, 10.0, 10.0)
+doubled = box * 2     # Box4(20.0, 20.0, 20.0, 20.0)
+```
+"""
+to_box4(i::Inset)::Box4{Float32} = Box4(i.top, i.right, i.bottom, i.left)
+to_box4(o::Offset)::Box4{Float32} = Box4(o.top, o.right, o.bottom, o.left)
 
 end # module Properties

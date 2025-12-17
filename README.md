@@ -183,6 +183,51 @@ This browser implements the **Content-- v6.0 specification**, a design-first, da
 | margin | `Offset` | Space outside the node |
 | width/height | `Size` | Dimensions with range syntax |
 
+### Mathematical Model
+
+Content-- uses a **math-first** approach inspired by linear algebra. Layout computation uses intuitive vector and box types:
+
+| Type | Description | Example |
+| :--- | :--- | :--- |
+| `Vec2` | 2D position/size vector | `Vec2(100.0, 50.0)` |
+| `Box4` | 4-sided spacing (top, right, bottom, left) | `Box4(10.0)` |
+| `Rect` | Rectangle (origin + size) | `Rect(pos, size)` |
+| `Transform2D` | 2D affine transformation | `translate(10, 20)` |
+
+**Mathematical Operators:**
+
+| Operator | ASCII | Meaning |
+| :--- | :--- | :--- |
+| `⊕` | `box_merge` | Maximum of each box side |
+| `⊗` | `hadamard` | Component-wise multiply |
+| `⊙` | `dot_product` | Dot product of vectors |
+
+**Layout Equations (Vector Form):**
+
+```julia
+# Child position calculation
+child.pos = parent.content_origin + Σ(preceding.size) + child.offset
+
+# Content origin (where children are placed)
+content_origin = pos + inset.start
+
+# Total size including spacing
+total_size = size + inset.total + offset.total
+```
+
+**Direction as Unit Vector:**
+
+```julia
+using DOPBrowser.ContentMM.Properties
+
+# Direction maps to unit vectors for intuitive math
+flow_down  = direction_to_vec2(DIRECTION_DOWN)   # Vec2(0, 1)
+flow_right = direction_to_vec2(DIRECTION_RIGHT)  # Vec2(1, 0)
+
+# Use in layout calculation
+next_pos = current_pos + flow_down * child_height
+```
+
 ### Input Methods
 
 Content-- supports two input methods:
@@ -245,11 +290,14 @@ Central browser context that ties together all modules. Provides a unified API f
 
 ## Content-- IR Modules
 
+### ContentMM.MathOps
+Mathematical types and operators for layout computation: Vec2, Box4, Rect, Transform2D. Provides intuitive vector math for layout calculations.
+
 ### ContentMM.Primitives
 Content-- node types: Stack, Grid, Scroll, Rect, Paragraph, Span, Link, TextCluster.
 
 ### ContentMM.Properties
-Layout semantics: Direction, Pack, Align, Size, Inset, Offset, Gap, Color.
+Layout semantics: Direction, Pack, Align, Size, Inset, Offset, Gap, Color. Integrates with MathOps for mathematical conversions.
 
 ### ContentMM.Styles
 Style system with AOT inheritance flattening. All inheritance resolved at compile time.

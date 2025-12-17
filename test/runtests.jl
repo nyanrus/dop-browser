@@ -1019,6 +1019,317 @@ end
 end
 
 # ============================================================================
+# MathOps Tests - Mathematical Types and Operators
+# ============================================================================
+
+@testset "MathOps - Mathematical Types" begin
+    
+    @testset "Vec2 - Basic Operations" begin
+        # Construction
+        v1 = DOPBrowser.ContentMM.MathOps.Vec2(10.0f0, 20.0f0)
+        @test v1.x == 10.0f0
+        @test v1.y == 20.0f0
+        
+        # Convenience constructor
+        v2 = DOPBrowser.ContentMM.MathOps.vec2(5, 10)
+        @test v2.x == 5.0f0
+        @test v2.y == 10.0f0
+        
+        # Addition
+        v3 = v1 + v2
+        @test v3.x == 15.0f0
+        @test v3.y == 30.0f0
+        
+        # Subtraction
+        v4 = v1 - v2
+        @test v4.x == 5.0f0
+        @test v4.y == 10.0f0
+        
+        # Scalar multiplication
+        v5 = v1 * 2
+        @test v5.x == 20.0f0
+        @test v5.y == 40.0f0
+        
+        # Scalar division
+        v6 = v1 / 2
+        @test v6.x == 5.0f0
+        @test v6.y == 10.0f0
+        
+        # Negation
+        v7 = -v1
+        @test v7.x == -10.0f0
+        @test v7.y == -20.0f0
+    end
+    
+    @testset "Vec2 - Tuple Construction" begin
+        v = DOPBrowser.ContentMM.MathOps.vec2((100, 50))
+        @test v.x == 100.0f0
+        @test v.y == 50.0f0
+    end
+    
+    @testset "Vec2 - Utility Functions" begin
+        v = DOPBrowser.ContentMM.MathOps.Vec2(3.0f0, 4.0f0)
+        
+        # Magnitude (3-4-5 triangle)
+        @test DOPBrowser.ContentMM.MathOps.magnitude(v) ≈ 5.0f0
+        
+        # Normalize
+        n = DOPBrowser.ContentMM.MathOps.normalize(v)
+        @test DOPBrowser.ContentMM.MathOps.magnitude(n) ≈ 1.0f0
+        
+        # Dot product
+        v2 = DOPBrowser.ContentMM.MathOps.Vec2(1.0f0, 0.0f0)
+        v3 = DOPBrowser.ContentMM.MathOps.Vec2(0.0f0, 1.0f0)
+        @test DOPBrowser.ContentMM.MathOps.dot(v2, v3) == 0.0f0  # Orthogonal
+        @test DOPBrowser.ContentMM.MathOps.dot(v2, v2) == 1.0f0  # Parallel
+    end
+    
+    @testset "Box4 - Basic Operations" begin
+        # Single value constructor
+        b1 = DOPBrowser.ContentMM.MathOps.Box4(10.0f0)
+        @test b1.top == 10.0f0
+        @test b1.right == 10.0f0
+        @test b1.bottom == 10.0f0
+        @test b1.left == 10.0f0
+        
+        # Two value constructor (vertical, horizontal)
+        b2 = DOPBrowser.ContentMM.MathOps.Box4(10.0f0, 20.0f0)
+        @test b2.top == 10.0f0
+        @test b2.right == 20.0f0
+        @test b2.bottom == 10.0f0
+        @test b2.left == 20.0f0
+        
+        # Four value constructor
+        b3 = DOPBrowser.ContentMM.MathOps.Box4(1.0f0, 2.0f0, 3.0f0, 4.0f0)
+        @test b3.top == 1.0f0
+        @test b3.right == 2.0f0
+        @test b3.bottom == 3.0f0
+        @test b3.left == 4.0f0
+        
+        # Addition
+        b4 = b1 + b3
+        @test b4.top == 11.0f0
+        @test b4.left == 14.0f0
+        
+        # Scalar multiplication
+        b5 = b1 * 2
+        @test b5.top == 20.0f0
+    end
+    
+    @testset "Box4 - Utility Functions" begin
+        b = DOPBrowser.ContentMM.MathOps.Box4(10.0f0, 20.0f0, 30.0f0, 40.0f0)
+        
+        # Horizontal sum
+        @test DOPBrowser.ContentMM.MathOps.horizontal(b) == 60.0f0  # left + right
+        
+        # Vertical sum
+        @test DOPBrowser.ContentMM.MathOps.vertical(b) == 40.0f0  # top + bottom
+        
+        # Total as Vec2
+        total = DOPBrowser.ContentMM.MathOps.total(b)
+        @test total.x == 60.0f0
+        @test total.y == 40.0f0
+    end
+    
+    @testset "Rect - Basic Operations" begin
+        pos = DOPBrowser.ContentMM.MathOps.Vec2(10.0f0, 20.0f0)
+        size = DOPBrowser.ContentMM.MathOps.Vec2(100.0f0, 50.0f0)
+        r = DOPBrowser.ContentMM.MathOps.Rect(pos, size)
+        
+        # Property accessors
+        @test r.x == 10.0f0
+        @test r.y == 20.0f0
+        @test r.width == 100.0f0
+        @test r.height == 50.0f0
+        @test r.left == 10.0f0
+        @test r.top == 20.0f0
+        @test r.right == 110.0f0
+        @test r.bottom == 70.0f0
+    end
+    
+    @testset "Rect - Contains and Intersection" begin
+        r = DOPBrowser.ContentMM.MathOps.Rect(0.0f0, 0.0f0, 100.0f0, 100.0f0)
+        
+        # Contains point
+        inside = DOPBrowser.ContentMM.MathOps.Vec2(50.0f0, 50.0f0)
+        outside = DOPBrowser.ContentMM.MathOps.Vec2(150.0f0, 50.0f0)
+        @test DOPBrowser.ContentMM.MathOps.contains(r, inside) == true
+        @test DOPBrowser.ContentMM.MathOps.contains(r, outside) == false
+        
+        # Intersection test
+        r2 = DOPBrowser.ContentMM.MathOps.Rect(50.0f0, 50.0f0, 100.0f0, 100.0f0)
+        @test DOPBrowser.ContentMM.MathOps.intersects(r, r2) == true
+        
+        r3 = DOPBrowser.ContentMM.MathOps.Rect(200.0f0, 200.0f0, 100.0f0, 100.0f0)
+        @test DOPBrowser.ContentMM.MathOps.intersects(r, r3) == false
+    end
+    
+    @testset "Rect - Inset and Outset" begin
+        r = DOPBrowser.ContentMM.MathOps.Rect(0.0f0, 0.0f0, 100.0f0, 100.0f0)
+        box = DOPBrowser.ContentMM.MathOps.Box4(10.0f0)
+        
+        # Inset (shrink by padding)
+        inset_r = DOPBrowser.ContentMM.MathOps.inset_rect(r, box)
+        @test inset_r.x == 10.0f0
+        @test inset_r.y == 10.0f0
+        @test inset_r.width == 80.0f0
+        @test inset_r.height == 80.0f0
+        
+        # Outset (expand by margin)
+        outset_r = DOPBrowser.ContentMM.MathOps.outset_rect(r, box)
+        @test outset_r.x == -10.0f0
+        @test outset_r.y == -10.0f0
+        @test outset_r.width == 120.0f0
+        @test outset_r.height == 120.0f0
+    end
+    
+    @testset "Transform2D - Basic Operations" begin
+        # Identity transform
+        id = DOPBrowser.ContentMM.MathOps.IDENTITY_TRANSFORM
+        v = DOPBrowser.ContentMM.MathOps.Vec2(10.0f0, 20.0f0)
+        result = id * v
+        @test result.x == 10.0f0
+        @test result.y == 20.0f0
+        
+        # Translation
+        trans = DOPBrowser.ContentMM.MathOps.translate(5.0f0, 10.0f0)
+        result = trans * v
+        @test result.x == 15.0f0
+        @test result.y == 30.0f0
+        
+        # Scale
+        sc = DOPBrowser.ContentMM.MathOps.scale(2.0f0)
+        result = sc * v
+        @test result.x == 20.0f0
+        @test result.y == 40.0f0
+    end
+    
+    @testset "Mathematical Operators" begin
+        b1 = DOPBrowser.ContentMM.MathOps.Box4(10.0f0, 20.0f0, 30.0f0, 40.0f0)
+        b2 = DOPBrowser.ContentMM.MathOps.Box4(15.0f0, 15.0f0, 15.0f0, 15.0f0)
+        
+        # Box merge (⊕ / box_merge)
+        merged = DOPBrowser.ContentMM.MathOps.box_merge(b1, b2)
+        @test merged.top == 15.0f0
+        @test merged.right == 20.0f0
+        @test merged.bottom == 30.0f0
+        @test merged.left == 40.0f0
+        
+        # Hadamard product (⊗ / hadamard)
+        v1 = DOPBrowser.ContentMM.MathOps.Vec2(2.0f0, 3.0f0)
+        v2 = DOPBrowser.ContentMM.MathOps.Vec2(4.0f0, 5.0f0)
+        hadamard = DOPBrowser.ContentMM.MathOps.hadamard(v1, v2)
+        @test hadamard.x == 8.0f0
+        @test hadamard.y == 15.0f0
+        
+        # Dot product (⊙ / dot_product)
+        dot = DOPBrowser.ContentMM.MathOps.dot_product(v1, v2)
+        @test dot == 23.0f0  # 2*4 + 3*5 = 8 + 15
+    end
+    
+    @testset "Utility Functions" begin
+        # Linear interpolation
+        @test DOPBrowser.ContentMM.MathOps.lerp(0.0f0, 100.0f0, 0.5f0) == 50.0f0
+        @test DOPBrowser.ContentMM.MathOps.lerp(0.0f0, 100.0f0, 0.0f0) == 0.0f0
+        @test DOPBrowser.ContentMM.MathOps.lerp(0.0f0, 100.0f0, 1.0f0) == 100.0f0
+        
+        # Vec2 lerp
+        v1 = DOPBrowser.ContentMM.MathOps.Vec2(0.0f0, 0.0f0)
+        v2 = DOPBrowser.ContentMM.MathOps.Vec2(100.0f0, 200.0f0)
+        mid = DOPBrowser.ContentMM.MathOps.lerp(v1, v2, 0.5f0)
+        @test mid.x == 50.0f0
+        @test mid.y == 100.0f0
+        
+        # Clamp01
+        @test DOPBrowser.ContentMM.MathOps.clamp01(1.5f0) == 1.0f0
+        @test DOPBrowser.ContentMM.MathOps.clamp01(-0.5f0) == 0.0f0
+        @test DOPBrowser.ContentMM.MathOps.clamp01(0.5f0) == 0.5f0
+        
+        # Remap
+        @test DOPBrowser.ContentMM.MathOps.remap(50.0f0, 0.0f0, 100.0f0, 0.0f0, 1.0f0) == 0.5f0
+        @test DOPBrowser.ContentMM.MathOps.remap(0.0f0, 0.0f0, 100.0f0, 0.0f0, 1.0f0) == 0.0f0
+        
+        # Smoothstep
+        @test DOPBrowser.ContentMM.MathOps.smoothstep(0.0f0, 1.0f0, 0.0f0) == 0.0f0
+        @test DOPBrowser.ContentMM.MathOps.smoothstep(0.0f0, 1.0f0, 1.0f0) == 1.0f0
+        @test DOPBrowser.ContentMM.MathOps.smoothstep(0.0f0, 1.0f0, 0.5f0) == 0.5f0  # Smoothstep(0.5) = 0.5
+    end
+    
+    @testset "Layout Computation Helpers" begin
+        bounds = DOPBrowser.ContentMM.MathOps.Rect(0.0f0, 0.0f0, 200.0f0, 100.0f0)
+        inset = DOPBrowser.ContentMM.MathOps.Box4(10.0f0)
+        
+        # Compute content box
+        content = DOPBrowser.ContentMM.MathOps.compute_content_box(bounds, inset)
+        @test content.x == 10.0f0
+        @test content.y == 10.0f0
+        @test content.width == 180.0f0
+        @test content.height == 80.0f0
+        
+        # Compute total size
+        content_size = DOPBrowser.ContentMM.MathOps.Vec2(100.0f0, 50.0f0)
+        offset = DOPBrowser.ContentMM.MathOps.Box4(5.0f0)
+        total = DOPBrowser.ContentMM.MathOps.compute_total_size(content_size, inset, offset)
+        @test total.x == 130.0f0  # 100 + 20 + 10
+        @test total.y == 80.0f0   # 50 + 20 + 10
+    end
+    
+    @testset "Properties Integration - Direction to Vec2" begin
+        # Test direction_to_vec2
+        down_vec = DOPBrowser.ContentMM.Properties.direction_to_vec2(DOPBrowser.ContentMM.Properties.DIRECTION_DOWN)
+        @test down_vec.x == 0.0f0
+        @test down_vec.y == 1.0f0
+        
+        right_vec = DOPBrowser.ContentMM.Properties.direction_to_vec2(DOPBrowser.ContentMM.Properties.DIRECTION_RIGHT)
+        @test right_vec.x == 1.0f0
+        @test right_vec.y == 0.0f0
+        
+        up_vec = DOPBrowser.ContentMM.Properties.direction_to_vec2(DOPBrowser.ContentMM.Properties.DIRECTION_UP)
+        @test up_vec.x == 0.0f0
+        @test up_vec.y == -1.0f0
+        
+        left_vec = DOPBrowser.ContentMM.Properties.direction_to_vec2(DOPBrowser.ContentMM.Properties.DIRECTION_LEFT)
+        @test left_vec.x == -1.0f0
+        @test left_vec.y == 0.0f0
+    end
+    
+    @testset "Properties Integration - Inset/Offset to Vec2" begin
+        inset = DOPBrowser.ContentMM.Properties.Inset(10.0f0, 20.0f0, 30.0f0, 40.0f0)
+        
+        # Start point (left, top)
+        start_vec = DOPBrowser.ContentMM.Properties.to_vec2(inset, :start)
+        @test start_vec.x == 40.0f0  # left
+        @test start_vec.y == 10.0f0  # top
+        
+        # End point (right, bottom)
+        end_vec = DOPBrowser.ContentMM.Properties.to_vec2(inset, :end)
+        @test end_vec.x == 20.0f0   # right
+        @test end_vec.y == 30.0f0   # bottom
+        
+        # Total (horizontal, vertical)
+        total_vec = DOPBrowser.ContentMM.Properties.to_vec2(inset, :total)
+        @test total_vec.x == 60.0f0  # left + right
+        @test total_vec.y == 40.0f0  # top + bottom
+    end
+    
+    @testset "Properties Integration - to_box4 Conversion" begin
+        inset = DOPBrowser.ContentMM.Properties.Inset(1.0f0, 2.0f0, 3.0f0, 4.0f0)
+        box = DOPBrowser.ContentMM.Properties.to_box4(inset)
+        
+        @test box.top == 1.0f0
+        @test box.right == 2.0f0
+        @test box.bottom == 3.0f0
+        @test box.left == 4.0f0
+        
+        # Can do math on the box
+        doubled = box * 2
+        @test doubled.top == 2.0f0
+        @test doubled.right == 4.0f0
+    end
+
+end
+
+# ============================================================================
 # Network Tests
 # ============================================================================
 
