@@ -1,10 +1,13 @@
 """
     TokenTape
 
-Flat token tape for HTML parsing with zero-copy string interning.
+Flat token tape for HTML parsing.
 
-Generates a linear sequence of tokens that can be processed sequentially,
-maximizing cache efficiency during DOM construction.
+This module provides HTML tokenization with a flat token tape structure.
+For high-performance parsing, consider using RustParser which provides
+Rust-based HTML parsing via html5ever.
+
+NOTE: This is a minimal implementation. For production use, prefer RustParser.
 """
 module TokenTape
 
@@ -32,14 +35,7 @@ end
 """
     Token
 
-A single HTML token in the tape. Uses interned string IDs for
-efficient storage and comparison.
-
-# Fields
-- `type::TokenType` - Type of the token
-- `name_id::UInt32` - Interned string ID for tag/attribute name
-- `value_id::UInt32` - Interned string ID for value (text content, attribute value)
-- `source_offset::UInt32` - Byte offset in original source (for error reporting)
+A single HTML token in the tape.
 """
 struct Token
     type::TokenType
@@ -52,10 +48,6 @@ end
     Tokenizer
 
 HTML tokenizer that produces a flat token tape.
-
-# Fields
-- `tokens::Vector{Token}` - The token tape
-- `strings::StringPool` - Shared string pool for interning
 """
 mutable struct Tokenizer
     tokens::Vector{Token}
@@ -69,7 +61,7 @@ end
 """
     reset!(tokenizer::Tokenizer)
 
-Clear the token tape for reuse. Does not clear the string pool.
+Clear the token tape for reuse.
 """
 function reset!(tokenizer::Tokenizer)
     empty!(tokenizer.tokens)
@@ -88,15 +80,7 @@ end
 """
     tokenize!(tokenizer::Tokenizer, html::AbstractString) -> Vector{Token}
 
-Parse HTML into a flat token tape. Strings are immediately interned
-into the shared pool for zero-copy efficiency.
-
-# Arguments
-- `tokenizer::Tokenizer` - The tokenizer instance
-- `html::AbstractString` - HTML source to parse
-
-# Returns
-- `Vector{Token}` - The generated token tape
+Parse HTML into a flat token tape.
 """
 function tokenize!(tokenizer::Tokenizer, html::AbstractString)::Vector{Token}
     reset!(tokenizer)
@@ -115,18 +99,14 @@ function tokenize!(tokenizer::Tokenizer, html::AbstractString)::Vector{Token}
     return tokenizer.tokens
 end
 
-"""
-Parse a tag starting at position `pos`.
-"""
 function parse_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, len::Int)::Int
     start_offset = UInt32(pos)
-    pos += 1  # Skip '<'
+    pos += 1
     
     if pos > len
         return pos
     end
     
-    # Check for special tags
     if html[pos] == '!'
         return parse_special_tag!(tokenizer, html, pos, len, start_offset)
     elseif html[pos] == '/'
@@ -136,15 +116,11 @@ function parse_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, len::I
     end
 end
 
-"""
-Parse special tags (comments, DOCTYPE).
-"""
 function parse_special_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, len::Int, start_offset::UInt32)::Int
-    pos += 1  # Skip '!'
+    pos += 1
     
-    # Check for comment
     if pos + 1 <= len && html[pos] == '-' && html[pos + 1] == '-'
-        pos += 2  # Skip '--'
+        pos += 2
         comment_start = pos
         while pos + 2 <= len
             if html[pos] == '-' && html[pos + 1] == '-' && html[pos + 2] == '>'
@@ -155,17 +131,14 @@ function parse_special_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int
             end
             pos += 1
         end
-        # Unterminated comment - consume rest
         comment_text = SubString(html, comment_start, len)
         value_id = intern!(tokenizer.strings, comment_text)
         push!(tokenizer.tokens, Token(TOKEN_COMMENT, UInt32(0), value_id, start_offset))
         return len + 1
     end
     
-    # Check for DOCTYPE
     if pos + 6 <= len && uppercase(SubString(html, pos, pos + 6)) == "DOCTYPE"
         pos += 7
-        # Skip to end of tag
         while pos <= len && html[pos] != '>'
             pos += 1
         end
@@ -173,23 +146,17 @@ function parse_special_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int
         return pos + 1
     end
     
-    # Unknown special tag, skip to end
     while pos <= len && html[pos] != '>'
         pos += 1
     end
     return pos + 1
 end
 
-"""
-Parse an end tag.
-"""
 function parse_end_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, len::Int, start_offset::UInt32)::Int
-    # Skip whitespace
     while pos <= len && isspace(html[pos])
         pos += 1
     end
     
-    # Parse tag name
     name_start = pos
     while pos <= len && html[pos] != '>' && !isspace(html[pos])
         pos += 1
@@ -201,7 +168,6 @@ function parse_end_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, le
         push!(tokenizer.tokens, Token(TOKEN_END_TAG, name_id, UInt32(0), start_offset))
     end
     
-    # Skip to end of tag
     while pos <= len && html[pos] != '>'
         pos += 1
     end
@@ -209,11 +175,7 @@ function parse_end_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, le
     return pos + 1
 end
 
-"""
-Parse a start tag with attributes.
-"""
 function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, len::Int, start_offset::UInt32)::Int
-    # Parse tag name
     name_start = pos
     while pos <= len && html[pos] != '>' && html[pos] != '/' && !isspace(html[pos])
         pos += 1
@@ -223,13 +185,9 @@ function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, 
     tag_name_id = intern!(tokenizer.strings, tag_name)
     
     is_self_closing = false
-    
-    # Collect attributes first, then emit in correct order
     attributes = Token[]
     
-    # Parse attributes
     while pos <= len
-        # Skip whitespace
         while pos <= len && isspace(html[pos])
             pos += 1
         end
@@ -253,7 +211,6 @@ function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, 
             continue
         end
         
-        # Parse attribute name
         attr_name_start = pos
         while pos <= len && html[pos] != '=' && html[pos] != '>' && html[pos] != '/' && !isspace(html[pos])
             pos += 1
@@ -267,7 +224,6 @@ function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, 
         attr_name_id = intern!(tokenizer.strings, attr_name)
         attr_value_id = UInt32(0)
         
-        # Skip whitespace around '='
         while pos <= len && isspace(html[pos])
             pos += 1
         end
@@ -278,7 +234,6 @@ function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, 
                 pos += 1
             end
             
-            # Parse attribute value
             if pos <= len
                 if html[pos] == '"' || html[pos] == '\''
                     quote_char = html[pos]
@@ -291,9 +246,8 @@ function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, 
                         attr_value = SubString(html, value_start, pos - 1)
                         attr_value_id = intern!(tokenizer.strings, attr_value)
                     end
-                    pos += 1  # Skip closing quote
+                    pos += 1
                 else
-                    # Unquoted value
                     value_start = pos
                     while pos <= len && html[pos] != '>' && html[pos] != '/' && !isspace(html[pos])
                         pos += 1
@@ -306,23 +260,16 @@ function parse_start_tag!(tokenizer::Tokenizer, html::AbstractString, pos::Int, 
             end
         end
         
-        # Collect attribute token
         push!(attributes, Token(TOKEN_ATTRIBUTE, attr_name_id, attr_value_id, start_offset))
     end
     
-    # Emit tag token first, then attributes in correct order
     token_type = is_self_closing ? TOKEN_SELF_CLOSING : TOKEN_START_TAG
     push!(tokenizer.tokens, Token(token_type, tag_name_id, UInt32(0), start_offset))
-    
-    # Append collected attributes
     append!(tokenizer.tokens, attributes)
     
     return pos
 end
 
-"""
-Parse text content.
-"""
 function parse_text!(tokenizer::Tokenizer, html::AbstractString, pos::Int, len::Int)::Int
     start_pos = pos
     start_offset = UInt32(pos)
@@ -333,7 +280,6 @@ function parse_text!(tokenizer::Tokenizer, html::AbstractString, pos::Int, len::
     
     if start_pos < pos
         text = SubString(html, start_pos, pos - 1)
-        # Only emit non-whitespace text
         stripped = strip(text)
         if !isempty(stripped)
             text_id = intern!(tokenizer.strings, stripped)
