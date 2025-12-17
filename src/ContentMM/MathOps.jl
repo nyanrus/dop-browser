@@ -56,6 +56,8 @@ export lerp, clamp01, remap, smoothstep
 export ⊕, ⊗, ⊙, box_merge, hadamard, dot_product
 export ZERO_VEC2, UNIT_VEC2, ZERO_BOX4, ZERO_RECT
 export norm, normalize  # Re-export from LinearAlgebra
+export magnitude, dot  # Backward compatibility aliases
+export horizontal, vertical, total  # Box4 utility functions
 
 # =============================================================================
 # Core Mathematical Types (Using StaticArrays for Performance)
