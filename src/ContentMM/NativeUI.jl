@@ -64,23 +64,26 @@ using ..Properties: PropertyTable, Direction, Pack, Align, Color,
 using ..TextParser: parse_content_text, ParsedDocument
 using ...DOMCSSOM.RenderBuffer: CommandBuffer, emit_rect!, emit_text!, command_count, get_commands
 import ...DOMCSSOM.RenderBuffer: clear! as clear_buffer!
-using ...Renderer: RenderPipeline, create_pipeline, render_frame!, get_png_data, export_png!
-using ...Renderer.PNGExport: encode_png, decode_png, write_png_file
-using ...Renderer.GPURenderer: get_framebuffer
-using ...Renderer.SoftwareRenderer: SoftwareRenderContext, create_software_context
-using ...Renderer.SoftwareRenderer: render_rect! as sw_render_rect!, render_text! as sw_render_text!
-using ...Renderer.SoftwareRenderer: save_png as sw_save_png, get_surface_data as sw_get_surface_data
-using ...Renderer.SoftwareRenderer: measure_text as sw_measure_text
-import ...Renderer.SoftwareRenderer: clear! as clear_software!
+# DEPRECATED: Old Renderer module removed, use RustRenderer instead
+# using ...Renderer: RenderPipeline, create_pipeline, render_frame!, get_png_data, export_png!
+# using ...Renderer.PNGExport: encode_png, decode_png, write_png_file
+# using ...Renderer.GPURenderer: get_framebuffer
+# using ...Renderer.SoftwareRenderer: SoftwareRenderContext, create_software_context
+# using ...Renderer.SoftwareRenderer: render_rect! as sw_render_rect!, render_text! as sw_render_text!
+# using ...Renderer.SoftwareRenderer: save_png as sw_save_png, get_surface_data as sw_get_surface_data
+# using ...Renderer.SoftwareRenderer: measure_text as sw_measure_text
+# import ...Renderer.SoftwareRenderer: clear! as clear_software!
+using ...RustRenderer: RustRendererHandle, create_renderer, add_rect!, add_text!, export_png!, get_framebuffer
+import ...RustRenderer: render! as rust_render!, clear! as rust_clear!
 
-# Aliases for backward compatibility
-const CairoRenderContext = SoftwareRenderContext
-const create_cairo_context = create_software_context
+# Aliases for backward compatibility - commented out as old Renderer module was removed
+# const CairoRenderContext = SoftwareRenderContext
+# const create_cairo_context = create_software_context
 
 export UIContext, create_ui, render!, render_to_png!, render_to_buffer
 export UIBuilder, with_stack!, with_paragraph!, rect!, span!
 export compare_pixels, PixelComparisonResult
-export render_cairo!, render_to_png_cairo!
+# export render_cairo!, render_to_png_cairo!  # Deprecated with old Renderer
 
 # ============================================================================
 # UI Context
@@ -99,10 +102,9 @@ mutable struct UIContext
     properties::PropertyTable
     strings::Vector{String}
     
-    # Rendering
+    # Rendering - updated to use RustRenderer
     command_buffer::CommandBuffer
-    render_pipeline::Union{RenderPipeline, Nothing}
-    software_context::Union{SoftwareRenderContext, Nothing}
+    renderer::Union{RustRendererHandle, Nothing}
     
     # State
     viewport_width::Float32
@@ -117,7 +119,6 @@ mutable struct UIContext
             String[],
             CommandBuffer(),
             nothing,
-            nothing,
             800.0f0,
             600.0f0,
             true,
@@ -126,9 +127,9 @@ mutable struct UIContext
     end
 end
 
-# Backward compatibility alias
-const cairo_context = software_context
-const use_cairo = use_software
+# Backward compatibility aliases - commented out as old Renderer was removed
+# const cairo_context = software_context
+# const use_cairo = use_software
 
 """
     create_ui(source::String) -> UIContext
@@ -328,18 +329,23 @@ function render_to_png!(ctx::UIContext, filename::String; width::Int=800, height
         render!(ctx, width=width, height=height)
     end
     
-    # Create or reuse render pipeline
-    if ctx.render_pipeline === nothing || 
-       ctx.render_pipeline.width != UInt32(width) ||
-       ctx.render_pipeline.height != UInt32(height)
-        ctx.render_pipeline = create_pipeline(UInt32(width), UInt32(height))
+    # Create or reuse renderer
+    if ctx.renderer === nothing
+        ctx.renderer = create_renderer(UInt32(width), UInt32(height))
     end
     
-    # Render frame
-    render_frame!(ctx.render_pipeline, ctx.command_buffer)
+    # Clear and render commands
+    rust_clear!(ctx.renderer)
+    for cmd in get_commands(ctx.command_buffer)
+        # Render each command using RustRenderer
+        x, y, w, h, r, g, b, a = cmd
+        add_rect!(ctx.renderer, Float32(x), Float32(y), Float32(w), Float32(h),
+                 Float32(r), Float32(g), Float32(b), Float32(a))
+    end
     
-    # Export PNG
-    export_png!(ctx.render_pipeline, filename)
+    # Render and export
+    rust_render!(ctx.renderer)
+    export_png!(ctx.renderer, filename)
 end
 
 """
@@ -352,18 +358,22 @@ function render_to_buffer(ctx::UIContext; width::Int=800, height::Int=600)::Vect
         render!(ctx, width=width, height=height)
     end
     
-    # Create or reuse render pipeline
-    if ctx.render_pipeline === nothing ||
-       ctx.render_pipeline.width != UInt32(width) ||
-       ctx.render_pipeline.height != UInt32(height)
-        ctx.render_pipeline = create_pipeline(UInt32(width), UInt32(height))
+    # Create or reuse renderer
+    if ctx.renderer === nothing
+        ctx.renderer = create_renderer(UInt32(width), UInt32(height))
     end
     
-    # Render frame
-    render_frame!(ctx.render_pipeline, ctx.command_buffer)
+    # Clear and render commands  
+    rust_clear!(ctx.renderer)
+    for cmd in get_commands(ctx.command_buffer)
+        x, y, w, h, r, g, b, a = cmd
+        add_rect!(ctx.renderer, Float32(x), Float32(y), Float32(w), Float32(h),
+                 Float32(r), Float32(g), Float32(b), Float32(a))
+    end
     
-    # Get framebuffer
-    return get_framebuffer(ctx.render_pipeline.gpu_ctx)
+    # Render and get framebuffer
+    rust_render!(ctx.renderer)
+    return get_framebuffer(ctx.renderer)
 end
 
 # ============================================================================

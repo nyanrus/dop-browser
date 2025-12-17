@@ -123,18 +123,26 @@ response = fetch!(ctx, "https://example.com")
 
 ### Renderer
 
-GPU rendering pipeline:
-- WebGPU-style GPU rendering
-- Vertex/index buffer management
+GPU rendering pipeline (via RustRenderer):
+- Hardware-accelerated GPU rendering via wgpu
+- Software fallback using tiny-skia
 - PNG export
 
 ```julia
-using DOPBrowser.Renderer
+using DOPBrowser.RustRenderer
 
-pipeline = create_pipeline(UInt32(800), UInt32(600))
-render_frame!(pipeline, commands)
-export_png!(pipeline, "output.png")
+# Create a renderer
+renderer = create_renderer(UInt32(800), UInt32(600))
+
+# Add rendering commands
+add_rect!(renderer, 10.0f0, 10.0f0, 100.0f0, 50.0f0, 1.0f0, 0.0f0, 0.0f0, 1.0f0)
+
+# Render and export
+render!(renderer)
+export_png!(renderer, "output.png")
 ```
+
+Note: The old Julia `Renderer` module has been deprecated. Use `RustRenderer` for production.
 
 ## Architecture Diagram
 

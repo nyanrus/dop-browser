@@ -396,14 +396,15 @@ Complete networking layer with:
 
 ## Rendering Pipeline
 
-### Renderer.GPURenderer
-WebGPU-style GPU rendering with:
-- Vertex/index buffer management
-- Render batch optimization
-- Clip/scissor stack management
+### RustRenderer (GPU & Software Rendering)
+The rendering pipeline is now implemented in Rust for optimal performance:
+- Hardware-accelerated GPU rendering via wgpu
+- Software fallback rendering using tiny-skia
+- Cross-platform window management via winit
+- Lossless PNG export
+- Text shaping and font rendering
 
-### Renderer.PNGExport
-Lossless PNG export from GPU framebuffer.
+Note: The old Julia `Renderer` module has been deprecated. Use `RustRenderer` for all rendering operations.
 
 ## Installation
 
