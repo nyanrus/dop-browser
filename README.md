@@ -58,9 +58,13 @@ DOPBrowser now includes a **production-ready interactive UI framework** that can
 - **Widget Library**: High-level components (Button, TextInput, Checkbox, Slider, etc.)
 - **Application Lifecycle**: Full app management with initialization, update loop, and cleanup
 - **Window Integration**: Platform-agnostic window abstraction with event handling
-- **Onscreen Rendering**: Native desktop windows using Gtk4 backend
+- **Onscreen Rendering**: Native desktop windows using Rust backend with winit (requires display server)
+- **Headless Mode**: Automatic fallback for CI/testing environments without display servers
 
 ### Quick Start (Onscreen Application)
+
+**Note**: Onscreen rendering requires a display server (X11/Wayland on Linux, native on macOS/Windows).
+In headless environments (e.g., CI systems), the application will automatically switch to headless mode.
 
 ```julia
 using DOPBrowser.Application
@@ -70,8 +74,9 @@ using DOPBrowser.State
 # Create reactive state
 count = signal(0)
 
-# Create application with Gtk backend for onscreen rendering
-app = create_app(title="Counter App", width=400, height=200, backend=:gtk)
+# Create application with Rust backend
+# Automatically detects headless environment
+app = create_app(title="Counter App", width=400, height=200, backend=:rust)
 
 # Define UI
 set_ui!(app) do
@@ -84,7 +89,7 @@ set_ui!(app) do
     end
 end
 
-# Run application (opens a desktop window)
+# Run application (opens a desktop window if display is available)
 run!(app)
 ```
 

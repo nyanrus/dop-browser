@@ -158,9 +158,26 @@ end
 # ============================================================================
 
 """
+Check if a display server is available for onscreen rendering.
+"""
+function is_display_available()::Bool
+    # Check for DISPLAY environment variable (X11 on Linux/Unix)
+    if Sys.isunix() && !Sys.isapple()
+        display = get(ENV, "DISPLAY", "")
+        wayland_display = get(ENV, "WAYLAND_DISPLAY", "")
+        return !isempty(display) || !isempty(wayland_display)
+    end
+    # On macOS and Windows, assume display is available
+    return true
+end
+
+"""
     create_app(; title="DOP Browser", width=800, height=600, kwargs...) -> App
 
 Create a new application instance.
+
+If `headless` is not explicitly set and no display server is available,
+the application will automatically run in headless mode.
 """
 function create_app(;
                     title::String = "DOP Browser",
@@ -170,6 +187,14 @@ function create_app(;
                     vsync::Bool = true,
                     headless::Bool = false,
                     backend::Symbol = :rust)
+    # Auto-detect headless mode if no display is available
+    actual_headless = headless
+    if !headless && !is_display_available()
+        @warn "No display server detected. Running in headless mode. " *
+              "Set DISPLAY environment variable or run with headless=true to suppress this warning."
+        actual_headless = true
+    end
+    
     config = WindowConfig(
         title = title,
         width = width,
@@ -179,7 +204,7 @@ function create_app(;
         backend = backend
     )
     
-    return App(config; headless = headless)
+    return App(config; headless = actual_headless)
 end
 
 # ============================================================================

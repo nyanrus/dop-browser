@@ -20,6 +20,8 @@ using DOPBrowser.Application
 Run an interactive counter application with onscreen rendering.
 
 This example creates a real desktop window using the Rust backend with winit.
+If no display server is available (e.g., in a headless CI environment),
+it automatically falls back to headless mode and saves a screenshot.
 """
 function run_onscreen_counter()
     println("\n=== Onscreen Counter Example ===")
@@ -28,6 +30,7 @@ function run_onscreen_counter()
     count = signal(0)
     
     # Create application with Rust backend for onscreen rendering
+    # Note: This will auto-detect headless mode if no display is available
     app = create_app(
         title = "Counter App",
         width = 400,
@@ -53,11 +56,37 @@ function run_onscreen_counter()
         end
     end
     
-    println("Starting onscreen application...")
-    println("Close the window to exit.")
-    
-    # Run the application
-    run!(app)
+    # Check if running in headless mode
+    if app.is_headless
+        println("Running in headless mode (no display server available)...")
+        println("Rendering a single frame and saving screenshot...")
+        
+        # Initialize and render
+        Application.initialize!(app)
+        Application.build_app_ui!(app)
+        
+        # Simulate some interactions
+        println("Simulating count changes:")
+        for i in 1:3
+            count[] = i
+            println("  Count: $(count[])")
+            render_frame!(app)
+        end
+        
+        # Save a screenshot
+        screenshot_path = joinpath(tempdir(), "counter_app_demo.png")
+        save_app_screenshot(app, screenshot_path)
+        println("Screenshot saved to: $screenshot_path")
+        
+        # Cleanup
+        Application.cleanup!(app)
+    else
+        println("Starting onscreen application...")
+        println("Close the window to exit.")
+        
+        # Run the application
+        run!(app)
+    end
     
     println("\nApplication closed. Final count: $(count[])")
 end
