@@ -7,7 +7,7 @@ This module provides a high-performance rendering backend implemented in Rust,
 with window management via winit and GPU rendering via wgpu. It exposes
 FFI bindings to Julia for seamless integration with the DOP Browser.
 
-The Rust library is built using the unified BinaryBuilder configuration in deps/build.jl.
+The Rust library can be built using the unified build script in deps/build.jl.
 
 ## Features
 - Cross-platform window management (Windows, Linux, macOS)
@@ -45,10 +45,6 @@ export set_clear_color!, clear!
 export is_open, close!, poll_events!
 export get_lib_path, is_available
 
-# Include the build utilities
-const deps_dir = joinpath(dirname(dirname(@__DIR__)), "deps")
-include(joinpath(deps_dir, "build.jl"))
-
 # ============================================================================
 # Library Loading
 # ============================================================================
@@ -57,38 +53,42 @@ include(joinpath(deps_dir, "build.jl"))
 const LIB_HANDLE = Ref{Ptr{Nothing}}(C_NULL)
 
 """
-Get the path to the Rust renderer library using the unified build system.
+    get_lib_name() -> String
+
+Get the platform-specific library filename.
+"""
+function get_lib_name()
+    if Sys.iswindows()
+        return "dop_renderer.dll"
+    elseif Sys.isapple()
+        return "libdop_renderer.dylib"
+    else
+        return "libdop_renderer.so"
+    end
+end
+
+"""
+Get the path to the Rust renderer library.
 """
 function get_lib_path()::String
-    # Use the unified build system to find the library
-    path = get_library_path("dop-renderer")
-    if path !== nothing
-        return path
-    end
-    
-    # Fallback: try different possible locations
     possible_paths = String[]
     
-    # Artifacts directory first
-    artifacts_dir = joinpath(dirname(dirname(@__DIR__)), "artifacts", "dop-renderer")
+    # Get the source directory
+    src_dir = @__DIR__
+    project_dir = dirname(dirname(src_dir))
+    
+    # Artifacts directory first (built by deps/build.jl)
+    artifacts_dir = joinpath(project_dir, "artifacts", "dop-renderer")
     
     # Local build path (development)
-    local_path = joinpath(@__DIR__, "..", "..", "rust", "dop-renderer", "target", "release")
-    debug_path = joinpath(@__DIR__, "..", "..", "rust", "dop-renderer", "target", "debug")
+    rust_dir = joinpath(project_dir, "rust", "dop-renderer")
     
-    if Sys.iswindows()
-        push!(possible_paths, joinpath(artifacts_dir, "dop_renderer.dll"))
-        push!(possible_paths, joinpath(local_path, "dop_renderer.dll"))
-        push!(possible_paths, joinpath(debug_path, "dop_renderer.dll"))
-    elseif Sys.isapple()
-        push!(possible_paths, joinpath(artifacts_dir, "libdop_renderer.dylib"))
-        push!(possible_paths, joinpath(local_path, "libdop_renderer.dylib"))
-        push!(possible_paths, joinpath(debug_path, "libdop_renderer.dylib"))
-    else
-        push!(possible_paths, joinpath(artifacts_dir, "libdop_renderer.so"))
-        push!(possible_paths, joinpath(local_path, "libdop_renderer.so"))
-        push!(possible_paths, joinpath(debug_path, "libdop_renderer.so"))
-    end
+    lib_name = get_lib_name()
+    
+    # Add candidates in order of preference
+    push!(possible_paths, joinpath(artifacts_dir, lib_name))
+    push!(possible_paths, joinpath(rust_dir, "target", "release", lib_name))
+    push!(possible_paths, joinpath(rust_dir, "target", "debug", lib_name))
     
     # System-installed path
     if Sys.isunix()

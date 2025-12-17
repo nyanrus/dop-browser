@@ -9,7 +9,7 @@ This module provides Julia bindings to the dop-parser Rust crate, which implemen
 - Content-- compiler with zerocopy binary format
 - JIT text shaping infrastructure
 
-The Rust library is built using the unified BinaryBuilder configuration in deps/build.jl.
+The Rust library can be built using the unified build script in deps/build.jl.
 
 ## Usage
 
@@ -32,27 +32,31 @@ export is_available, get_version
 export parse_html, parse_inline_style, parse_color, parse_length
 export create_string_pool, intern!, get_string
 
-# Include the build utilities
-const deps_dir = joinpath(dirname(dirname(@__DIR__)), "deps")
-include(joinpath(deps_dir, "build.jl"))
-
 # Library handle
 const lib_handle = Ref{Ptr{Cvoid}}(C_NULL)
 const lib_path = Ref{String}("")
 
 """
+    get_lib_name() -> String
+
+Get the platform-specific library filename.
+"""
+function get_lib_name()
+    if Sys.iswindows()
+        return "dop_parser.dll"
+    elseif Sys.isapple()
+        return "libdop_parser.dylib"
+    else
+        return "libdop_parser.so"
+    end
+end
+
+"""
     find_library() -> Union{String, Nothing}
 
-Find the dop-parser shared library using the unified build system.
+Find the dop-parser shared library.
 """
 function find_library()
-    # Use the unified build system to find the library
-    path = get_library_path("dop-parser")
-    if path !== nothing
-        return path
-    end
-    
-    # Fallback: look in various locations relative to the project
     candidates = String[]
     
     # Get the source directory
@@ -60,23 +64,15 @@ function find_library()
     project_dir = dirname(dirname(src_dir))
     rust_dir = joinpath(project_dir, "rust", "dop-parser")
     
-    # Check artifacts directory first
+    # Check artifacts directory first (built by deps/build.jl)
     artifacts_dir = joinpath(project_dir, "artifacts", "dop-parser")
     
-    # Check for release and debug builds
-    if Sys.iswindows()
-        push!(candidates, joinpath(artifacts_dir, "dop_parser.dll"))
-        push!(candidates, joinpath(rust_dir, "target", "release", "dop_parser.dll"))
-        push!(candidates, joinpath(rust_dir, "target", "debug", "dop_parser.dll"))
-    elseif Sys.isapple()
-        push!(candidates, joinpath(artifacts_dir, "libdop_parser.dylib"))
-        push!(candidates, joinpath(rust_dir, "target", "release", "libdop_parser.dylib"))
-        push!(candidates, joinpath(rust_dir, "target", "debug", "libdop_parser.dylib"))
-    else
-        push!(candidates, joinpath(artifacts_dir, "libdop_parser.so"))
-        push!(candidates, joinpath(rust_dir, "target", "release", "libdop_parser.so"))
-        push!(candidates, joinpath(rust_dir, "target", "debug", "libdop_parser.so"))
-    end
+    lib_name = get_lib_name()
+    
+    # Add candidates in order of preference
+    push!(candidates, joinpath(artifacts_dir, lib_name))
+    push!(candidates, joinpath(rust_dir, "target", "release", lib_name))
+    push!(candidates, joinpath(rust_dir, "target", "debug", lib_name))
     
     for path in candidates
         if isfile(path)

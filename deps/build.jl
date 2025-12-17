@@ -1,10 +1,11 @@
-# build.jl - Build script for Rust FFI libraries using BinaryBuilder
+# build.jl - Build script for Rust FFI libraries
 #
 # This script provides unified build functionality for both dop-parser and dop-renderer
-# Rust libraries. It can be run directly or included from Project.toml's build script.
-
-using Pkg.Artifacts
-using Base.BinaryPlatforms
+# Rust libraries. It can be run directly as a standalone script.
+#
+# Usage:
+#   julia deps/build.jl          # Build all crates in release mode
+#   julia deps/build.jl debug    # Build all crates in debug mode
 
 const RUST_CRATES = ["dop-parser", "dop-renderer"]
 
@@ -97,6 +98,7 @@ function build_all(; release::Bool=true)
         lib_path = build_rust_crate(crate; release=release)
         install_library(crate, lib_path)
     end
+    @info "All Rust crates built successfully"
 end
 
 """
@@ -149,5 +151,6 @@ end
 
 # If run as a script, build all crates
 if abspath(PROGRAM_FILE) == @__FILE__
-    build_all()
+    release = !("debug" in ARGS)
+    build_all(; release=release)
 end
