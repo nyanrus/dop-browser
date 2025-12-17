@@ -23,8 +23,8 @@ ui = create_ui(\"\"\"
     }
 \"\"\")
 
-# Render to PNG with Cairo (high-quality text rendering)
-render_to_png!(ui, "output.png", width=800, height=600, use_cairo=true)
+# Render to PNG with the default renderer
+render_to_png!(ui, "output.png", width=800, height=600)
 ```
 
 ### Programmatic API
@@ -382,27 +382,11 @@ end
 """
     render_cairo!(ctx::UIContext; width::Int=800, height::Int=600)
 
-Render the UI using Cairo for high-quality vector graphics and text rendering.
+Legacy compatibility wrapper for the removed Cairo backend. Delegates to
+`render!` using the default renderer.
 """
 function render_cairo!(ctx::UIContext; width::Int=800, height::Int=600)
-    ctx.viewport_width = Float32(width)
-    ctx.viewport_height = Float32(height)
-    ctx.use_cairo = true
-    
-    # Create or reuse Cairo context
-    if ctx.cairo_context === nothing ||
-       ctx.cairo_context.width != UInt32(width) ||
-       ctx.cairo_context.height != UInt32(height)
-        ctx.cairo_context = create_cairo_context(width, height)
-    end
-    
-    # Clear with white background
-    clear_cairo!(ctx.cairo_context, 1.0, 1.0, 1.0, 1.0)
-    
-    # Generate Cairo render commands from the node tree
-    generate_cairo_commands!(ctx)
-    
-    ctx.dirty = false
+    render!(ctx; width=width, height=height)
 end
 
 """
@@ -551,29 +535,21 @@ end
 """
     render_to_png_cairo!(ctx::UIContext, filename::String; width::Int=800, height::Int=600)
 
-Render the UI using Cairo and save to a PNG file.
+Compatibility wrapper for legacy Cairo export. Uses the default renderer and
+delegates to `render_to_png!`.
 """
 function render_to_png_cairo!(ctx::UIContext, filename::String; width::Int=800, height::Int=600)
-    render_cairo!(ctx, width=width, height=height)
-    
-    if ctx.cairo_context !== nothing
-        save_png(ctx.cairo_context, filename)
-    end
+    render_to_png!(ctx, filename; width=width, height=height)
 end
 
 """
     render_to_buffer_cairo(ctx::UIContext; width::Int=800, height::Int=600) -> Vector{UInt8}
 
-Render the UI using Cairo and return raw RGBA pixel data.
+Compatibility wrapper for legacy Cairo buffer export. Uses the default renderer
+and delegates to `render_to_buffer`.
 """
 function render_to_buffer_cairo(ctx::UIContext; width::Int=800, height::Int=600)::Vector{UInt8}
-    render_cairo!(ctx, width=width, height=height)
-    
-    if ctx.cairo_context !== nothing
-        return get_surface_data(ctx.cairo_context)
-    end
-    
-    return UInt8[]
+    render_to_buffer(ctx; width=width, height=height)
 end
 
 export render_to_buffer_cairo
