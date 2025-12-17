@@ -50,14 +50,17 @@ function build_rust_crate(name::String; release::Bool=true)
     end
     
     # Build the crate
-    profile = release ? "--release" : ""
+    cargo_flag = release ? "--release" : ""
     target_dir = release ? "release" : "debug"
     
-    @info "Building Rust crate: $name" profile=profile
+    @info "Building Rust crate: $name" release=release
     
-    # Run cargo build
+    # Run cargo build with error handling
     cd(rust_dir) do
-        run(`cargo build $profile`)
+        cmd = `cargo build $cargo_flag`
+        if !success(cmd)
+            error("Failed to build Rust crate: $name. Run 'cargo build' in $rust_dir for details.")
+        end
     end
     
     # Return path to built library
@@ -136,13 +139,13 @@ Ensure a library is built and return the path to it.
 function ensure_built(name::String; release::Bool=true)
     lib_path = get_library_path(name)
     
-    if lib_path === nothing
+    if isnothing(lib_path)
         lib_path = build_rust_crate(name; release=release)
         install_library(name, lib_path)
         lib_path = get_library_path(name)
     end
     
-    if lib_path === nothing
+    if isnothing(lib_path)
         error("Failed to build or locate library: $name")
     end
     
