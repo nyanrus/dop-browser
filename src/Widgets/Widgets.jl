@@ -661,8 +661,8 @@ function render_widgets!(tree::WidgetTree; width::Int=800, height::Int=600)
     new_ctx = create_ui(source)
     tree.ui_context = new_ctx
     
-    # Render using Cairo for high quality
-    render_cairo!(tree.ui_context, width=width, height=height)
+    # Render the generated UI
+    render!(tree.ui_context, width=width, height=height)
     
     tree.dirty = false
 end
