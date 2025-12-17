@@ -86,6 +86,9 @@ include("Core.jl")
 # Window management for platform integration
 include("Window/Window.jl")
 
+# Rust-based rendering engine (winit + wgpu)
+include("RustRenderer/RustRenderer.jl")
+
 # Reactive state management
 include("State/State.jl")
 
@@ -161,6 +164,10 @@ export Renderer
 # Interactive UI Library Modules
 using .Window
 export Window
+
+# Rust-based rendering (winit + wgpu)
+using .RustRenderer
+export RustRenderer
 
 using .State
 export State
