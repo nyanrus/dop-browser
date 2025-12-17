@@ -6,6 +6,8 @@
 
 use std::ffi::{c_char, c_float, c_int, CStr};
 use std::ptr;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use crate::renderer::RenderCommand;
 #[cfg(feature = "software")]
@@ -198,6 +200,183 @@ pub extern "C" fn dop_window_get_mouse_y(handle: *const WindowHandle) -> c_float
         return 0.0;
     }
     unsafe { (*handle).mouse_position().1 as c_float }
+}
+
+// ============================================================================
+// Threaded Window for Onscreen Rendering
+// ============================================================================
+
+/// A threaded window handle that runs winit event loop in a separate thread
+pub struct ThreadedWindowHandle {
+    events: Arc<Mutex<Vec<DopEvent>>>,
+    is_open: Arc<Mutex<bool>>,
+    size: Arc<Mutex<(u32, u32)>>,
+    thread_handle: Option<thread::JoinHandle<()>>,
+}
+
+impl ThreadedWindowHandle {
+    pub fn is_open(&self) -> bool {
+        *self.is_open.lock().unwrap()
+    }
+
+    pub fn poll_events(&self) -> Vec<DopEvent> {
+        let mut events = self.events.lock().unwrap();
+        std::mem::take(&mut *events)
+    }
+
+    pub fn get_size(&self) -> (u32, u32) {
+        *self.size.lock().unwrap()
+    }
+}
+
+impl Drop for ThreadedWindowHandle {
+    fn drop(&mut self) {
+        // Mark as closed
+        *self.is_open.lock().unwrap() = false;
+        
+        // Wait for thread to finish (with timeout)
+        if let Some(handle) = self.thread_handle.take() {
+            // We can't force kill the thread, but we can at least try to join it
+            let _ = handle.join();
+        }
+    }
+}
+
+/// Create an onscreen window (runs in a separate thread)
+/// Returns a handle that can be used to poll events
+#[no_mangle]
+pub extern "C" fn dop_window_create_onscreen(
+    width: c_int,
+    height: c_int,
+    title: *const c_char,
+) -> *mut ThreadedWindowHandle {
+    let title = if title.is_null() {
+        "DOP Browser".to_string()
+    } else {
+        unsafe {
+            CStr::from_ptr(title)
+                .to_str()
+                .unwrap_or("DOP Browser")
+                .to_string()
+        }
+    };
+
+    let config = WindowConfig {
+        title,
+        width: width as u32,
+        height: height as u32,
+        ..Default::default()
+    };
+
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let is_open = Arc::new(Mutex::new(true));
+    let size = Arc::new(Mutex::new((width as u32, height as u32)));
+
+    let events_clone = events.clone();
+    let is_open_clone = is_open.clone();
+    let size_clone = size.clone();
+
+    // Spawn a thread to run the event loop
+    let thread_handle = thread::spawn(move || {
+        use winit::event_loop::{ControlFlow, EventLoop};
+        use crate::window::DopApp;
+
+        // Create event loop
+        let event_loop = match EventLoop::new() {
+            Ok(el) => el,
+            Err(e) => {
+                log::error!("Failed to create event loop: {:?}", e);
+                *is_open_clone.lock().unwrap() = false;
+                return;
+            }
+        };
+
+        event_loop.set_control_flow(ControlFlow::Poll);
+
+        // Create app with shared event queue
+        let mut app = DopApp::new_with_shared_events(config, events_clone.clone());
+
+        // Run the event loop
+        let result = event_loop.run_app(&mut app);
+
+        if let Err(e) = result {
+            log::error!("Event loop error: {:?}", e);
+        }
+
+        // Get the final state from the app
+        if let Some(handle) = app.take_handle() {
+            // Update size
+            let final_size = handle.get_size();
+            *size_clone.lock().unwrap() = final_size;
+        }
+
+        // Mark as closed
+        *is_open_clone.lock().unwrap() = false;
+    });
+
+    Box::into_raw(Box::new(ThreadedWindowHandle {
+        events,
+        is_open,
+        size,
+        thread_handle: Some(thread_handle),
+    }))
+}
+
+/// Free a threaded window handle
+#[no_mangle]
+pub extern "C" fn dop_window_free_threaded(handle: *mut ThreadedWindowHandle) {
+    if !handle.is_null() {
+        unsafe {
+            drop(Box::from_raw(handle));
+        }
+    }
+}
+
+/// Check if threaded window is open
+#[no_mangle]
+pub extern "C" fn dop_window_is_open_threaded(handle: *const ThreadedWindowHandle) -> c_int {
+    if handle.is_null() {
+        return 0;
+    }
+    unsafe { if (*handle).is_open() { 1 } else { 0 } }
+}
+
+/// Poll events from threaded window
+#[no_mangle]
+pub extern "C" fn dop_window_poll_events_threaded(
+    handle: *mut ThreadedWindowHandle,
+    events: *mut DopEvent,
+    max_events: c_int,
+) -> c_int {
+    if handle.is_null() || events.is_null() || max_events <= 0 {
+        return 0;
+    }
+    unsafe {
+        let polled = (*handle).poll_events();
+        let count = polled.len().min(max_events as usize);
+        for (i, event) in polled.into_iter().take(count).enumerate() {
+            *events.add(i) = event;
+        }
+        count as c_int
+    }
+}
+
+/// Get threaded window width
+#[no_mangle]
+pub extern "C" fn dop_window_get_width_threaded(handle: *const ThreadedWindowHandle) -> c_int {
+    if handle.is_null() {
+        return 0;
+    }
+    unsafe { (*handle).get_size().0 as c_int }
+}
+
+/// Get threaded window height
+#[no_mangle]
+pub extern "C" fn dop_window_get_height_threaded(handle: *const ThreadedWindowHandle) -> c_int {
+    if handle.is_null() {
+        return 0;
+    }
+    unsafe { (*handle).get_size().1 as c_int }
 }
 
 // ============================================================================
