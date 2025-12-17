@@ -47,6 +47,11 @@ module DOPBrowser
 # 6. ContentMM - Content-- IR and runtime
 # 7. Network - HTTP/HTTPS networking layer
 # 8. EventLoop - Browser main event loop
+#
+# DEPRECATED modules (maintained for compatibility, will be removed):
+# - HTMLParser (use RustParser instead)
+# - CSSParserModule (use RustParser instead)
+# - Renderer (use RustRenderer instead)
 
 # Rust-based HTML/CSS parser and Content-- compiler (REQUIRED)
 include("RustParser/RustParser.jl")
@@ -54,14 +59,24 @@ include("RustParser/RustParser.jl")
 # Rust-based rendering engine (winit + wgpu) (REQUIRED)
 include("RustRenderer/RustRenderer.jl")
 
+# DEPRECATED: Julia implementations (for backward compatibility only)
+include("HTMLParser/HTMLParser.jl")
+include("CSSParser/CSSParserModule.jl")
+
 # Layout module (LayoutArrays)
 include("Layout/Layout.jl")
 
 # DOM/CSSOM module (NodeTable + StyleArchetypes + RenderBuffer + StringInterner)
 include("DOMCSSOM/DOMCSSOM.jl")
 
+# Compiler module (HTML+CSS to Content--)
+include("Compiler/Compiler.jl")
+
 # Event Loop module
 include("EventLoop/EventLoop.jl")
+
+# DEPRECATED: Rendering pipeline (for backward compatibility only)
+include("Renderer/Renderer.jl")
 
 # Content-- IR modules
 include("ContentMM/ContentMM.jl")
@@ -417,5 +432,28 @@ function js_call(browser::Browser, node_id::UInt32,
 end
 
 export js_call
+
+# ============================================================================
+# Module Initialization - Verify Rust Libraries
+# ============================================================================
+
+function __init__()
+    # Verify that required Rust libraries are available
+    try
+        RustParser.is_available()
+        @info "RustParser library loaded successfully"
+    catch e
+        @error "Failed to load RustParser library. Please build it with: cd rust/dop-parser && cargo build --release" exception=e
+        rethrow(e)
+    end
+    
+    try
+        RustRenderer.is_available()
+        @info "RustRenderer library loaded successfully"
+    catch e
+        @error "Failed to load RustRenderer library. Please build it with: cd rust/dop-renderer && cargo build --release" exception=e
+        rethrow(e)
+    end
+end
 
 end # module DOPBrowser

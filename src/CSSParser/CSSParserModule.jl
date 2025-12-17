@@ -3,26 +3,28 @@
 
 CSS parsing module providing style computation and property parsing.
 
-This module provides:
-- CSS style parsing (inline and block)
-- Color parsing (hex, rgb, rgba, named colors)
-- Length parsing (px, %, em, mm, auto)
-- Comprehensive CSS property support
+**DEPRECATED**: This Julia implementation is deprecated in favor of RustParser.
+Please use RustParser for production code, which provides:
+- CSS parsing using cssparser crate
+- Better performance and standards compliance
 
-For high-performance parsing, consider using RustParser which provides
-Rust-based CSS parsing via cssparser.
+This module is maintained for compatibility only and will be removed in a future version.
 
-## Usage
+## Migration
 
 ```julia
+# Old (deprecated):
 using DOPBrowser.CSSParserModule
-
 styles = parse_inline_style("width: 100px; background-color: red;")
-color = parse_color("#ff0000")
-(px, is_auto) = parse_length("50%", 800.0f0)
+
+# New (recommended):
+using DOPBrowser.RustParser
+styles = RustParser.parse_inline_style("width: 100px; background-color: red;")
 ```
 """
 module CSSParserModule
+
+@warn "CSSParserModule is deprecated. Please use RustParser instead. This module will be removed in a future version." maxlog=1
 
 include("CSSCore.jl")
 

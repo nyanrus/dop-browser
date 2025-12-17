@@ -153,37 +153,42 @@ save_app_screenshot(app, "output.png")
 
 DOPBrowser is organized into well-defined modules for better maintainability:
 
-| Module | Purpose |
-|--------|---------|
-| **Pipeline** | Simplified FP-style pipeline (parse_doc → layout → render → to_png) |
-| **HTMLParser** | HTML tokenization and string interning |
-| **CSSParserModule** | CSS parsing and style computation |
-| **Layout** | SIMD-friendly layout calculation |
-| **DOMCSSOM** | Virtual DOM/CSSOM representation |
-| **Compiler** | HTML+CSS to Content-- compilation |
-| **ContentMM** | Content-- IR and runtime |
-| **Network** | HTTP/HTTPS networking layer |
-| **Renderer** | GPU rendering and PNG export |
-| **EventLoop** | Browser main event loop |
-| **Window** | Platform windowing abstraction |
-| **State** | Reactive state management |
-| **Widgets** | High-level UI components |
-| **Application** | Application lifecycle management |
-| **RustParser** | Rust-based HTML/CSS parser (high-performance alternative) |
-| **RustRenderer** | Rust-based GPU renderer via wgpu (high-performance alternative) |
+| Module | Purpose | Status |
+|--------|---------|--------|
+| **Pipeline** | Simplified FP-style pipeline (parse_doc → layout → render → to_png) | Active |
+| **RustParser** | Rust-based HTML/CSS parser using html5ever and cssparser | **Required** |
+| **RustRenderer** | Rust-based GPU renderer via wgpu | **Required** |
+| **Layout** | SIMD-friendly layout calculation | Active |
+| **DOMCSSOM** | Virtual DOM/CSSOM representation | Active |
+| **Compiler** | HTML+CSS to Content-- compilation | Active |
+| **ContentMM** | Content-- IR and runtime | Active |
+| **Network** | HTTP/HTTPS networking layer | Active |
+| **EventLoop** | Browser main event loop | Active |
+| **Window** | Platform windowing abstraction | Active |
+| **State** | Reactive state management | Active |
+| **Widgets** | High-level UI components | Active |
+| **Application** | Application lifecycle management | Active |
+| **HTMLParser** | HTML tokenization and string interning | **Deprecated** |
+| **CSSParserModule** | CSS parsing and style computation | **Deprecated** |
+| **Renderer** | GPU rendering and PNG export | **Deprecated** |
 
 See [docs/MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md) for detailed information about the module structure.
 
-### Rust vs Julia Implementations
+### Rust Implementation (Required)
 
-For production use, prefer the Rust-based implementations when available:
+**DOPBrowser now requires Rust libraries to be built and available.**
+
+The Rust-based implementations are mandatory for production use:
 - **RustParser**: Uses html5ever and cssparser crates for standards-compliant parsing
 - **RustRenderer**: Uses winit/wgpu for GPU-accelerated rendering
 
-The Julia implementations (HTMLParser, CSSParserModule, Renderer) are provided for:
-- Rapid prototyping and experimentation
-- Environments where Rust libraries are not available
-- Educational purposes
+To build the Rust libraries:
+```bash
+cd rust/dop-parser && cargo build --release
+cd ../dop-renderer && cargo build --release
+```
+
+The Julia implementations (HTMLParser, CSSParserModule, Renderer) are **deprecated** and maintained only for backward compatibility. They will be removed in a future version.
 
 ## Acid2 Test Support
 

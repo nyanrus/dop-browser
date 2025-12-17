@@ -13,14 +13,19 @@ with math-style operators for layout computation.
 3. **Math-Style**: Layout uses intuitive Vec2, Box4 operations
 4. **Minimal API**: Essential operations only, no redundancy
 
-## Note on Rust Implementations
+## Rust Implementation (Required)
 
-For production use, prefer the Rust-based implementations when available:
-- **RustParser**: Uses html5ever and cssparser crates for standards-compliant parsing
-- **RustRenderer**: Uses winit/wgpu for GPU-accelerated rendering
+**Note**: DOPBrowser now requires Rust libraries (RustParser and RustRenderer) to be built and available.
+The Julia implementations (HTMLParser, CSSParserModule, Renderer) are deprecated.
 
-This Pipeline module uses the Julia implementations for maximum portability.
-Use `Pipeline.rust_available()` to check if Rust implementations are available.
+This Pipeline module currently uses the Julia implementations for internal processing but will
+be migrated to use Rust implementations in a future version.
+
+To build the required Rust libraries:
+```bash
+cd rust/dop-parser && cargo build --release
+cd ../dop-renderer && cargo build --release
+```
 
 ## Quick Start
 
