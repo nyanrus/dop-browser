@@ -250,33 +250,54 @@ This browser implements the **Content-- v6.0 specification**, a design-first, da
 
 ### Mathematical Model
 
-Content-- uses a **math-first** approach inspired by linear algebra. Layout computation uses intuitive vector and box types:
+Content-- uses a **math-first** approach inspired by linear algebra, leveraging mature Julia libraries for high performance:
 
-| Type | Description | Example |
-| :--- | :--- | :--- |
-| `Vec2` | 2D position/size vector | `Vec2(100.0, 50.0)` |
-| `Box4` | 4-sided spacing (top, right, bottom, left) | `Box4(10.0)` |
-| `Rect` | Rectangle (origin + size) | `Rect(pos, size)` |
-| `Transform2D` | 2D affine transformation | `translate(10, 20)` |
+**Performance-Optimized Types:**
 
-**Mathematical Operators:**
+| Type | Implementation | Description | Example |
+| :--- | :--- | :--- | :--- |
+| `Vec2` | `StaticArrays.SVector{2,T}` | 2D position/size vector | `Vec2(100.0, 50.0)` |
+| `Box4` | `StaticArrays.SVector{4,T}` | 4-sided spacing (top, right, bottom, left) | `Box4(10.0)` |
+| `Rect` | Custom struct | Rectangle (origin + size) | `Rect(pos, size)` |
+| `Transform2D` | Affine matrix | 2D affine transformation | `translate(10, 20)` |
 
-| Operator | ASCII | Meaning |
-| :--- | :--- | :--- |
-| `⊕` | `box_merge` | Maximum of each box side |
-| `⊗` | `hadamard` | Component-wise multiply |
-| `⊙` | `dot_product` | Dot product of vectors |
+**Mathematical Operators (Unicode Support):**
+
+| Operator | Unicode | ASCII | Meaning | Library |
+| :--- | :--- | :--- | :--- | :--- |
+| `⊕` | `\oplus` | `box_merge` | Maximum of each box side | Custom |
+| `⊗` | `\otimes` | `hadamard` | Component-wise multiply (Hadamard product) | Custom |
+| `⊙` | `\odot` | `dot_product` | Dot product of vectors | `LinearAlgebra` |
+| `‖·‖` | `\|cdot\|` | `norm` | Vector magnitude/length | `LinearAlgebra` |
+
+**Key Benefits:**
+- **StaticArrays.jl**: Immutable, stack-allocated vectors for zero-cost abstractions
+- **LinearAlgebra**: Standard library for mathematical operations (norm, dot, normalize)
+- **Type Stability**: All operations preserve type information for maximum performance
+- **SIMD-Ready**: StaticArrays enables automatic vectorization
 
 **Layout Equations (Vector Form):**
 
 ```julia
-# Child position calculation
+using DOPBrowser.ContentMM.MathOps
+using LinearAlgebra
+
+# Child position calculation with Unicode operators
+v₁ = Vec2(10.0f0, 20.0f0)
+v₂ = Vec2(5.0f0, 10.0f0)
+result = v₁ ⊙ v₂  # Dot product: 200.0
+
+# Vector magnitude using LinearAlgebra
+‖v₁‖ = norm(v₁)  # 22.36...
+
+# Box merge for constraint composition
+b₁ = Box4(10.0f0, 20.0f0, 30.0f0, 40.0f0)
+b₂ = Box4(15.0f0)
+merged = b₁ ⊕ b₂  # Box4(15.0, 20.0, 30.0, 40.0)
+
+# Traditional ASCII notation still supported
 child.pos = parent.content_origin + Σ(preceding.size) + child.offset
-
-# Content origin (where children are placed)
 content_origin = pos + inset.start
-
-# Total size including spacing
 total_size = size + inset.total + offset.total
 ```
 
@@ -292,6 +313,7 @@ flow_right = direction_to_vec2(DIRECTION_RIGHT)  # Vec2(1, 0)
 # Use in layout calculation
 next_pos = current_pos + flow_down * child_height
 ```
+
 
 ### Input Methods
 
@@ -356,7 +378,20 @@ Central browser context that ties together all modules. Provides a unified API f
 ## Content-- IR Modules
 
 ### ContentMM.MathOps
-Mathematical types and operators for layout computation: Vec2, Box4, Rect, Transform2D. Provides intuitive vector math for layout calculations.
+**High-performance mathematical types and operators for layout computation.**
+
+Built on mature Julia libraries:
+- **StaticArrays.jl**: Immutable, stack-allocated vectors (Vec2, Box4) for zero-cost abstractions
+- **LinearAlgebra**: Standard mathematical operations (norm, dot, normalize)
+- **Unicode operators**: Expressive notation (⊕, ⊗, ⊙) for mathematical clarity
+
+Provides types: `Vec2`, `Box4`, `Rect`, `Transform2D`
+
+Key features:
+- SIMD-ready operations through StaticArrays
+- Type-stable for maximum performance
+- Full Unicode operator support for mathematical expressiveness
+- Backward compatible with ASCII function names
 
 ### ContentMM.Primitives
 Content-- node types: Stack, Grid, Scroll, Rect, Paragraph, Span, Link, TextCluster.
