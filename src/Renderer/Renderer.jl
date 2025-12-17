@@ -3,16 +3,29 @@
 
 Complete rendering pipeline from Content-- to GPU and PNG output.
 
-This module integrates:
-- GPURenderer: WebGPU-style GPU rendering
-- PNGExport: Lossless PNG image export
-- CairoRenderer: Cairo-based native rendering with text support
-- RenderPipeline: Orchestrates the full render pass
+**DEPRECATED**: This Julia implementation is deprecated in favor of RustRenderer.
+Please use RustRenderer for production code, which provides:
+- GPU rendering using wgpu
+- Window management using winit
+- Better performance and cross-platform support
 
-For high-performance GPU rendering, consider using RustRenderer which provides
-Rust-based rendering via winit/wgpu.
+This module is maintained for compatibility only and will be removed in a future version.
+
+## Migration
+
+```julia
+# Old (deprecated):
+using DOPBrowser.Renderer
+pipeline = create_pipeline(UInt32(800), UInt32(600))
+
+# New (recommended):
+using DOPBrowser.RustRenderer
+renderer = create_renderer(800, 600)
+```
 """
 module Renderer
+
+@warn "Renderer module is deprecated. Please use RustRenderer instead. This module will be removed in a future version." maxlog=1
 
 include("GPURenderer.jl")
 include("PNGExport.jl")

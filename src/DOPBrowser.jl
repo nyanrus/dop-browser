@@ -39,20 +39,28 @@ module DOPBrowser
 # Modular Architecture
 # =============================================================================
 # The browser engine is organized into the following modules:
-# 1. HTMLParser - HTML tokenization and string interning
-# 2. CSSParserModule - CSS parsing and style computation  
+# 1. RustParser - Rust-based HTML/CSS parser (REQUIRED for production)
+# 2. RustRenderer - Rust-based GPU renderer (REQUIRED for production)
 # 3. Layout - SIMD-friendly layout calculation
 # 4. DOMCSSOM - Virtual DOM/CSSOM representation
 # 5. Compiler - HTML+CSS to Content-- compilation
 # 6. ContentMM - Content-- IR and runtime
 # 7. Network - HTTP/HTTPS networking layer
-# 8. Renderer - GPU rendering and PNG export
-# 9. EventLoop - Browser main event loop
+# 8. EventLoop - Browser main event loop
+#
+# DEPRECATED modules (maintained for compatibility, will be removed):
+# - HTMLParser (use RustParser instead)
+# - CSSParserModule (use RustParser instead)
+# - Renderer (use RustRenderer instead)
 
-# HTML Parser module (StringInterner + TokenTape)
+# Rust-based HTML/CSS parser and Content-- compiler (REQUIRED)
+include("RustParser/RustParser.jl")
+
+# Rust-based rendering engine (winit + wgpu) (REQUIRED)
+include("RustRenderer/RustRenderer.jl")
+
+# DEPRECATED: Julia implementations (for backward compatibility only)
 include("HTMLParser/HTMLParser.jl")
-
-# CSS Parser module
 include("CSSParser/CSSParserModule.jl")
 
 # Layout module (LayoutArrays)
@@ -67,7 +75,7 @@ include("Compiler/Compiler.jl")
 # Event Loop module
 include("EventLoop/EventLoop.jl")
 
-# Rendering pipeline (before ContentMM for NativeUI dependencies)
+# DEPRECATED: Rendering pipeline (for backward compatibility only)
 include("Renderer/Renderer.jl")
 
 # Content-- IR modules
@@ -92,12 +100,6 @@ include("Pipeline/Pipeline.jl")
 
 # Window management for platform integration
 include("Window/Window.jl")
-
-# Rust-based rendering engine (winit + wgpu)
-include("RustRenderer/RustRenderer.jl")
-
-# Rust-based HTML/CSS parser and Content-- compiler
-include("RustParser/RustParser.jl")
 
 # Reactive state management
 include("State/State.jl")
@@ -430,5 +432,30 @@ function js_call(browser::Browser, node_id::UInt32,
 end
 
 export js_call
+
+# ============================================================================
+# Module Initialization - Verify Rust Libraries
+# ============================================================================
+
+function __init__()
+    # Verify that required Rust libraries are available
+    try
+        RustParser.is_available()
+        @info "RustParser library loaded successfully"
+    catch e
+        rust_dir = joinpath("rust", "dop-parser")
+        @error "Failed to load RustParser library. Please build it with: cd $(rust_dir) && cargo build --release" exception=e
+        rethrow(e)
+    end
+    
+    try
+        RustRenderer.is_available()
+        @info "RustRenderer library loaded successfully"
+    catch e
+        rust_dir = joinpath("rust", "dop-renderer")
+        @error "Failed to load RustRenderer library. Please build it with: cd $(rust_dir) && cargo build --release" exception=e
+        rethrow(e)
+    end
+end
 
 end # module DOPBrowser
