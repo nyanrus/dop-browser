@@ -208,13 +208,12 @@ mutable struct Computed{T}
     observers::Set{Any}
     is_dirty::Bool
     
-    function Computed{T}(compute::Function) where T
+    function Computed{T}(compute::Function, initial_value::T) where T
         ctx = get_context()
         id = ctx.next_id
         ctx.next_id += 1
         
-        # Placeholder value - will be computed on first access
-        computed_obj = new{T}(id, compute, zero(T), Set{Signal}(), Set{Any}(), true)
+        computed_obj = new{T}(id, compute, initial_value, Set{Signal}(), Set{Any}(), true)
         
         # Initial computation to set up dependencies
         recompute!(computed_obj)
@@ -229,9 +228,10 @@ end
 Create a computed value from a function.
 """
 function computed(f::Function)
-    # Infer type from initial computation
-    T = typeof(f())
-    return Computed{T}(f)
+    # Infer type and initial value from first computation
+    initial_value = f()
+    T = typeof(initial_value)
+    return Computed{T}(f, initial_value)
 end
 
 """

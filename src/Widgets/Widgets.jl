@@ -295,13 +295,13 @@ Label widget for displaying text.
 """
 mutable struct LabelWidget <: Widget
     props::WidgetProps
-    text::Union{String, Signal{String}}
+    text::Any  # String, Signal{String}, or Computed{String}
     font_size::Float32
     font_weight::Symbol  # :normal, :bold
     color::String
     
     function LabelWidget(;
-                         text::Union{String, Signal{String}} = "",
+                         text = "",
                          font_size::Float32 = 14.0f0,
                          font_weight::Symbol = :normal,
                          color::String = "#000000",
@@ -315,7 +315,7 @@ end
 
 Create a label widget.
 """
-function label(; text::Union{String, Signal{String}} = "",
+function label(; text = "",
                font_size::Float32 = 14.0f0,
                font_weight::Symbol = :normal,
                color::String = "#000000",
@@ -748,7 +748,14 @@ function _write_widget(io::IO, widget::ButtonWidget)
 end
 
 function _write_widget(io::IO, widget::LabelWidget)
-    text = widget.text isa Signal ? widget.text[] : widget.text
+    # Handle String, Signal, or Computed
+    text = if widget.text isa String
+        widget.text
+    elseif hasmethod(getindex, Tuple{typeof(widget.text)})
+        widget.text[]
+    else
+        string(widget.text)
+    end
     print(io, "Paragraph { Span(Text: \"$text\"); }")
 end
 
