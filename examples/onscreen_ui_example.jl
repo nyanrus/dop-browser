@@ -143,6 +143,7 @@ end
 
 """
 Run a simple todo list application with onscreen rendering.
+If no display server is available, falls back to headless mode.
 """
 function run_todo_app()
     println("\n=== Todo List Application ===")
@@ -196,10 +197,30 @@ function run_todo_app()
         end
     end
     
-    println("Starting todo application...")
-    println("Close the window to exit.")
-    
-    run!(app)
+    # Check if running in headless mode
+    if app.is_headless
+        println("Running in headless mode (no display server available)...")
+        println("Todo app functionality limited in headless mode.")
+        
+        # Initialize
+        Application.initialize!(app)
+        Application.build_app_ui!(app)
+        
+        # Simulate some todos
+        println("Simulating todo operations:")
+        todos[] = ["Learn Julia", "Build DOP Browser", "Test examples"]
+        println("  Added 3 todos: ", todos[])
+        
+        render_frame!(app)
+        
+        # Cleanup
+        Application.cleanup!(app)
+    else
+        println("Starting todo application...")
+        println("Close the window to exit.")
+        
+        run!(app)
+    end
     
     println("\nTodo app closed.")
 end
