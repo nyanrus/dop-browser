@@ -1,28 +1,32 @@
 """
     MathOps
 
-Mathematical operators for Content-- layout computation.
+Mathematical operators for Content-- layout computation using mature Julia libraries.
 
-Content-- uses a mathematically intuitive approach where layout properties
-can be expressed using familiar mathematical notation:
+Content-- uses a mathematically intuitive approach leveraging:
+- **StaticArrays.jl** for high-performance immutable vectors
+- **LinearAlgebra** for standard mathematical operations
+- **Unicode operators** for expressive mathematical notation
 
 ## Vector Operations
 
 Layout positions and sizes are represented as 2D vectors:
-- `Vec2(x, y)` - A 2D point or size
-- `Box4(top, right, bottom, left)` - A 4-sided box value (like margin/padding)
+- `Vec2(x, y)` - A 2D point or size (backed by SVector{2,T})
+- `Box4(top, right, bottom, left)` - A 4-sided box value (backed by SVector{4,T})
 
 ## Operators
 
-| Operator | Meaning | Example |
-|----------|---------|---------|
-| `+` | Addition | `Vec2(10, 20) + Vec2(5, 5) = Vec2(15, 25)` |
-| `-` | Subtraction | `Vec2(10, 20) - Vec2(5, 5) = Vec2(5, 15)` |
-| `*` | Scaling | `Vec2(10, 20) * 2 = Vec2(20, 40)` |
-| `/` | Division | `Vec2(10, 20) / 2 = Vec2(5, 10)` |
-| `⊕` | Box merge | Combine two Box4 values |
-| `↓` | Flow down | Direction operator |
-| `→` | Flow right | Direction operator |
+| Operator | Unicode | Meaning | Example |
+|----------|---------|---------|---------|
+| `+` | | Addition | `Vec2(10, 20) + Vec2(5, 5) = Vec2(15, 25)` |
+| `-` | | Subtraction | `Vec2(10, 20) - Vec2(5, 5) = Vec2(5, 15)` |
+| `*` | | Scaling | `Vec2(10, 20) * 2 = Vec2(20, 40)` |
+| `/` | | Division | `Vec2(10, 20) / 2 = Vec2(5, 10)` |
+| `⊕` | oplus | Box merge | Combine two Box4 values |
+| `⊗` | otimes | Hadamard product | Component-wise multiply |
+| `⊙` | odot | Dot product | `Vec2(1,0) ⊙ Vec2(0,1) = 0` |
+| `‖·‖` | norm | Norm/magnitude | `‖Vec2(3,4)‖ = 5` |
+| `∘` | circ | Function composition | For transforms |
 
 ## Intuitive Property Syntax
 
@@ -43,20 +47,27 @@ parent.content_origin = parent.position + parent.inset
 """
 module MathOps
 
+using StaticArrays
+using LinearAlgebra
+
 export Vec2, Box4, Rect, Transform2D
 export vec2, box4, rect
-export lerp, clamp01, remap
+export lerp, clamp01, remap, smoothstep
 export ⊕, ⊗, ⊙, box_merge, hadamard, dot_product
 export ZERO_VEC2, UNIT_VEC2, ZERO_BOX4, ZERO_RECT
+export norm, normalize  # Re-export from LinearAlgebra
+export magnitude, dot  # Backward compatibility aliases
+export horizontal, vertical, total  # Box4 utility functions
 
 # =============================================================================
-# Core Mathematical Types
+# Core Mathematical Types (Using StaticArrays for Performance)
 # =============================================================================
 
 """
     Vec2{T}
 
 2D vector for positions, sizes, and offsets.
+Backed by StaticArrays.SVector{2,T} for high performance.
 Supports intuitive mathematical operations.
 
 # Examples
@@ -64,23 +75,38 @@ Supports intuitive mathematical operations.
 pos = Vec2(100.0f0, 200.0f0)
 size = Vec2(50.0f0, 30.0f0)
 end_pos = pos + size  # Vec2(150.0, 230.0)
+
+# Using Unicode operators
+v₁ = Vec2(3.0f0, 4.0f0)
+‖v₁‖ = norm(v₁)  # 5.0
+v₂ = Vec2(1.0f0, 0.0f0)
+v₁ ⊙ v₂  # Dot product: 3.0
 ```
 """
 struct Vec2{T<:Number}
-    x::T
-    y::T
+    data::SVector{2,T}
     
     function Vec2{T}(x::T, y::T) where T<:Number
-        new{T}(x, y)
+        new{T}(SVector{2,T}(x, y))
     end
     
     function Vec2(x::Number, y::Number)
         T = promote_type(typeof(x), typeof(y))
-        new{T}(convert(T, x), convert(T, y))
+        new{T}(SVector{2,T}(convert(T, x), convert(T, y)))
+    end
+    
+    # Constructor from SVector
+    function Vec2(v::SVector{2,T}) where T<:Number
+        new{T}(v)
     end
 end
 
-# Convenient constructor
+# Property accessors for backward compatibility
+Base.getproperty(v::Vec2, s::Symbol) = s === :x ? getfield(v, :data)[1] :
+                                        s === :y ? getfield(v, :data)[2] :
+                                        getfield(v, s)
+
+# Convenient constructors
 vec2(x::Number, y::Number) = Vec2(Float32(x), Float32(y))
 vec2(v::Number) = Vec2(Float32(v), Float32(v))
 vec2(t::Tuple{<:Number, <:Number}) = Vec2(Float32(t[1]), Float32(t[2]))
@@ -89,107 +115,122 @@ vec2(t::Tuple{<:Number, <:Number}) = Vec2(Float32(t[1]), Float32(t[2]))
 const ZERO_VEC2 = Vec2(0.0f0, 0.0f0)
 const UNIT_VEC2 = Vec2(1.0f0, 1.0f0)
 
-# Arithmetic operations
-Base.:+(a::Vec2, b::Vec2) = Vec2(a.x + b.x, a.y + b.y)
-Base.:-(a::Vec2, b::Vec2) = Vec2(a.x - b.x, a.y - b.y)
-Base.:-(a::Vec2) = Vec2(-a.x, -a.y)
-Base.:*(a::Vec2, s::Number) = Vec2(a.x * s, a.y * s)
-Base.:*(s::Number, a::Vec2) = a * s
-Base.:/(a::Vec2, s::Number) = Vec2(a.x / s, a.y / s)
+# Arithmetic operations (leveraging SVector's optimized operations)
+Base.:+(a::Vec2, b::Vec2) = Vec2(a.data + b.data)
+Base.:-(a::Vec2, b::Vec2) = Vec2(a.data - b.data)
+Base.:-(a::Vec2) = Vec2(-a.data)
+Base.:*(a::Vec2, s::Number) = Vec2(a.data * s)
+Base.:*(s::Number, a::Vec2) = Vec2(s * a.data)
+Base.:/(a::Vec2, s::Number) = Vec2(a.data / s)
 
-# Component-wise operations
-Base.:*(a::Vec2, b::Vec2) = Vec2(a.x * b.x, a.y * b.y)
-Base.:/(a::Vec2, b::Vec2) = Vec2(a.x / b.x, a.y / b.y)
+# Component-wise operations (Hadamard product)
+Base.:*(a::Vec2, b::Vec2) = Vec2(a.data .* b.data)
+Base.:/(a::Vec2, b::Vec2) = Vec2(a.data ./ b.data)
 
 # Comparison
-Base.:(==)(a::Vec2, b::Vec2) = a.x == b.x && a.y == b.y
-Base.isapprox(a::Vec2, b::Vec2; kwargs...) = isapprox(a.x, b.x; kwargs...) && isapprox(a.y, b.y; kwargs...)
+Base.:(==)(a::Vec2, b::Vec2) = a.data == b.data
+Base.isapprox(a::Vec2, b::Vec2; kwargs...) = isapprox(a.data, b.data; kwargs...)
 
-# Conversion
+# Conversion and indexing
 Base.Tuple(v::Vec2) = (v.x, v.y)
 Base.convert(::Type{Vec2{T}}, v::Vec2) where T = Vec2{T}(convert(T, v.x), convert(T, v.y))
-Base.getindex(v::Vec2, i::Int) = i == 1 ? v.x : (i == 2 ? v.y : throw(BoundsError(v, i)))
+Base.getindex(v::Vec2, i::Int) = getfield(v, :data)[i]
+Base.length(::Vec2) = 2
+Base.eltype(::Type{Vec2{T}}) where T = T
 
 # Utility functions
 Base.zero(::Type{Vec2{T}}) where T = Vec2{T}(zero(T), zero(T))
 Base.one(::Type{Vec2{T}}) where T = Vec2{T}(one(T), one(T))
 
+# Extend LinearAlgebra's norm and normalize to work with Vec2
+# These delegate to SVector's implementations (which call LinearAlgebra)
+LinearAlgebra.norm(v::Vec2) = LinearAlgebra.norm(v.data)
+LinearAlgebra.normalize(v::Vec2) = Vec2(LinearAlgebra.normalize(v.data))
+
+# Keep magnitude as an alias for norm (for backward compatibility)
 """
     magnitude(v::Vec2) -> Number
 
 Euclidean magnitude (length) of the vector.
+Alias for `norm(v)`.
 """
-magnitude(v::Vec2) = sqrt(v.x^2 + v.y^2)
+magnitude(v::Vec2) = norm(v)
 
-"""
-    normalize(v::Vec2) -> Vec2
-
-Unit vector in the same direction.
-Returns the original vector if magnitude is near zero.
-"""
-function normalize(v::Vec2)
-    m = magnitude(v)
-    m < eps(typeof(m)) ? v : v / m
-end
-
+# Dot product using LinearAlgebra
 """
     dot(a::Vec2, b::Vec2) -> Number
 
-Dot product of two vectors.
+Dot product of two vectors using LinearAlgebra.
 """
-dot(a::Vec2, b::Vec2) = a.x * b.x + a.y * b.y
+LinearAlgebra.dot(a::Vec2, b::Vec2) = dot(a.data, b.data)
 
 """
     Box4{T}
 
 4-sided box value for inset (padding), offset (margin), and stroke (border).
 Values follow CSS order: top, right, bottom, left.
+Backed by StaticArrays.SVector{4,T} for high performance.
 
 # Examples
 ```julia
 inset = Box4(10.0f0)           # All sides = 10
 inset = Box4(10.0f0, 20.0f0)   # Vertical = 10, Horizontal = 20
 inset = Box4(1.0f0, 2.0f0, 3.0f0, 4.0f0)  # Top, Right, Bottom, Left
+
+# Using Unicode operators
+b₁ = Box4(10.0f0, 20.0f0, 10.0f0, 20.0f0)
+b₂ = Box4(5.0f0)
+b₃ = b₁ ⊕ b₂  # Box merge (max of each side)
 ```
 """
 struct Box4{T<:Number}
-    top::T
-    right::T
-    bottom::T
-    left::T
+    data::SVector{4,T}
     
     # All sides equal
     function Box4{T}(all::T) where T<:Number
-        new{T}(all, all, all, all)
+        new{T}(SVector{4,T}(all, all, all, all))
     end
     
     # Vertical/Horizontal
     function Box4{T}(vertical::T, horizontal::T) where T<:Number
-        new{T}(vertical, horizontal, vertical, horizontal)
+        new{T}(SVector{4,T}(vertical, horizontal, vertical, horizontal))
     end
     
     # All four sides
     function Box4{T}(top::T, right::T, bottom::T, left::T) where T<:Number
-        new{T}(top, right, bottom, left)
+        new{T}(SVector{4,T}(top, right, bottom, left))
     end
     
     # Auto-convert
     function Box4(all::Number)
         T = Float32
-        new{T}(convert(T, all), convert(T, all), convert(T, all), convert(T, all))
+        v = convert(T, all)
+        new{T}(SVector{4,T}(v, v, v, v))
     end
     
     function Box4(vertical::Number, horizontal::Number)
         T = Float32
         v, h = convert(T, vertical), convert(T, horizontal)
-        new{T}(v, h, v, h)
+        new{T}(SVector{4,T}(v, h, v, h))
     end
     
     function Box4(top::Number, right::Number, bottom::Number, left::Number)
         T = Float32
-        new{T}(convert(T, top), convert(T, right), convert(T, bottom), convert(T, left))
+        new{T}(SVector{4,T}(convert(T, top), convert(T, right), convert(T, bottom), convert(T, left)))
+    end
+    
+    # Constructor from SVector
+    function Box4(v::SVector{4,T}) where T<:Number
+        new{T}(v)
     end
 end
+
+# Property accessors for backward compatibility
+Base.getproperty(b::Box4, s::Symbol) = s === :top ? getfield(b, :data)[1] :
+                                        s === :right ? getfield(b, :data)[2] :
+                                        s === :bottom ? getfield(b, :data)[3] :
+                                        s === :left ? getfield(b, :data)[4] :
+                                        getfield(b, s)
 
 # Convenient constructors
 box4(all::Number) = Box4(Float32(all))
@@ -220,18 +261,21 @@ end
 
 const ZERO_BOX4 = Box4(0.0f0)
 
-# Arithmetic operations
-Base.:+(a::Box4, b::Box4) = Box4(a.top + b.top, a.right + b.right, a.bottom + b.bottom, a.left + b.left)
-Base.:-(a::Box4, b::Box4) = Box4(a.top - b.top, a.right - b.right, a.bottom - b.bottom, a.left - b.left)
-Base.:*(a::Box4, s::Number) = Box4(a.top * s, a.right * s, a.bottom * s, a.left * s)
-Base.:*(s::Number, a::Box4) = a * s
-Base.:/(a::Box4, s::Number) = Box4(a.top / s, a.right / s, a.bottom / s, a.left / s)
+# Arithmetic operations (leveraging SVector's optimized operations)
+Base.:+(a::Box4, b::Box4) = Box4(a.data + b.data)
+Base.:-(a::Box4, b::Box4) = Box4(a.data - b.data)
+Base.:*(a::Box4, s::Number) = Box4(a.data * s)
+Base.:*(s::Number, a::Box4) = Box4(s * a.data)
+Base.:/(a::Box4, s::Number) = Box4(a.data / s)
 
 # Comparison
-Base.:(==)(a::Box4, b::Box4) = a.top == b.top && a.right == b.right && a.bottom == b.bottom && a.left == b.left
+Base.:(==)(a::Box4, b::Box4) = a.data == b.data
 
-# Conversion to tuple
+# Conversion and indexing
 Base.Tuple(b::Box4) = (b.top, b.right, b.bottom, b.left)
+Base.getindex(b::Box4, i::Int) = getfield(b, :data)[i]
+Base.length(::Box4) = 4
+Base.eltype(::Type{Box4{T}}) where T = T
 
 """
     horizontal(b::Box4) -> Number
@@ -516,36 +560,60 @@ function smoothstep(edge0::Number, edge1::Number, x::Number)
 end
 
 # =============================================================================
-# Mathematical Operators (Unicode)
+# Mathematical Operators (Unicode) - Expressive Math Notation
 # =============================================================================
 
 """
     box_merge(a::Box4, b::Box4) -> Box4
     ⊕(a::Box4, b::Box4) -> Box4
 
-Box merge operator - maximum of each side.
+Box merge operator (⊕) - maximum of each side.
 Useful for combining constraint boxes.
+
+# Example
+```julia
+b₁ = Box4(10.0f0, 20.0f0, 30.0f0, 40.0f0)
+b₂ = Box4(15.0f0)
+merged = b₁ ⊕ b₂  # Box4(15.0, 20.0, 30.0, 40.0) - max of each side
+```
 """
-box_merge(a::Box4, b::Box4) = Box4(max(a.top, b.top), max(a.right, b.right), max(a.bottom, b.bottom), max(a.left, b.left))
-⊕(a::Box4, b::Box4) = box_merge(a, b)
+box_merge(a::Box4, b::Box4) = Box4(max.(a.data, b.data))
+const ⊕ = box_merge
 
 """
     hadamard(a::Vec2, b::Vec2) -> Vec2
     ⊗(a::Vec2, b::Vec2) -> Vec2
 
-Hadamard product (component-wise multiplication).
+Hadamard product (⊗) - component-wise multiplication.
+Also known as element-wise or Schur product.
+
+# Example
+```julia
+v₁ = Vec2(2.0f0, 3.0f0)
+v₂ = Vec2(4.0f0, 5.0f0)
+result = v₁ ⊗ v₂  # Vec2(8.0, 15.0)
+```
 """
-hadamard(a::Vec2, b::Vec2) = Vec2(a.x * b.x, a.y * b.y)
-⊗(a::Vec2, b::Vec2) = hadamard(a, b)
+hadamard(a::Vec2, b::Vec2) = Vec2(a.data .* b.data)
+const ⊗ = hadamard
 
 """
     dot_product(a::Vec2, b::Vec2) -> Number
     ⊙(a::Vec2, b::Vec2) -> Number
 
-Dot product operator.
+Dot product operator (⊙).
+Returns the scalar product of two vectors.
+
+# Example
+```julia
+using LinearAlgebra
+v₁ = Vec2(3.0f0, 4.0f0)
+v₂ = Vec2(1.0f0, 0.0f0)
+result = v₁ ⊙ v₂  # 3.0 (same as dot(v₁, v₂))
+```
 """
 dot_product(a::Vec2, b::Vec2) = dot(a, b)
-⊙(a::Vec2, b::Vec2) = dot_product(a, b)
+const ⊙ = dot_product
 
 # =============================================================================
 # Layout Computation Helpers
