@@ -47,7 +47,7 @@ export Vec2, Box4, Rect, Transform2D
 export vec2, box4, rect
 export lerp, clamp01, remap
 export ⊕, ⊗, ⊙, box_merge, hadamard, dot_product
-export ZERO_VEC2, UNIT_VEC2, ZERO_BOX4
+export ZERO_VEC2, UNIT_VEC2, ZERO_BOX4, ZERO_RECT
 
 # =============================================================================
 # Core Mathematical Types
@@ -125,10 +125,11 @@ magnitude(v::Vec2) = sqrt(v.x^2 + v.y^2)
     normalize(v::Vec2) -> Vec2
 
 Unit vector in the same direction.
+Returns the original vector if magnitude is near zero.
 """
 function normalize(v::Vec2)
     m = magnitude(v)
-    m == 0 ? v : v / m
+    m < eps(typeof(m)) ? v : v / m
 end
 
 """
@@ -194,9 +195,28 @@ end
 box4(all::Number) = Box4(Float32(all))
 box4(v::Number, h::Number) = Box4(Float32(v), Float32(h))
 box4(t::Number, r::Number, b::Number, l::Number) = Box4(Float32(t), Float32(r), Float32(b), Float32(l))
-box4(t::Tuple) = length(t) == 1 ? box4(t[1]) : 
-                 length(t) == 2 ? box4(t[1], t[2]) : 
-                 length(t) == 4 ? box4(t[1], t[2], t[3], t[4]) : ZERO_BOX4
+
+"""
+    box4(t::Tuple) -> Box4
+
+Construct Box4 from a tuple. Supported tuple lengths:
+- 1 element: all sides equal
+- 2 elements: (vertical, horizontal)
+- 4 elements: (top, right, bottom, left)
+
+Throws ArgumentError for unsupported tuple lengths.
+"""
+function box4(t::Tuple)
+    if length(t) == 1
+        box4(t[1])
+    elseif length(t) == 2
+        box4(t[1], t[2])
+    elseif length(t) == 4
+        box4(t[1], t[2], t[3], t[4])
+    else
+        throw(ArgumentError("Box4 tuple must have 1, 2, or 4 elements, got $(length(t))"))
+    end
+end
 
 const ZERO_BOX4 = Box4(0.0f0)
 
@@ -274,6 +294,9 @@ end
 rect(x::Number, y::Number, w::Number, h::Number) = Rect(Float32(x), Float32(y), Float32(w), Float32(h))
 rect(origin::Vec2, size::Vec2) = Rect(origin, size)
 
+# Zero rect constant
+const ZERO_RECT = Rect(0.0f0, 0.0f0, 0.0f0, 0.0f0)
+
 # Property accessors
 Base.getproperty(r::Rect, s::Symbol) = 
     s == :x ? getfield(r, :origin).x :
@@ -313,6 +336,7 @@ end
     intersection(a::Rect, b::Rect) -> Rect
 
 Compute the intersection of two rectangles.
+Returns ZERO_RECT if the rectangles don't overlap.
 """
 function intersection(a::Rect, b::Rect)
     left = max(a.left, b.left)
@@ -321,7 +345,7 @@ function intersection(a::Rect, b::Rect)
     bottom = min(a.bottom, b.bottom)
     
     if right <= left || bottom <= top
-        return Rect(0.0f0, 0.0f0, 0.0f0, 0.0f0)
+        return ZERO_RECT
     end
     
     return Rect(left, top, right - left, bottom - top)
