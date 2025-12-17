@@ -5,7 +5,9 @@
 
 pub mod window;
 pub mod renderer;
+pub mod text;
 pub mod ffi;
 
 pub use window::*;
 pub use renderer::*;
+pub use text::*;

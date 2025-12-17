@@ -344,12 +344,12 @@ Create a new window with the given configuration.
 function create_window(config::WindowConfig = WindowConfig())::WindowHandle
     handle = WindowHandle(config)
     
-    # Initialize backend
-    if config.backend == :gtk
-        initialize_gtk_backend!(handle)
-    elseif config.backend == :cairo
-        initialize_cairo_backend!(handle)
-    elseif config.backend == :software
+    # Initialize backend - Gtk is no longer supported, use software or Rust
+    if config.backend == :gtk || config.backend == :rust
+        # Gtk removed - fall back to software rendering
+        @warn "Gtk backend is no longer available. Using software backend instead." maxlog=1
+        initialize_software_backend!(handle)
+    elseif config.backend == :cairo || config.backend == :software
         initialize_software_backend!(handle)
     else
         # Default to software backend

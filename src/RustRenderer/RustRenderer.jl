@@ -468,6 +468,234 @@ end
 export renderer_resize!
 
 # ============================================================================
+# Text Rendering Functions
+# ============================================================================
+
+"""
+    add_text!(handle::RustRendererHandle, text::String, x, y; 
+              font_size=16.0, r=0.0, g=0.0, b=0.0, a=1.0, font_id=0)
+
+Add a text render command.
+"""
+function add_text!(handle::RustRendererHandle, text::String,
+                   x::Real, y::Real;
+                   font_size::Real=16.0,
+                   r::Real=0.0, g::Real=0.0, b::Real=0.0, a::Real=1.0,
+                   font_id::Integer=0)
+    if handle.is_valid && handle.ptr != C_NULL
+        ccall(get_func(:dop_renderer_add_text), 
+              Cvoid, (Ptr{Nothing}, Cstring, Cfloat, Cfloat, Cfloat, Cfloat, Cfloat, Cfloat, Cfloat, Cint), 
+              handle.ptr, text,
+              Float32(x), Float32(y), Float32(font_size),
+              Float32(r), Float32(g), Float32(b), Float32(a),
+              Int32(font_id))
+    end
+end
+
+export add_text!
+
+"""
+    measure_text(handle::RustRendererHandle, text::String; font_size=16.0, font_id=0) -> Tuple{Float32, Float32}
+
+Measure text width and height.
+"""
+function measure_text(handle::RustRendererHandle, text::String;
+                      font_size::Real=16.0, font_id::Integer=0)::Tuple{Float32, Float32}
+    if !handle.is_valid || handle.ptr == C_NULL
+        return (Float32(0), Float32(0))
+    end
+    
+    width = Ref{Cfloat}(0.0)
+    height = Ref{Cfloat}(0.0)
+    
+    ccall(get_func(:dop_renderer_measure_text), 
+          Cvoid, (Ptr{Nothing}, Cstring, Cfloat, Cint, Ptr{Cfloat}, Ptr{Cfloat}), 
+          handle.ptr, text, Float32(font_size), Int32(font_id),
+          width, height)
+    
+    return (Float32(width[]), Float32(height[]))
+end
+
+export measure_text
+
+"""
+    load_font!(handle::RustRendererHandle, path::String) -> Int
+
+Load a font from file. Returns font ID or -1 on failure.
+"""
+function load_font!(handle::RustRendererHandle, path::String)::Int
+    if !handle.is_valid || handle.ptr == C_NULL
+        return -1
+    end
+    
+    result = ccall(get_func(:dop_renderer_load_font), 
+                   Cint, (Ptr{Nothing}, Cstring), 
+                   handle.ptr, path)
+    return Int(result)
+end
+
+export load_font!
+
+"""
+    has_default_font(handle::RustRendererHandle) -> Bool
+
+Check if a default font is available.
+"""
+function has_default_font(handle::RustRendererHandle)::Bool
+    if !handle.is_valid || handle.ptr == C_NULL
+        return false
+    end
+    
+    result = ccall(get_func(:dop_renderer_has_default_font), 
+                   Cint, (Ptr{Nothing},), 
+                   handle.ptr)
+    return result != 0
+end
+
+export has_default_font
+
+"""
+    export_png!(handle::RustRendererHandle, path::String) -> Bool
+
+Export the framebuffer to a PNG file.
+"""
+function export_png!(handle::RustRendererHandle, path::String)::Bool
+    if !handle.is_valid || handle.ptr == C_NULL
+        return false
+    end
+    
+    result = ccall(get_func(:dop_renderer_export_png), 
+                   Cint, (Ptr{Nothing}, Cstring), 
+                   handle.ptr, path)
+    return result != 0
+end
+
+export export_png!
+
+# ============================================================================
+# Text Shaper
+# ============================================================================
+
+"""
+    TextShaperHandle
+
+Handle to a text shaper for paragraph layout.
+"""
+mutable struct TextShaperHandle
+    ptr::Ptr{Nothing}
+    is_valid::Bool
+    
+    function TextShaperHandle(ptr::Ptr{Nothing})
+        h = new(ptr, ptr != C_NULL)
+        finalizer(h) do handle
+            if handle.is_valid && handle.ptr != C_NULL
+                destroy_shaper!(handle)
+            end
+        end
+        return h
+    end
+end
+
+export TextShaperHandle
+
+"""
+    create_text_shaper() -> TextShaperHandle
+
+Create a new text shaper.
+"""
+function create_text_shaper()::TextShaperHandle
+    ptr = ccall(get_func(:dop_text_shaper_create), Ptr{Nothing}, ())
+    return TextShaperHandle(ptr)
+end
+
+export create_text_shaper
+
+"""
+    destroy_shaper!(handle::TextShaperHandle)
+
+Destroy a text shaper.
+"""
+function destroy_shaper!(handle::TextShaperHandle)
+    if handle.is_valid && handle.ptr != C_NULL
+        ccall(get_func(:dop_text_shaper_free), Cvoid, (Ptr{Nothing},), handle.ptr)
+        handle.ptr = C_NULL
+        handle.is_valid = false
+    end
+end
+
+export destroy_shaper!
+
+"""
+    ShapedTextResult
+
+Result of text shaping.
+"""
+struct ShapedTextResult
+    width::Float32
+    height::Float32
+    line_count::Int32
+end
+
+export ShapedTextResult
+
+"""
+    shape_paragraph(handle::TextShaperHandle, text::String, max_width::Real; font_size::Real=16.0) -> ShapedTextResult
+
+Shape a paragraph with word wrapping.
+"""
+function shape_paragraph(handle::TextShaperHandle, text::String, max_width::Real;
+                         font_size::Real=16.0)::ShapedTextResult
+    if !handle.is_valid || handle.ptr == C_NULL
+        return ShapedTextResult(0.0f0, 0.0f0, 0)
+    end
+    
+    # The FFI returns a struct, we need to call and get the result
+    result = ccall(get_func(:dop_text_shaper_shape), 
+                   NTuple{3, Cfloat}, (Ptr{Nothing}, Cstring, Cfloat, Cfloat), 
+                   handle.ptr, text, Float32(max_width), Float32(font_size))
+    
+    return ShapedTextResult(result[1], result[2], Int32(result[3]))
+end
+
+export shape_paragraph
+
+"""
+    shaper_load_font!(handle::TextShaperHandle, path::String) -> Int
+
+Load a font into the text shaper.
+"""
+function shaper_load_font!(handle::TextShaperHandle, path::String)::Int
+    if !handle.is_valid || handle.ptr == C_NULL
+        return -1
+    end
+    
+    result = ccall(get_func(:dop_text_shaper_load_font), 
+                   Cint, (Ptr{Nothing}, Cstring), 
+                   handle.ptr, path)
+    return Int(result)
+end
+
+export shaper_load_font!
+
+"""
+    shaper_has_font(handle::TextShaperHandle) -> Bool
+
+Check if the shaper has a font loaded.
+"""
+function shaper_has_font(handle::TextShaperHandle)::Bool
+    if !handle.is_valid || handle.ptr == C_NULL
+        return false
+    end
+    
+    result = ccall(get_func(:dop_text_shaper_has_font), 
+                   Cint, (Ptr{Nothing},), 
+                   handle.ptr)
+    return result != 0
+end
+
+export shaper_has_font
+
+# ============================================================================
 # Utility Functions
 # ============================================================================
 
