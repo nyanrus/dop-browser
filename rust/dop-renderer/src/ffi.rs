@@ -282,7 +282,7 @@ pub extern "C" fn dop_window_create_onscreen(
         use crate::window::DopApp;
 
         // Create event loop - use builder to enable any_thread on Unix platforms
-        let event_loop = {
+        let event_loop_result = {
             #[cfg(any(
                 target_os = "linux",
                 target_os = "dragonfly",
@@ -310,7 +310,7 @@ pub extern "C" fn dop_window_create_onscreen(
             }
         };
         
-        let event_loop = match event_loop {
+        let event_loop = match event_loop_result {
             Ok(el) => el,
             Err(e) => {
                 log::error!("Failed to create event loop: {:?}", e);

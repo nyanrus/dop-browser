@@ -372,8 +372,8 @@ function initialize_rust_backend!(handle::WindowHandle)
             return
         end
         
-        # Check if we need onscreen rendering (backend is rust_onscreen)
-        if handle.config.backend == :rust_onscreen
+        # Check if we need headless rendering (backend is :rust, not :rust_onscreen)
+        if handle.config.backend != :rust_onscreen
             # Headless Rust rendering
             renderer = RustRenderer.create_renderer(handle.width, handle.height)
             handle.backend_data = (:rust_headless, renderer)
@@ -563,8 +563,31 @@ end
 Convert Rust mouse button to Window mouse button.
 """
 function convert_rust_mouse_button(rust_button)
-    # Both use the same enum values, so we can just convert
-    return MOUSE_LEFT  # Default, the enum values should match
+    # Map RustRenderer mouse button enum to Window mouse button enum
+    try
+        RustRenderer = @eval begin
+            import ...RustRenderer as RR
+            RR
+        end
+        
+        # The enum values should match, but let's be explicit
+        if rust_button == RustRenderer.MOUSE_LEFT
+            return MOUSE_LEFT
+        elseif rust_button == RustRenderer.MOUSE_RIGHT
+            return MOUSE_RIGHT
+        elseif rust_button == RustRenderer.MOUSE_MIDDLE
+            return MOUSE_MIDDLE
+        elseif rust_button == RustRenderer.MOUSE_X1
+            return MOUSE_X1
+        elseif rust_button == RustRenderer.MOUSE_X2
+            return MOUSE_X2
+        else
+            return MOUSE_LEFT  # Default fallback
+        end
+    catch
+        # If we can't access RustRenderer, default to left
+        return MOUSE_LEFT
+    end
 end
 
 """

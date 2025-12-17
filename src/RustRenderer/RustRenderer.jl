@@ -377,7 +377,7 @@ export destroy_threaded!
 Check if the threaded window is still open.
 """
 function is_open_threaded(handle::RustThreadedWindowHandle)::Bool
-    if !handle.is_valid
+    if !handle.is_valid || handle.ptr == C_NULL
         return false
     end
     return ccall(get_func(:dop_window_is_open_threaded), Cint, (Ptr{Nothing},), handle.ptr) != 0
@@ -414,7 +414,7 @@ export poll_events_threaded!
 Get the size of the threaded window.
 """
 function get_size_threaded(handle::RustThreadedWindowHandle)::Tuple{Int, Int}
-    if !handle.is_valid
+    if !handle.is_valid || handle.ptr == C_NULL
         return (0, 0)
     end
     width = ccall(get_func(:dop_window_get_width_threaded), Cint, (Ptr{Nothing},), handle.ptr)
