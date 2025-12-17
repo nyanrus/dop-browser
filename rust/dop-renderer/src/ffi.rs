@@ -278,11 +278,39 @@ pub extern "C" fn dop_window_create_onscreen(
 
     // Spawn a thread to run the event loop
     let thread_handle = thread::spawn(move || {
-        use winit::event_loop::{ControlFlow, EventLoop};
+        use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
         use crate::window::DopApp;
 
-        // Create event loop
-        let event_loop = match EventLoop::new() {
+        // Create event loop - use builder to enable any_thread on Unix platforms
+        let event_loop = {
+            #[cfg(any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            ))]
+            {
+                use winit::platform::x11::EventLoopBuilderExtX11;
+                
+                let mut builder = EventLoopBuilder::new();
+                // Enable any_thread to allow event loop creation on non-main thread
+                builder.with_any_thread(true).build()
+            }
+            
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "dragonfly",
+                target_os = "freebsd",
+                target_os = "netbsd",
+                target_os = "openbsd"
+            )))]
+            {
+                EventLoop::new()
+            }
+        };
+        
+        let event_loop = match event_loop {
             Ok(el) => el,
             Err(e) => {
                 log::error!("Failed to create event loop: {:?}", e);
