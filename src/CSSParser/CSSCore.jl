@@ -486,6 +486,24 @@ function parse_inline_style(style_str::AbstractString)::CSSStyles
     return styles
 end
 
+"""
+    apply_property!(styles::CSSStyles, prop::AbstractString, val::AbstractString)
+
+Apply a single CSS property value to the styles struct.
+
+# Arguments
+- `styles`: The CSSStyles struct to modify
+- `prop`: The CSS property name (e.g., "width", "background-color")
+- `val`: The CSS property value (e.g., "100px", "red")
+
+Supports CSS2.1 and CSS3 properties including:
+- Positioning: position, top, right, bottom, left, z-index
+- Display: display, visibility, overflow, overflow-x, overflow-y
+- Box model: width, height, margin-*, padding-*, border-*
+- Flexbox: flex-direction, justify-content, align-items, flex, gap
+- Visual: opacity, border-radius, box-shadow, transform
+- Typography: font-size, font-weight, text-align, text-decoration
+"""
 function apply_property!(styles::CSSStyles, prop::AbstractString, val::AbstractString)
     val_lower = lowercase(val)
     
@@ -902,7 +920,29 @@ function parse_box_shadow!(styles::CSSStyles, val::AbstractString)
     styles.has_box_shadow = length(lengths) >= 2
 end
 
-"Parse transform value."
+"""
+    parse_transform!(styles::CSSStyles, val::AbstractString)
+
+Parse CSS3 transform property value and update the styles struct.
+
+# Supported Transform Functions
+- `translate(x, y)` or `translate(x)`: Translate by x and y (or just x)
+- `translateX(x)`: Translate horizontally
+- `translateY(y)`: Translate vertically  
+- `rotate(angle)`: Rotate by angle in deg, rad, or turn
+- `scale(n)` or `scale(x, y)`: Scale uniformly or non-uniformly
+- `scaleX(x)`: Scale horizontally
+- `scaleY(y)`: Scale vertically
+
+# Example
+```julia
+parse_transform!(styles, "translateX(50px) rotate(45deg) scale(1.5)")
+```
+
+# Note
+Multiple transforms can be combined in one value (space-separated).
+Sets `has_transform = true` if any transform is successfully parsed.
+"""
 function parse_transform!(styles::CSSStyles, val::AbstractString)
     val = lowercase(strip(val))
     

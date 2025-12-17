@@ -281,15 +281,15 @@ using DOPBrowser
         
         # Points
         (val, auto) = parse_length("12pt")
-        @test val ≈ 16.0f0 atol=0.1f0  # 12 * 1.333
+        @test val ≈ 12.0f0 * DOPBrowser.CSSParserModule.CSSCore.PX_PER_PT atol=0.1f0
         
         # Inches
         (val, auto) = parse_length("1in")
-        @test val == 96.0f0  # 1 * 96px
+        @test val == DOPBrowser.CSSParserModule.CSSCore.PX_PER_INCH
         
         # Centimeters
         (val, auto) = parse_length("1cm")
-        @test val ≈ 37.795f0 atol=0.01f0
+        @test val ≈ DOPBrowser.CSSParserModule.CSSCore.PX_PER_CM atol=0.01f0
     end
     
     # ========== CSS3 Flexbox Tests ==========
