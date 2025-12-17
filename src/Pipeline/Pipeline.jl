@@ -204,7 +204,8 @@ function parse_doc(html::AbstractString)::Document
     # Simple state machine for parsing
     stack = UInt32[0]  # Parent stack
     
-    link_child!(parent_id::UInt32, child_id::UInt32) = begin
+    link_child!(parent_id::UInt32, child_id::UInt32,
+                first_children::Vector{UInt32}, next_siblings::Vector{UInt32}) = begin
         parent_id == 0 && return
         if first_children[parent_id] == 0
             first_children[parent_id] = child_id
@@ -217,7 +218,13 @@ function parse_doc(html::AbstractString)::Document
         next_siblings[sibling] = child_id
     end
 
-    function add_element!(parent_id::UInt32, tag_id::UInt32)
+    function add_element!(
+        parent_id::UInt32, tag_id::UInt32,
+        node_types::Vector{UInt8}, parents::Vector{UInt32},
+        first_children::Vector{UInt32}, next_siblings::Vector{UInt32},
+        tags::Vector{UInt32}, widths::Vector{Float32}, heights::Vector{Float32},
+        bg_colors::Vector{NTuple{4, UInt8}}
+    )
         new_id = UInt32(length(node_types) + 1)
         push!(node_types, 0x02)  # Element
         push!(parents, parent_id)
@@ -227,11 +234,15 @@ function parse_doc(html::AbstractString)::Document
         push!(widths, 0.0f0)
         push!(heights, 0.0f0)
         push!(bg_colors, (0x00, 0x00, 0x00, 0x00))
-        link_child!(parent_id, new_id)
+        link_child!(parent_id, new_id, first_children, next_siblings)
         return new_id
     end
 
-    function apply_inline_styles!(styles, idx::Integer)
+    function apply_inline_styles!(
+        styles, idx::Integer,
+        widths::Vector{Float32}, heights::Vector{Float32},
+        bg_colors::Vector{NTuple{4, UInt8}}
+    )
         if !styles.width_auto
             widths[idx] = styles.width
         end
@@ -244,13 +255,19 @@ function parse_doc(html::AbstractString)::Document
         end
     end
 
-    function parse_attributes!(token_index::Int, node_id::UInt32)
+    function parse_attributes!(
+        token_index::Int, node_id::UInt32,
+        tokens, pool,
+        widths::Vector{Float32}, heights::Vector{Float32},
+        bg_colors::Vector{NTuple{4, UInt8}}
+    )
         j = token_index + 1
         while j <= length(tokens) && tokens[j].type == TOKEN_ATTRIBUTE
             attr_token = tokens[j]
             if get_string(pool, attr_token.name_id) == "style"
                 style_str = get_string(pool, attr_token.value_id)
-                apply_inline_styles!(parse_inline_style(style_str), Int(node_id))
+                apply_inline_styles!(parse_inline_style(style_str), Int(node_id),
+                                     widths, heights, bg_colors)
             end
             j += 1
         end
@@ -275,8 +292,11 @@ function parse_doc(html::AbstractString)::Document
         
         if token.type == TOKEN_START_TAG  # Start tag
             parent_id = stack[end]
-            new_id = add_element!(parent_id, token.name_id)
-            i = parse_attributes!(i, new_id) - 1
+            new_id = add_element!(parent_id, token.name_id,
+                                  node_types, parents, first_children, next_siblings,
+                                  tags, widths, heights, bg_colors)
+            i = parse_attributes!(i, new_id, tokens, pool,
+                                  widths, heights, bg_colors) - 1
             push!(stack, new_id)
             
         elseif token.type == TOKEN_END_TAG  # End tag
@@ -285,8 +305,11 @@ function parse_doc(html::AbstractString)::Document
             end
             
         elseif token.type == TOKEN_SELF_CLOSING  # Self-closing
-            new_id = add_element!(stack[end], token.name_id)
-            i = parse_attributes!(i, new_id) - 1
+            new_id = add_element!(stack[end], token.name_id,
+                                  node_types, parents, first_children, next_siblings,
+                                  tags, widths, heights, bg_colors)
+            i = parse_attributes!(i, new_id, tokens, pool,
+                                  widths, heights, bg_colors) - 1
         end
         
         i += 1
