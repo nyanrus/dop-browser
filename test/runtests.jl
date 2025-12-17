@@ -1915,6 +1915,9 @@ end
             # Set clear color to red
             DOPBrowser.RustRenderer.set_clear_color!(renderer, 1.0, 0.0, 0.0, 1.0)
             
+            # Render frame to apply clear color
+            DOPBrowser.RustRenderer.render!(renderer)
+            
             # Get framebuffer - should be all red
             buffer = DOPBrowser.RustRenderer.get_framebuffer(renderer)
             

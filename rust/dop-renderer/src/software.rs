@@ -137,20 +137,28 @@ impl SoftwareRenderer {
         // Sort commands by z-index
         self.commands.sort_by_key(|c| c.z_index);
 
-        // Render each rectangle (iterate by reference to avoid clone)
-        for cmd in &self.commands {
-            self.render_rect_internal(cmd);
+        // Render rectangles - iterate by index to avoid borrow conflicts
+        // Each iteration clones a single command (small struct) instead of the whole vector
+        for i in 0..self.commands.len() {
+            let cmd = self.commands[i].clone();
+            Self::render_rect_to_pixmap(&mut self.pixmap, &cmd);
         }
 
         // Render text commands
         for i in 0..self.text_commands.len() {
             let text_cmd = self.text_commands[i].clone();
-            self.render_text(&text_cmd);
+            Self::render_text_to_pixmap(
+                &mut self.pixmap,
+                &mut self.font_manager,
+                self.width,
+                self.height,
+                &text_cmd,
+            );
         }
     }
 
-    /// Internal rectangle rendering (takes reference)
-    fn render_rect_internal(&mut self, cmd: &RenderCommand) {
+    /// Render a rectangle to the pixmap (static method to avoid borrow conflicts)
+    fn render_rect_to_pixmap(pixmap: &mut Pixmap, cmd: &RenderCommand) {
         if cmd.width <= 0.0 || cmd.height <= 0.0 {
             return;
         }
@@ -172,7 +180,7 @@ impl SoftwareRenderer {
         // Create a filled rectangle path
         let path = PathBuilder::from_rect(rect);
         
-        self.pixmap.fill_path(
+        pixmap.fill_path(
             &path,
             &paint,
             tiny_skia::FillRule::Winding,
@@ -181,8 +189,14 @@ impl SoftwareRenderer {
         );
     }
 
-    /// Render a text command
-    fn render_text(&mut self, cmd: &TextCommand) {
+    /// Render text to the pixmap (static method to avoid borrow conflicts)
+    fn render_text_to_pixmap(
+        pixmap: &mut Pixmap,
+        font_manager: &mut FontManager,
+        width: u32,
+        height: u32,
+        cmd: &TextCommand,
+    ) {
         if cmd.text.is_empty() {
             return;
         }
@@ -194,7 +208,7 @@ impl SoftwareRenderer {
             (cmd.color_a * 255.0) as u8,
         );
 
-        let (text_buffer, text_w, text_h) = self.font_manager.rasterize_text(
+        let (text_buffer, text_w, text_h) = font_manager.rasterize_text(
             &cmd.text,
             cmd.font_size,
             cmd.font_id,
@@ -208,9 +222,9 @@ impl SoftwareRenderer {
         // Blit text to pixmap
         let tx = cmd.x as i32;
         let ty = cmd.y as i32;
-        let pixmap_data = self.pixmap.data_mut();
-        let w = self.width as i32;
-        let h = self.height as i32;
+        let pixmap_data = pixmap.data_mut();
+        let w = width as i32;
+        let h = height as i32;
 
         for ty_off in 0..text_h as i32 {
             for tx_off in 0..text_w as i32 {
