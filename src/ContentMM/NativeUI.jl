@@ -76,14 +76,9 @@ import ...DOMCSSOM.RenderBuffer: clear! as clear_buffer!
 using ...RustRenderer: RustRendererHandle, create_renderer, add_rect!, add_text!, export_png!, get_framebuffer
 import ...RustRenderer: render! as rust_render!, clear! as rust_clear!
 
-# Aliases for backward compatibility - commented out as old Renderer module was removed
-# const CairoRenderContext = SoftwareRenderContext
-# const create_cairo_context = create_software_context
-
 export UIContext, create_ui, render!, render_to_png!, render_to_buffer
 export UIBuilder, with_stack!, with_paragraph!, rect!, span!
 export compare_pixels, PixelComparisonResult
-# export render_cairo!, render_to_png_cairo!  # Deprecated with old Renderer
 
 # ============================================================================
 # UI Context
@@ -126,10 +121,6 @@ mutable struct UIContext
         )
     end
 end
-
-# Backward compatibility aliases - commented out as old Renderer was removed
-# const cairo_context = software_context
-# const use_cairo = use_software
 
 """
     create_ui(source::String) -> UIContext
@@ -374,185 +365,6 @@ function render_to_buffer(ctx::UIContext; width::Int=800, height::Int=600)::Vect
     rust_render!(ctx.renderer)
     return get_framebuffer(ctx.renderer)
 end
-
-# ============================================================================
-# Cairo Rendering (High-Quality Text Rendering)
-# ============================================================================
-
-"""
-    render_cairo!(ctx::UIContext; width::Int=800, height::Int=600)
-
-Legacy compatibility wrapper for the removed Cairo backend. Delegates to
-`render!` using the default renderer.
-"""
-function render_cairo!(ctx::UIContext; width::Int=800, height::Int=600)
-    render!(ctx; width=width, height=height)
-end
-
-"""
-Generate Cairo render commands from the node tree.
-"""
-function generate_cairo_commands!(ctx::UIContext)
-    n = node_count(ctx.nodes)
-    if n == 0 || ctx.cairo_context === nothing
-        return
-    end
-    
-    # Compute layout
-    layout_x = zeros(Float32, n)
-    layout_y = zeros(Float32, n)
-    layout_w = zeros(Float32, n)
-    layout_h = zeros(Float32, n)
-    
-    # First pass: collect sizes from properties
-    for i in 1:n
-        if i <= length(ctx.properties.width)
-            layout_w[i] = ctx.properties.width[i]
-            layout_h[i] = ctx.properties.height[i]
-        end
-    end
-    
-    # Second pass: compute positions
-    compute_layout!(ctx, layout_x, layout_y, layout_w, layout_h)
-    
-    # Third pass: render using Cairo
-    for i in 1:n
-        node_type = ctx.nodes.node_types[i]
-        
-        # Render fill if present
-        if layout_w[i] > 0 && layout_h[i] > 0
-            if i <= length(ctx.properties.fill_a) && ctx.properties.fill_a[i] > 0
-                r = Float64(ctx.properties.fill_r[i]) / 255.0
-                g = Float64(ctx.properties.fill_g[i]) / 255.0
-                b = Float64(ctx.properties.fill_b[i]) / 255.0
-                a = Float64(ctx.properties.fill_a[i]) / 255.0
-                
-                # Get border radius if available
-                radius = 0.0
-                if i <= length(ctx.properties.round_tl)
-                    radius = Float64(ctx.properties.round_tl[i])
-                end
-                
-                render_rect!(ctx.cairo_context, 
-                            Float64(layout_x[i]), Float64(layout_y[i]),
-                            Float64(layout_w[i]), Float64(layout_h[i]),
-                            (r, g, b, a); radius=radius)
-            end
-        end
-        
-        # Render text for Span nodes
-        if node_type == NODE_SPAN
-            text_id = ctx.nodes.text_ids[i]
-            if text_id > 0 && text_id <= length(ctx.strings)
-                text = ctx.strings[text_id]
-                
-                # Get text color from properties (default black)
-                text_r = 0.0
-                text_g = 0.0
-                text_b = 0.0
-                text_a = 1.0
-                if i <= length(ctx.properties.text_color_a)
-                    text_r = Float64(ctx.properties.text_color_r[i]) / 255.0
-                    text_g = Float64(ctx.properties.text_color_g[i]) / 255.0
-                    text_b = Float64(ctx.properties.text_color_b[i]) / 255.0
-                    text_a = Float64(ctx.properties.text_color_a[i]) / 255.0
-                end
-                
-                # Get font size (default 16)
-                font_size = 16.0
-                if i <= length(ctx.properties.font_size) && ctx.properties.font_size[i] > 0
-                    font_size = Float64(ctx.properties.font_size[i])
-                end
-                
-                # Find parent position if not set
-                parent_id = ctx.nodes.parents[i]
-                text_x = Float64(layout_x[i])
-                text_y = Float64(layout_y[i])
-                
-                if parent_id > 0 && (layout_w[i] == 0 || layout_h[i] == 0)
-                    text_x = Float64(layout_x[parent_id])
-                    text_y = Float64(layout_y[parent_id])
-                    
-                    # Add inset
-                    if parent_id <= length(ctx.properties.inset_left)
-                        text_x += Float64(ctx.properties.inset_left[parent_id])
-                        text_y += Float64(ctx.properties.inset_top[parent_id])
-                    end
-                end
-                
-                render_text!(ctx.cairo_context, text, text_x, text_y + font_size,
-                            font_size=font_size, color=(text_r, text_g, text_b, text_a))
-            end
-        end
-        
-        # Render text for Paragraph nodes with children
-        if node_type == NODE_PARAGRAPH
-            _render_paragraph_text!(ctx, i, layout_x, layout_y)
-        end
-    end
-end
-
-"""
-Render text content for a Paragraph node.
-"""
-function _render_paragraph_text!(ctx::UIContext, para_id::Int, 
-                                  layout_x::Vector{Float32}, layout_y::Vector{Float32})
-    if ctx.cairo_context === nothing
-        return
-    end
-    
-    children = get_children(ctx.nodes, UInt32(para_id))
-    
-    para_x = Float64(layout_x[para_id])
-    para_y = Float64(layout_y[para_id])
-    
-    # Add inset
-    if para_id <= length(ctx.properties.inset_left)
-        para_x += Float64(ctx.properties.inset_left[para_id])
-        para_y += Float64(ctx.properties.inset_top[para_id])
-    end
-    
-    current_x = para_x
-    font_size = 16.0
-    
-    for child_id in children
-        if ctx.nodes.node_types[child_id] == NODE_SPAN
-            text_id = ctx.nodes.text_ids[child_id]
-            if text_id > 0 && text_id <= length(ctx.strings)
-                text = ctx.strings[text_id]
-                
-                render_text!(ctx.cairo_context, text, current_x, para_y + font_size,
-                            font_size=font_size, color=(0.0, 0.0, 0.0, 1.0))
-                
-                # Advance X position
-                text_width, _ = measure_text(ctx.cairo_context, text, font_size=font_size)
-                current_x += text_width
-            end
-        end
-    end
-end
-
-"""
-    render_to_png_cairo!(ctx::UIContext, filename::String; width::Int=800, height::Int=600)
-
-Compatibility wrapper for legacy Cairo export. Uses the default renderer and
-delegates to `render_to_png!`.
-"""
-function render_to_png_cairo!(ctx::UIContext, filename::String; width::Int=800, height::Int=600)
-    render_to_png!(ctx, filename; width=width, height=height)
-end
-
-"""
-    render_to_buffer_cairo(ctx::UIContext; width::Int=800, height::Int=600) -> Vector{UInt8}
-
-Compatibility wrapper for legacy Cairo buffer export. Uses the default renderer
-and delegates to `render_to_buffer`.
-"""
-function render_to_buffer_cairo(ctx::UIContext; width::Int=800, height::Int=600)::Vector{UInt8}
-    render_to_buffer(ctx; width=width, height=height)
-end
-
-export render_to_buffer_cairo
 
 # ============================================================================
 # Programmatic UI Builder

@@ -19,27 +19,21 @@ using DOPBrowser.Application
 """
 Run an interactive counter application with onscreen rendering.
 
-This example creates a real desktop window using the Gtk backend.
+This example creates a real desktop window using the Rust backend with winit.
 """
 function run_onscreen_counter()
     println("\n=== Onscreen Counter Example ===")
     
-    # Check if Gtk is available
-    if !Window.is_gtk_available()
-        println("Gtk is not available. Running in headless mode instead.")
-        return run_headless_demo()
-    end
-    
     # Create reactive state
     count = signal(0)
     
-    # Create application with Gtk backend for onscreen rendering
+    # Create application with Rust backend for onscreen rendering
     app = create_app(
         title = "Counter App",
         width = 400,
         height = 200,
         headless = false,
-        backend = :gtk
+        backend = :rust
     )
     
     # Define UI
@@ -69,10 +63,10 @@ function run_onscreen_counter()
 end
 
 """
-Run a headless demo as fallback when Gtk is not available.
+Run a headless demo as fallback.
 """
 function run_headless_demo()
-    println("\n=== Headless Demo (Gtk not available) ===")
+    println("\n=== Headless Demo ===")
     
     count = signal(0)
     
@@ -81,7 +75,7 @@ function run_headless_demo()
         width = 400,
         height = 200,
         headless = true,
-        backend = :cairo
+        backend = :rust
     )
     
     set_ui!(app) do
@@ -124,11 +118,6 @@ Run a simple todo list application with onscreen rendering.
 function run_todo_app()
     println("\n=== Todo List Application ===")
     
-    if !Window.is_gtk_available()
-        println("Gtk is not available. Skipping onscreen todo app.")
-        return
-    end
-    
     # Create store for todos
     todos = signal(String[])
     input_text = signal("")
@@ -138,7 +127,7 @@ function run_todo_app()
         width = 500,
         height = 400,
         headless = false,
-        backend = :gtk
+        backend = :rust
     )
     
     # Define UI
@@ -197,7 +186,7 @@ function main()
     # Check environment
     println("\nEnvironment:")
     println("  Julia version: $(VERSION)")
-    println("  Gtk available: $(Window.is_gtk_available())")
+    println("  Rust backend available: true")
     
     # Run examples
     run_onscreen_counter()

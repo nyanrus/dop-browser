@@ -54,7 +54,7 @@ using ..ContentMM.Properties: Color, parse_color, Direction,
 using ..ContentMM.Primitives: NodeTable, NodeType, create_node!, node_count,
                                NODE_ROOT, NODE_STACK, NODE_RECT, NODE_PARAGRAPH, NODE_SPAN
 using ..ContentMM.Properties: PropertyTable, resize_properties!, set_property!
-using ..ContentMM.NativeUI: UIContext, create_ui, render!, render_cairo!
+using ..ContentMM.NativeUI: UIContext, create_ui, render!
 
 export Widget, WidgetTree, WidgetProps
 export ContainerWidget, ButtonWidget, LabelWidget, TextInputWidget

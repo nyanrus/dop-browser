@@ -254,14 +254,14 @@ println("    ✓ Saved: contentmm_palette.png")
 println()
 
 # ============================================================================
-# Part 3: Cairo Rendering with Text (High-Quality)
+# Part 3: Text Rendering with Content--
 # ============================================================================
 
-println("Part 3: Cairo Rendering with Text (FreeTypeAbstraction)")
+println("Part 3: Text Rendering with Content--")
 println("-" ^ 40)
 
 # Example 1: Text in boxes
-println("  → Rendering: Text in colored boxes (Cairo)")
+println("  → Rendering: Text in colored boxes")
 ui_text_boxes = create_ui("""
 Stack(Direction: Down, Fill: #FFFFFF, Inset: 20, Gap: 15) {
     Rect(Size: (350, 80), Fill: #3498DB) {
@@ -271,15 +271,15 @@ Stack(Direction: Down, Fill: #FFFFFF, Inset: 20, Gap: 15) {
         Paragraph { Span(Text: "Content-- Text Format"); }
     }
     Rect(Size: (350, 80), Fill: #E74C3C) {
-        Paragraph { Span(Text: "Cairo + FreeType Rendering"); }
+        Paragraph { Span(Text: "Rust Renderer with winit"); }
     }
 }
 """)
-render_to_png_cairo!(ui_text_boxes, joinpath(OUTPUT_DIR, "cairo_text_boxes.png"), width=420, height=340)
-println("    ✓ Saved: cairo_text_boxes.png")
+render_to_png!(ui_text_boxes, joinpath(OUTPUT_DIR, "rust_text_boxes.png"), width=420, height=340)
+println("    ✓ Saved: rust_text_boxes.png")
 
 # Example 2: Multi-paragraph text
-println("  → Rendering: Multi-paragraph text (Cairo)")
+println("  → Rendering: Multi-paragraph text")
 ui_paragraphs = create_ui("""
 Stack(Direction: Down, Fill: #F8F9FA, Inset: 25, Gap: 20) {
     Rect(Size: (400, 50), Fill: #343A40) {
@@ -292,19 +292,19 @@ Stack(Direction: Down, Fill: #F8F9FA, Inset: 25, Gap: 20) {
         Span(Text: "The second paragraph demonstrates text flow."); 
     }
     Paragraph { 
-        Span(Text: "Cairo provides high-quality vector graphics."); 
+        Span(Text: "Rust provides high-quality native rendering."); 
     }
     Rect(Size: (400, 3), Fill: #DEE2E6);
     Paragraph { 
-        Span(Text: "FreeTypeAbstraction handles font rendering."); 
+        Span(Text: "winit handles cross-platform windowing."); 
     }
 }
 """)
-render_to_png_cairo!(ui_paragraphs, joinpath(OUTPUT_DIR, "cairo_paragraphs.png"), width=500, height=350)
-println("    ✓ Saved: cairo_paragraphs.png")
+render_to_png!(ui_paragraphs, joinpath(OUTPUT_DIR, "rust_paragraphs.png"), width=500, height=350)
+println("    ✓ Saved: rust_paragraphs.png")
 
 # Example 3: UI Card with text
-println("  → Rendering: UI Card design (Cairo)")
+println("  → Rendering: UI Card design")
 ui_card = create_ui("""
 Stack(Direction: Down, Fill: #ECEFF1, Inset: 30, Gap: 0) {
     Stack(Direction: Down, Fill: #FFFFFF, Inset: 20, Gap: 10, Round: 8) {
@@ -319,8 +319,8 @@ Stack(Direction: Down, Fill: #ECEFF1, Inset: 30, Gap: 0) {
     }
 }
 """)
-render_to_png_cairo!(ui_card, joinpath(OUTPUT_DIR, "cairo_card.png"), width=440, height=380)
-println("    ✓ Saved: cairo_card.png")
+render_to_png!(ui_card, joinpath(OUTPUT_DIR, "rust_card.png"), width=440, height=380)
+println("    ✓ Saved: rust_card.png")
 
 println()
 

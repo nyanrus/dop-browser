@@ -2242,23 +2242,7 @@ end
     end
     
     @testset "Backend Options" begin
-        # Test Gtk backend configuration
-        config_gtk = DOPBrowser.Window.WindowConfig(
-            title = "Gtk Window",
-            width = 800,
-            height = 600,
-            backend = :gtk
-        )
-        @test config_gtk.backend == :gtk
-        
-        # Test Cairo backend configuration
-        config_cairo = DOPBrowser.Window.WindowConfig(
-            title = "Cairo Window",
-            backend = :cairo
-        )
-        @test config_cairo.backend == :cairo
-        
-        # Test Rust backend configuration
+        # Test Rust backend configuration (default)
         config_rust = DOPBrowser.Window.WindowConfig(
             title = "Rust Window",
             backend = :rust

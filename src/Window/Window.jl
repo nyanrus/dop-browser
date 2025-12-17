@@ -10,9 +10,6 @@ the Content-- UI library to run as interactive desktop applications.
 - **rust** (default): Rust-based rendering using tiny-skia for software rendering
   and winit for window management
 
-Note: Gtk4 and Cairo backends have been removed. Use the RustRenderer module
-for production window management with wgpu and winit.
-
 ## Usage
 
 ### Offscreen Window for Testing
@@ -300,8 +297,6 @@ mutable struct WindowHandle
     event_queue::Vector{WindowEvent}
     # Backend-specific data
     backend_data::Any
-    # Cairo context (for Cairo backend)
-    cairo_context::Any
     # Framebuffer for software rendering
     framebuffer::Vector{UInt8}
     
@@ -328,7 +323,6 @@ mutable struct WindowHandle
             "",
             WindowEvent[],
             nothing,
-            nothing,
             UInt8[]
         )
     end
@@ -351,25 +345,12 @@ function create_window(config::WindowConfig = WindowConfig())::WindowHandle
         initialize_rust_backend!(handle)
     elseif config.backend == :software
         initialize_software_backend!(handle)
-    elseif config.backend == :gtk || config.backend == :cairo
-        # Gtk/Cairo removed - fall back to Rust rendering
-        @warn "Gtk/Cairo backend is no longer available. Using Rust backend instead." maxlog=1
-        initialize_rust_backend!(handle)
     else
         # Default to Rust backend
         initialize_rust_backend!(handle)
     end
     
     return handle
-end
-
-"""
-Initialize Gtk windowing backend for onscreen rendering.
-NOTE: Gtk4 support has been removed. This function now uses Rust backend.
-"""
-function initialize_gtk_backend!(handle::WindowHandle)
-    @warn "Gtk4 backend has been removed. Using Rust backend instead." maxlog=1
-    initialize_rust_backend!(handle)
 end
 
 """
@@ -396,56 +377,6 @@ function initialize_rust_backend!(handle::WindowHandle)
     end
     
     # Fall back to software backend
-    initialize_software_backend!(handle)
-end
-
-"""
-Convert Gtk modifier state to our modifier flags.
-NOTE: Kept for API compatibility but not used with software backend.
-"""
-function _gtk_state_to_modifiers(state)::UInt8
-    mods = MOD_NONE
-    # Gtk4 modifier masks
-    if (state & 0x01) != 0  # Shift
-        mods |= MOD_SHIFT
-    end
-    if (state & 0x04) != 0  # Control
-        mods |= MOD_CTRL
-    end
-    if (state & 0x08) != 0  # Alt/Mod1
-        mods |= MOD_ALT
-    end
-    if (state & 0x40) != 0  # Super/Mod4
-        mods |= MOD_SUPER
-    end
-    return mods
-end
-
-"""
-Convert Gtk button number to MouseButton enum.
-"""
-function _gtk_button_to_mouse_button(gtk_button::Integer)::MouseButton
-    if gtk_button == 1
-        return MOUSE_LEFT
-    elseif gtk_button == 2
-        return MOUSE_MIDDLE
-    elseif gtk_button == 3
-        return MOUSE_RIGHT
-    elseif gtk_button == 4
-        return MOUSE_X1
-    elseif gtk_button == 5
-        return MOUSE_X2
-    else
-        return MOUSE_LEFT
-    end
-end
-
-"""
-Initialize Cairo rendering backend.
-NOTE: Cairo has been replaced with software rendering.
-"""
-function initialize_cairo_backend!(handle::WindowHandle)
-    # Cairo removed - use software backend
     initialize_software_backend!(handle)
 end
 
@@ -480,7 +411,6 @@ function destroy!(handle::WindowHandle)
     end
     
     handle.backend_data = nothing
-    handle.cairo_context = nothing
     empty!(handle.framebuffer)
     empty!(handle.event_queue)
 end
@@ -898,7 +828,7 @@ export save_screenshot
     is_gtk_available() -> Bool
 
 Check if Gtk backend is available.
-NOTE: Gtk4 has been removed. This function always returns false.
+NOTE: Gtk4 has been removed. This function always returns false for backward compatibility.
 """
 function is_gtk_available()::Bool
     return false

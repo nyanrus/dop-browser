@@ -169,7 +169,7 @@ function create_app(;
                     resizable::Bool = true,
                     vsync::Bool = true,
                     headless::Bool = false,
-                    backend::Symbol = :cairo)
+                    backend::Symbol = :rust)
     config = WindowConfig(
         title = title,
         width = width,
