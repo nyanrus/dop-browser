@@ -1,0 +1,22 @@
+[package]
+name = "dop-renderer"
+version = "0.1.0"
+edition = "2021"
+description = "Rust-based rendering engine for DOP Browser using winit and wgpu"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+winit = "0.30.0"
+wgpu = "23.0.0"
+raw-window-handle = "0.6.2"
+pollster = "0.4.0"
+bytemuck = { version = "1.16.0", features = ["derive"] }
+log = "0.4.21"
+env_logger = "0.11.3"
+
+[profile.release]
+lto = true
+opt-level = 3

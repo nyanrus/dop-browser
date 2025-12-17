@@ -1597,6 +1597,198 @@ end
 end
 
 # ============================================================================
+# Rust Renderer Tests
+# ============================================================================
+
+@testset "Rust Renderer" begin
+    
+    @testset "Library Availability" begin
+        # Check if the Rust library is available
+        is_avail = DOPBrowser.RustRenderer.is_available()
+        @test is_avail isa Bool
+        
+        if is_avail
+            @info "Rust renderer library is available"
+            
+            # Get library version
+            version = DOPBrowser.RustRenderer.get_version()
+            @test version == "0.1.0"
+        else
+            @warn "Rust renderer library not found - skipping renderer tests"
+        end
+    end
+    
+    if DOPBrowser.RustRenderer.is_available()
+        @testset "Headless Renderer Creation" begin
+            renderer = DOPBrowser.RustRenderer.create_renderer(200, 150)
+            @test renderer.is_valid == true
+            @test renderer.width == 200
+            @test renderer.height == 150
+            
+            # Cleanup
+            DOPBrowser.RustRenderer.destroy!(renderer)
+            @test renderer.is_valid == false
+        end
+        
+        @testset "Renderer Clear Color" begin
+            renderer = DOPBrowser.RustRenderer.create_renderer(100, 100)
+            
+            # Set clear color to red
+            DOPBrowser.RustRenderer.set_clear_color!(renderer, 1.0, 0.0, 0.0, 1.0)
+            
+            # Get framebuffer - should be all red
+            buffer = DOPBrowser.RustRenderer.get_framebuffer(renderer)
+            
+            @test length(buffer) == 100 * 100 * 4  # RGBA
+            
+            # First pixel should be red
+            @test buffer[1] == 255  # R
+            @test buffer[2] == 0    # G
+            @test buffer[3] == 0    # B
+            @test buffer[4] == 255  # A
+            
+            DOPBrowser.RustRenderer.destroy!(renderer)
+        end
+        
+        @testset "Renderer Add Rect" begin
+            renderer = DOPBrowser.RustRenderer.create_renderer(100, 100)
+            
+            # Set white background
+            DOPBrowser.RustRenderer.set_clear_color!(renderer, 1.0, 1.0, 1.0, 1.0)
+            
+            # Add a blue rectangle
+            DOPBrowser.RustRenderer.add_rect!(renderer, 
+                10.0, 10.0, 50.0, 50.0,  # x, y, width, height
+                0.0, 0.0, 1.0, 1.0)      # RGBA
+            
+            # Render
+            DOPBrowser.RustRenderer.render!(renderer)
+            
+            # Get framebuffer
+            buffer = DOPBrowser.RustRenderer.get_framebuffer(renderer)
+            
+            # Check a pixel inside the rectangle (e.g., at 25, 25)
+            idx = ((25 * 100) + 25) * 4 + 1
+            @test buffer[idx] == 0      # R
+            @test buffer[idx + 1] == 0  # G
+            @test buffer[idx + 2] == 255  # B
+            @test buffer[idx + 3] == 255  # A
+            
+            # Check a pixel outside the rectangle (e.g., at 0, 0)
+            @test buffer[1] == 255    # R (white)
+            @test buffer[2] == 255    # G (white)
+            @test buffer[3] == 255    # B (white)
+            
+            DOPBrowser.RustRenderer.destroy!(renderer)
+        end
+        
+        @testset "Renderer Clear Commands" begin
+            renderer = DOPBrowser.RustRenderer.create_renderer(100, 100)
+            
+            # Set white background
+            DOPBrowser.RustRenderer.set_clear_color!(renderer, 1.0, 1.0, 1.0, 1.0)
+            
+            # Add a rectangle
+            DOPBrowser.RustRenderer.add_rect!(renderer, 
+                10.0, 10.0, 50.0, 50.0, 
+                0.0, 0.0, 1.0, 1.0)
+            
+            # Clear commands
+            DOPBrowser.RustRenderer.clear!(renderer)
+            
+            # Render - should have no rectangles
+            DOPBrowser.RustRenderer.render!(renderer)
+            
+            # Get framebuffer - should be all white
+            buffer = DOPBrowser.RustRenderer.get_framebuffer(renderer)
+            
+            # Check a pixel that would have been in the rectangle
+            idx = ((25 * 100) + 25) * 4 + 1
+            @test buffer[idx] == 255    # R (white)
+            @test buffer[idx + 1] == 255  # G (white)
+            @test buffer[idx + 2] == 255  # B (white)
+            
+            DOPBrowser.RustRenderer.destroy!(renderer)
+        end
+        
+        @testset "Renderer Resize" begin
+            renderer = DOPBrowser.RustRenderer.create_renderer(100, 100)
+            
+            @test renderer.width == 100
+            @test renderer.height == 100
+            
+            # Resize
+            DOPBrowser.RustRenderer.renderer_resize!(renderer, 200, 150)
+            
+            @test renderer.width == 200
+            @test renderer.height == 150
+            
+            # Check framebuffer size
+            size = DOPBrowser.RustRenderer.get_framebuffer_size(renderer)
+            @test size == 200 * 150 * 4
+            
+            DOPBrowser.RustRenderer.destroy!(renderer)
+        end
+        
+        @testset "Renderer Z-Index Ordering" begin
+            renderer = DOPBrowser.RustRenderer.create_renderer(100, 100)
+            
+            # Set white background
+            DOPBrowser.RustRenderer.set_clear_color!(renderer, 1.0, 1.0, 1.0, 1.0)
+            
+            # Add blue rectangle at z-index 0
+            DOPBrowser.RustRenderer.add_rect!(renderer, 
+                20.0, 20.0, 60.0, 60.0, 
+                0.0, 0.0, 1.0, 1.0,
+                z_index=0)
+            
+            # Add red rectangle at z-index 1 (on top)
+            DOPBrowser.RustRenderer.add_rect!(renderer, 
+                40.0, 40.0, 40.0, 40.0, 
+                1.0, 0.0, 0.0, 1.0,
+                z_index=1)
+            
+            # Render
+            DOPBrowser.RustRenderer.render!(renderer)
+            
+            # Get framebuffer
+            buffer = DOPBrowser.RustRenderer.get_framebuffer(renderer)
+            
+            # Check pixel at center (50, 50) - should be red (on top)
+            idx = ((50 * 100) + 50) * 4 + 1
+            @test buffer[idx] == 255      # R (red)
+            @test buffer[idx + 1] == 0    # G
+            @test buffer[idx + 2] == 0    # B
+            
+            # Check pixel at corner of blue rect (25, 25) - should be blue
+            idx = ((25 * 100) + 25) * 4 + 1
+            @test buffer[idx] == 0        # R
+            @test buffer[idx + 1] == 0    # G
+            @test buffer[idx + 2] == 255  # B (blue)
+            
+            DOPBrowser.RustRenderer.destroy!(renderer)
+        end
+        
+        @testset "Window Handle Creation" begin
+            window = DOPBrowser.RustRenderer.create_window(width=640, height=480)
+            @test window.is_valid == true
+            
+            # Check is_open
+            @test DOPBrowser.RustRenderer.is_open(window) == true
+            
+            # Close
+            DOPBrowser.RustRenderer.close!(window)
+            @test DOPBrowser.RustRenderer.is_open(window) == false
+            
+            # Cleanup
+            DOPBrowser.RustRenderer.destroy!(window)
+            @test window.is_valid == false
+        end
+    end
+
+end
+
+# ============================================================================
 # Interactive UI Library Tests
 # ============================================================================
 

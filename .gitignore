@@ -1,0 +1,23 @@
+# Julia artifacts
+Manifest.toml
+*.jl.cov
+*.jl.mem
+
+# Rust build artifacts
+rust/*/target/
+rust/**/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+*.png
+!scripts/reference_*.png
