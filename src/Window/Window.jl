@@ -465,6 +465,20 @@ Destroy a window and release its resources.
 """
 function destroy!(handle::WindowHandle)
     handle.is_open = false
+    
+    # Clean up Rust renderer if present
+    if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+        try
+            RustRenderer = @eval begin
+                import ...RustRenderer as RR
+                RR
+            end
+            RustRenderer.destroy!(handle.backend_data[2])
+        catch
+            # Ignore cleanup errors
+        end
+    end
+    
     handle.backend_data = nothing
     handle.cairo_context = nothing
     empty!(handle.framebuffer)
@@ -581,7 +595,19 @@ export inject_event!
 Resize the backend buffers when window size changes.
 """
 function resize_backend!(handle::WindowHandle)
-    if handle.backend_data == :software
+    if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+        try
+            RustRenderer = @eval begin
+                import ...RustRenderer as RR
+                RR
+            end
+            RustRenderer.renderer_resize!(handle.backend_data[2], handle.width, handle.height)
+            resize!(handle.framebuffer, handle.width * handle.height * 4)
+            fill!(handle.framebuffer, 0)
+        catch e
+            @warn "Failed to resize Rust backend" exception=e
+        end
+    elseif handle.backend_data == :software
         resize!(handle.framebuffer, handle.width * handle.height * 4)
         fill!(handle.framebuffer, 0)
     end
@@ -722,8 +748,66 @@ export is_key_pressed, is_mouse_button_pressed, get_mouse_position, get_modifier
 Render the UI context to the window.
 """
 function render!(handle::WindowHandle, ui_context)
-    # Always use software rendering
-    render_software!(handle, ui_context)
+    # Check backend type
+    if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+        render_rust!(handle, ui_context)
+    else
+        render_software!(handle, ui_context)
+    end
+end
+
+"""
+Render using Rust backend (tiny-skia software rendering).
+"""
+function render_rust!(handle::WindowHandle, ui_context)
+    try
+        RustRenderer = @eval begin
+            import ...RustRenderer as RR
+            RR
+        end
+        
+        if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+            renderer = handle.backend_data[2]
+            
+            # Clear the renderer
+            RustRenderer.clear!(renderer)
+            RustRenderer.set_clear_color!(renderer, 1.0f0, 1.0f0, 1.0f0, 1.0f0)
+            
+            # Try to get render commands from the UI context
+            try
+                NativeUI = @eval begin
+                    import ...ContentMM.NativeUI as NUI
+                    NUI
+                end
+                
+                # If ui_context has command buffer, render those commands
+                if hasproperty(ui_context, :command_buffer)
+                    commands = NativeUI.get_commands(ui_context.command_buffer)
+                    for cmd in commands
+                        RustRenderer.add_rect!(renderer, 
+                            Float32(cmd.x), Float32(cmd.y), 
+                            Float32(cmd.width), Float32(cmd.height),
+                            Float32(cmd.color_r), Float32(cmd.color_g), 
+                            Float32(cmd.color_b), Float32(cmd.color_a))
+                    end
+                end
+            catch
+                # Ignore if NativeUI is not available
+            end
+            
+            # Render
+            RustRenderer.render!(renderer)
+            
+            # Copy framebuffer
+            buffer = RustRenderer.get_framebuffer(renderer)
+            if length(buffer) == length(handle.framebuffer)
+                copyto!(handle.framebuffer, buffer)
+            end
+        end
+    catch e
+        @warn "Rust rendering failed, falling back to software" exception=e
+        render_software!(handle, ui_context)
+    end
 end
 
 """

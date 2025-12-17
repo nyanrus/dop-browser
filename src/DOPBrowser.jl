@@ -75,9 +75,6 @@ include("Compiler/Compiler.jl")
 # Event Loop module
 include("EventLoop/EventLoop.jl")
 
-# DEPRECATED: Rendering pipeline (for backward compatibility only)
-include("Renderer/Renderer.jl")
-
 # Content-- IR modules
 include("ContentMM/ContentMM.jl")
 
@@ -169,15 +166,11 @@ export ContentMM
 using .Network
 export Network
 
-# Rendering pipeline
-using .Renderer
-export Renderer
-
 # Interactive UI Library Modules
 using .Window
 export Window
 
-# Rust-based rendering (winit + wgpu)
+# Rust-based rendering (winit + wgpu + tiny-skia)
 using .RustRenderer
 export RustRenderer
 
@@ -228,8 +221,12 @@ mutable struct Browser
     # Networking
     network::Network.NetworkContext
     
-    # Rendering
-    render_pipeline::Renderer.RenderPipeline
+    # Rust Renderer handle
+    renderer::RustRenderer.RustRendererHandle
+    
+    # Dimensions
+    width::UInt32
+    height::UInt32
     
     # JS interface
     js_interface::ContentMM.Runtime.JSInterface
@@ -243,10 +240,10 @@ mutable struct Browser
         ctx = create_context(viewport_width=Float32(width), viewport_height=Float32(height))
         runtime = ContentMM.Runtime.RuntimeContext(Float32(width), Float32(height))
         network = Network.NetworkContext()
-        pipeline = Renderer.RenderPipeline(width, height)
+        renderer = RustRenderer.create_renderer(Int(width), Int(height))
         js = ContentMM.Runtime.JSInterface(runtime)
         
-        new(ctx, runtime, network, pipeline, js, "", "", false)
+        new(ctx, runtime, network, renderer, width, height, js, "", "", false)
     end
 end
 
@@ -329,14 +326,28 @@ export load_html!
 """
     render!(browser::Browser)
 
-Render the current document.
+Render the current document using the Rust renderer.
 """
 function render!(browser::Browser)
     # Update runtime
     ContentMM.Runtime.update!(browser.runtime, 0.016f0)  # ~60fps
     
-    # Render to pipeline
-    Renderer.render_frame!(browser.render_pipeline, browser.context.render_buffer)
+    # Clear renderer
+    RustRenderer.clear!(browser.renderer)
+    RustRenderer.set_clear_color!(browser.renderer, 1.0f0, 1.0f0, 1.0f0, 1.0f0)
+    
+    # Get render commands and submit to Rust renderer
+    cmds = get_commands(browser.context.render_buffer)
+    for cmd in cmds
+        RustRenderer.add_rect!(browser.renderer,
+            Float32(cmd.x), Float32(cmd.y), 
+            Float32(cmd.width), Float32(cmd.height),
+            Float32(cmd.color_r), Float32(cmd.color_g), 
+            Float32(cmd.color_b), Float32(cmd.color_a))
+    end
+    
+    # Render
+    RustRenderer.render!(browser.renderer)
 end
 
 export render!
@@ -344,11 +355,11 @@ export render!
 """
     render_to_png!(browser::Browser, filename::String)
 
-Render and export to PNG.
+Render and export to PNG using Rust renderer.
 """
 function render_to_png!(browser::Browser, filename::String)
     render!(browser)
-    Renderer.export_png!(browser.render_pipeline, filename)
+    RustRenderer.export_png!(browser.renderer, filename)
 end
 
 export render_to_png!
@@ -356,11 +367,11 @@ export render_to_png!
 """
     get_png_data(browser::Browser) -> Vector{UInt8}
 
-Render and get PNG data as bytes.
+Render and get framebuffer data as bytes.
 """
 function get_png_data(browser::Browser)::Vector{UInt8}
     render!(browser)
-    return Renderer.get_png_data(browser.render_pipeline)
+    return RustRenderer.get_framebuffer(browser.renderer)
 end
 
 export get_png_data
@@ -375,7 +386,9 @@ function set_viewport!(browser::Browser, width::UInt32, height::UInt32)
     browser.context.viewport_height = Float32(height)
     browser.runtime.viewport_width = Float32(width)
     browser.runtime.viewport_height = Float32(height)
-    Renderer.resize!(browser.render_pipeline, width, height)
+    browser.width = width
+    browser.height = height
+    RustRenderer.renderer_resize!(browser.renderer, Int(width), Int(height))
 end
 
 export set_viewport!
