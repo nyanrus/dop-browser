@@ -383,7 +383,7 @@ end
     render_cairo!(ctx::UIContext; width::Int=800, height::Int=600)
 
 Legacy compatibility wrapper for the removed Cairo backend. Delegates to
-[`render!`] using the default renderer.
+`render!` using the default renderer.
 """
 function render_cairo!(ctx::UIContext; width::Int=800, height::Int=600)
     render!(ctx; width=width, height=height)
@@ -536,7 +536,7 @@ end
     render_to_png_cairo!(ctx::UIContext, filename::String; width::Int=800, height::Int=600)
 
 Compatibility wrapper for legacy Cairo export. Uses the default renderer and
-delegates to [`render_to_png!`].
+delegates to `render_to_png!`.
 """
 function render_to_png_cairo!(ctx::UIContext, filename::String; width::Int=800, height::Int=600)
     render_to_png!(ctx, filename; width=width, height=height)
@@ -546,7 +546,7 @@ end
     render_to_buffer_cairo(ctx::UIContext; width::Int=800, height::Int=600) -> Vector{UInt8}
 
 Compatibility wrapper for legacy Cairo buffer export. Uses the default renderer
-and delegates to [`render_to_buffer`].
+and delegates to `render_to_buffer`.
 """
 function render_to_buffer_cairo(ctx::UIContext; width::Int=800, height::Int=600)::Vector{UInt8}
     render_to_buffer(ctx; width=width, height=height)
