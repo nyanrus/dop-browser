@@ -393,6 +393,8 @@ Key features:
 - Full Unicode operator support for mathematical expressiveness
 - Backward compatible with ASCII function names
 
+📖 **See [docs/MATH_REFACTORING.md](docs/MATH_REFACTORING.md) for detailed migration guide and performance benefits.**
+
 ### ContentMM.Primitives
 Content-- node types: Stack, Grid, Scroll, Rect, Paragraph, Span, Link, TextCluster.
 
