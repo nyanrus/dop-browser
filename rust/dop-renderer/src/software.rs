@@ -8,7 +8,24 @@ use tiny_skia::{Color, Paint, PathBuilder, Pixmap, Rect, Transform};
 use crate::renderer::RenderCommand;
 use crate::text::FontManager;
 
-/// Software renderer using tiny-skia
+/// Software renderer using tiny-skia for CPU-based 2D rendering.
+///
+/// This renderer provides a complete software rasterization pipeline that:
+/// - Uses tiny-skia's Pixmap as the backing framebuffer
+/// - Accumulates render commands (rectangles, text) in a vector
+/// - Sorts by z-index and rasterizes on `render()` call
+/// - Supports alpha blending and anti-aliasing
+///
+/// # Lifecycle
+/// 1. Create with `new(width, height)`
+/// 2. Configure with `set_clear_color()`
+/// 3. Add commands with `add_rect()` and `add_text()`
+/// 4. Call `render()` to rasterize all commands
+/// 5. Access results via `get_framebuffer()` or `export_png()`
+/// 6. Call `clear()` between frames
+///
+/// # Thread Safety
+/// This renderer is NOT thread-safe. Use from a single thread only.
 pub struct SoftwareRenderer {
     pixmap: Pixmap,
     width: u32,
@@ -34,15 +51,24 @@ pub struct TextCommand {
 }
 
 impl SoftwareRenderer {
-    /// Create a new software renderer with the given dimensions
+    /// Create a new software renderer with the given dimensions.
+    /// 
+    /// # Arguments
+    /// * `width` - Width of the framebuffer (minimum 1)
+    /// * `height` - Height of the framebuffer (minimum 1)
+    /// 
+    /// # Panics
+    /// Panics if the pixmap cannot be created (e.g., out of memory for large dimensions).
     pub fn new(width: u32, height: u32) -> Self {
-        let pixmap = Pixmap::new(width.max(1), height.max(1))
-            .expect("Failed to create pixmap");
+        let w = width.max(1);
+        let h = height.max(1);
+        let pixmap = Pixmap::new(w, h)
+            .unwrap_or_else(|| panic!("Failed to create {}x{} pixmap - check memory availability", w, h));
         
         Self {
             pixmap,
-            width: width.max(1),
-            height: height.max(1),
+            width: w,
+            height: h,
             commands: Vec::new(),
             text_commands: Vec::new(),
             clear_color: (255, 255, 255, 255), // White by default
@@ -111,23 +137,20 @@ impl SoftwareRenderer {
         // Sort commands by z-index
         self.commands.sort_by_key(|c| c.z_index);
 
-        // Clone commands to iterate over them
-        let commands: Vec<RenderCommand> = self.commands.clone();
-
-        // Render each rectangle
-        for cmd in &commands {
-            self.render_rect(cmd);
+        // Render each rectangle (iterate by reference to avoid clone)
+        for cmd in &self.commands {
+            self.render_rect_internal(cmd);
         }
 
         // Render text commands
-        let text_commands: Vec<TextCommand> = self.text_commands.clone();
-        for text_cmd in &text_commands {
+        for i in 0..self.text_commands.len() {
+            let text_cmd = self.text_commands[i].clone();
             self.render_text(&text_cmd);
         }
     }
 
-    /// Render a single rectangle command
-    fn render_rect(&mut self, cmd: &RenderCommand) {
+    /// Internal rectangle rendering (takes reference)
+    fn render_rect_internal(&mut self, cmd: &RenderCommand) {
         if cmd.width <= 0.0 || cmd.height <= 0.0 {
             return;
         }
