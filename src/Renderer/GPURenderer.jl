@@ -3,6 +3,9 @@
 
 WebGPU-based GPU rendering for Content--.
 
+For high-performance GPU rendering, consider using RustRenderer which provides
+Rust-based rendering via winit/wgpu.
+
 ## Features
 - Direct render command buffer upload
 - Efficient batching for minimal draw calls

@@ -8,6 +8,9 @@ This module integrates:
 - PNGExport: Lossless PNG image export
 - CairoRenderer: Cairo-based native rendering with text support
 - RenderPipeline: Orchestrates the full render pass
+
+For high-performance GPU rendering, consider using RustRenderer which provides
+Rust-based rendering via winit/wgpu.
 """
 module Renderer
 

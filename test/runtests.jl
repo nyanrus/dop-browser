@@ -2841,3 +2841,132 @@ end
     end
 
 end
+
+# ============================================================================
+# Simplified Pipeline Tests
+# ============================================================================
+
+@testset "Simplified Pipeline" begin
+    
+    @testset "Basic Parsing" begin
+        using DOPBrowser.Pipeline
+        
+        html = "<div style=\"width: 100px; height: 50px;\"></div>"
+        doc = parse_doc(html)
+        
+        @test length(doc.node_types) >= 2  # Root + div
+        @test doc.layout_computed == false
+    end
+    
+    @testset "Layout Computation" begin
+        using DOPBrowser.Pipeline
+        
+        html = "<div style=\"width: 100px; height: 50px;\"></div>"
+        doc = parse_doc(html)
+        doc = layout(doc, viewport=(800, 600))
+        
+        @test doc.layout_computed == true
+        @test doc.viewport.x == 800.0f0
+        @test doc.viewport.y == 600.0f0
+        
+        # Check div size
+        @test doc.sizes[2].x == 100.0f0
+        @test doc.sizes[2].y == 50.0f0
+    end
+    
+    @testset "Render Commands" begin
+        using DOPBrowser.Pipeline
+        
+        html = "<div style=\"width: 100px; height: 50px; background-color: red;\"></div>"
+        doc = parse_doc(html)
+        doc = layout(doc, viewport=(200, 100))
+        buffer = render(doc)
+        
+        @test length(buffer.commands) >= 1  # At least the div
+        
+        # Check first command is a red rectangle
+        cmd = buffer.commands[1]
+        @test cmd[3] == 100.0f0  # width
+        @test cmd[4] == 50.0f0   # height
+        @test cmd[5] == 1.0f0    # red
+        @test cmd[6] == 0.0f0    # green
+        @test cmd[7] == 0.0f0    # blue
+    end
+    
+    @testset "PNG Generation" begin
+        using DOPBrowser.Pipeline
+        
+        html = "<div style=\"width: 50px; height: 50px; background-color: blue;\"></div>"
+        doc = parse_doc(html)
+        doc = layout(doc, viewport=(100, 100))
+        buffer = render(doc)
+        png_data = to_png(buffer)
+        
+        @test length(png_data) > 0
+        # Check PNG signature
+        @test png_data[1:8] == UInt8[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    end
+    
+    @testset "Pipeline Composition" begin
+        using DOPBrowser.Pipeline
+        
+        html = "<div style=\"width: 100px; height: 100px; background-color: green;\"></div>"
+        
+        # Test with_viewport function
+        layout_fn = with_viewport((400, 300))
+        doc = html |> parse_doc |> layout_fn
+        
+        @test doc.viewport.x == 400.0f0
+        @test doc.viewport.y == 300.0f0
+        @test doc.layout_computed == true
+    end
+    
+    @testset "render_html Convenience" begin
+        using DOPBrowser.Pipeline
+        
+        html = "<div style=\"width: 50px; height: 50px; background-color: red;\"></div>"
+        png_data = render_html(html, viewport=(100, 100))
+        
+        @test length(png_data) > 0
+        # Check PNG signature
+        @test png_data[1:8] == UInt8[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    end
+    
+    @testset "Hit Testing" begin
+        using DOPBrowser.Pipeline
+        using DOPBrowser.ContentMM.MathOps: vec2
+        
+        html = "<div style=\"width: 100px; height: 50px;\"></div>"
+        doc = parse_doc(html)
+        doc = layout(doc, viewport=(400, 300))
+        
+        # Test hit within div
+        hit = hit_test(doc, vec2(50.0f0, 25.0f0))
+        @test hit !== nothing
+        @test hit == 2  # The div
+        
+        # Test hit outside
+        hit = hit_test(doc, vec2(200.0f0, 100.0f0))
+        @test hit === nothing
+    end
+    
+    @testset "Math-Style Accessors" begin
+        using DOPBrowser.Pipeline
+        using DOPBrowser.Pipeline: position, bounds
+        
+        html = "<div style=\"width: 100px; height: 50px;\"></div>"
+        doc = parse_doc(html)
+        doc = layout(doc, viewport=(400, 300))
+        
+        # Test position accessor
+        pos = position(doc, 2)
+        @test pos.x == 0.0f0
+        @test pos.y == 0.0f0
+        
+        # Test bounds accessor
+        (p, s) = bounds(doc, 2)
+        @test s.x == 100.0f0
+        @test s.y == 50.0f0
+    end
+
+end

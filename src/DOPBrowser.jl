@@ -80,6 +80,13 @@ include("Network/Network.jl")
 include("Core.jl")
 
 # =============================================================================
+# Simplified Functional Pipeline
+# =============================================================================
+
+# FP-style pipeline for Content-- → Rendering → Interaction
+include("Pipeline/Pipeline.jl")
+
+# =============================================================================
 # Interactive UI Library Modules (Production-Ready)
 # =============================================================================
 
@@ -184,6 +191,10 @@ export Widgets
 
 using .Application
 export Application
+
+# Simplified Pipeline module
+using .Pipeline
+export Pipeline
 
 # Export modules for direct access
 export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
