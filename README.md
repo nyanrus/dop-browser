@@ -4,6 +4,47 @@ A **Data-Oriented Programming (DOP)** browser engine base implementation in Juli
 
 This project provides a render-friendly Intermediate Representation (IR) that replaces traditional DOM & CSSOM with cache-efficient, SIMD-friendly data structures.
 
+## Simplified Pipeline (FP-Style)
+
+DOPBrowser now includes a **simplified functional programming-style Pipeline** for the Content-- → Rendering → Interaction flow:
+
+```julia
+using DOPBrowser.Pipeline
+
+# One-liner: HTML to PNG
+html = "<div style='width: 100px; height: 50px; background: red'></div>"
+png_data = html |> parse_doc |> layout |> render |> to_png
+
+# Step by step with viewport customization
+doc = parse_doc(html)
+doc = layout(doc, viewport=(1920, 1080))
+buffer = render(doc)
+save_png(buffer, "output.png")
+
+# Convenience function
+png = render_html("<div style='background: blue; width: 100px; height: 100px'></div>")
+
+# Curried composition with viewport
+layout_hd = with_viewport((1920, 1080))
+png = html |> parse_doc |> layout_hd |> render |> to_png
+```
+
+### Interaction
+
+```julia
+using DOPBrowser.Pipeline
+using DOPBrowser.ContentMM.MathOps: vec2
+
+# Hit testing
+doc = parse_doc("<div style='width: 100px; height: 50px'></div>") |> layout
+node_id = hit_test(doc, vec2(50.0f0, 25.0f0))  # Returns 2 (the div)
+
+# Math-style accessors
+using DOPBrowser.Pipeline: position, bounds
+pos = position(doc, 2)     # Vec2(0, 0)
+(p, s) = bounds(doc, 2)    # (Vec2(0,0), Vec2(100, 50))
+```
+
 ## Interactive UI Library
 
 DOPBrowser now includes a **production-ready interactive UI framework** that can be used to build native desktop applications. The framework provides:
@@ -109,6 +150,7 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 
 | Module | Purpose |
 |--------|---------|
+| **Pipeline** | Simplified FP-style pipeline (parse_doc → layout → render → to_png) |
 | **HTMLParser** | HTML tokenization and string interning |
 | **CSSParserModule** | CSS parsing and style computation |
 | **Layout** | SIMD-friendly layout calculation |
@@ -122,8 +164,21 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 | **State** | Reactive state management |
 | **Widgets** | High-level UI components |
 | **Application** | Application lifecycle management |
+| **RustParser** | Rust-based HTML/CSS parser (high-performance alternative) |
+| **RustRenderer** | Rust-based GPU renderer via wgpu (high-performance alternative) |
 
 See [docs/MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md) for detailed information about the module structure.
+
+### Rust vs Julia Implementations
+
+For production use, prefer the Rust-based implementations when available:
+- **RustParser**: Uses html5ever and cssparser crates for standards-compliant parsing
+- **RustRenderer**: Uses winit/wgpu for GPU-accelerated rendering
+
+The Julia implementations (HTMLParser, CSSParserModule, Renderer) are provided for:
+- Rapid prototyping and experimentation
+- Environments where Rust libraries are not available
+- Educational purposes
 
 ## Acid2 Test Support
 

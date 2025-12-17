@@ -55,8 +55,7 @@ using ..ContentMM.MathOps: Vec2, Box4, vec2, box4
 
 export Document, RenderBuffer
 export parse_doc, layout, render, to_png, save_png
-export with_viewport, with_style
-export |>, ∘
+export with_viewport, render_html
 
 # ============================================================================
 # Core Types (Immutable where possible for FP purity)
@@ -227,18 +226,26 @@ function parse_doc(html::AbstractString)::Document
             push!(heights, 0.0f0)
             push!(bg_colors, (0x00, 0x00, 0x00, 0x00))
             
-            if parent_id > 0 && first_children[parent_id] == 0
-                first_children[parent_id] = new_id
+            # Link to parent (same logic as start tags)
+            if parent_id > 0
+                if first_children[parent_id] == 0
+                    first_children[parent_id] = new_id
+                else
+                    # Find last sibling
+                    sibling = first_children[parent_id]
+                    while next_siblings[sibling] != 0
+                        sibling = next_siblings[sibling]
+                    end
+                    next_siblings[sibling] = new_id
+                end
             end
         end
         
         i += 1
     end
     
-    # Collect strings
-    for sid in 1:length(pool.strings)
-        push!(strings, pool.strings[sid])
-    end
+    # Collect strings (copy from pool)
+    strings = copy(pool.strings)
     
     # Initialize positions and sizes
     n = length(node_types)
