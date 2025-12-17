@@ -321,7 +321,7 @@ function label(; text = "",
                color::String = "#000000",
                kwargs...)
     props = WidgetProps(; kwargs...)
-    lbl = LabelWidget(; text=text, font_size=Float32(font_size), font_weight=font_weight,
+    lbl = LabelWidget(; text=text, font_size=font_size, font_weight=font_weight,
                        color=color, props=props)
     _add_to_parent(lbl)
     return lbl
@@ -493,7 +493,7 @@ function slider(; value::Union{Number, Signal{Float32}} = 0.0f0,
                 on_change::Union{Function, Nothing} = nothing,
                 kwargs...)
     props = WidgetProps(; kwargs...)
-    s = SliderWidget(; value=value, min=Float32(min), max=Float32(max), step=Float32(step),
+    s = SliderWidget(; value=value, min=min, max=max, step=step,
                      on_change=on_change, props=props)
     _add_to_parent(s)
     return s
@@ -546,8 +546,7 @@ function progress_bar(; value::Union{Real, Signal{Float32}} = 0.0f0,
                       color::String = "#2196F3",
                       kwargs...)
     props = WidgetProps(; kwargs...)
-    val = value isa Signal{Float32} ? value : Float32(value)
-    pb = ProgressBarWidget(; value=val, max=Float32(max), indeterminate=indeterminate,
+    pb = ProgressBarWidget(; value=value, max=max, indeterminate=indeterminate,
                            color=color, props=props)
     _add_to_parent(pb)
     return pb
@@ -576,7 +575,7 @@ Create a spacer widget.
 """
 function spacer(; flex::Real = 1.0f0, kwargs...)
     props = WidgetProps(; kwargs...)
-    s = SpacerWidget(; flex=Float32(flex), props=props)
+    s = SpacerWidget(; flex=flex, props=props)
     _add_to_parent(s)
     return s
 end
