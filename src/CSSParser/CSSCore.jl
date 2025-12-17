@@ -273,9 +273,10 @@ function apply_property!(styles::CSSStyles, prop::AbstractString, val::AbstractS
         if content_val == "none" || content_val == "normal"
             styles.has_content = false; styles.content = ""
         else
-            m = match(r"^['\"](.*)['\"]\s*$", content_val)
+            # Match quoted content with matching quote types
+            m = match(r"^(['\"])(.*)\1\s*$", content_val)
             if m !== nothing
-                styles.content = m.captures[1]; styles.has_content = true
+                styles.content = m.captures[2]; styles.has_content = true
             elseif content_val == "''" || content_val == "\"\""
                 styles.content = ""; styles.has_content = true
             end
