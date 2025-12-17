@@ -268,7 +268,7 @@ Content-- uses a **math-first** approach inspired by linear algebra, leveraging 
 | `⊕` | `\oplus` | `box_merge` | Maximum of each box side | Custom |
 | `⊗` | `\otimes` | `hadamard` | Component-wise multiply (Hadamard product) | Custom |
 | `⊙` | `\odot` | `dot_product` | Dot product of vectors | `LinearAlgebra` |
-| `‖·‖` | `\|cdot\|` | `norm` | Vector magnitude/length | `LinearAlgebra` |
+| `norm()` | N/A | `norm` | Vector magnitude/length | `LinearAlgebra` |
 
 **Key Benefits:**
 - **StaticArrays.jl**: Immutable, stack-allocated vectors for zero-cost abstractions

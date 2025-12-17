@@ -142,9 +142,10 @@ Base.eltype(::Type{Vec2{T}}) where T = T
 Base.zero(::Type{Vec2{T}}) where T = Vec2{T}(zero(T), zero(T))
 Base.one(::Type{Vec2{T}}) where T = Vec2{T}(one(T), one(T))
 
-# Use LinearAlgebra's norm and normalize for vectors
-LinearAlgebra.norm(v::Vec2) = norm(v.data)
-LinearAlgebra.normalize(v::Vec2) = Vec2(normalize(v.data))
+# Extend LinearAlgebra's norm and normalize to work with Vec2
+# These delegate to SVector's implementations (which call LinearAlgebra)
+LinearAlgebra.norm(v::Vec2) = LinearAlgebra.norm(v.data)
+LinearAlgebra.normalize(v::Vec2) = Vec2(LinearAlgebra.normalize(v.data))
 
 # Keep magnitude as an alias for norm (for backward compatibility)
 """
