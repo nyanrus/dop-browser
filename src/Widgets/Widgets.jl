@@ -141,14 +141,14 @@ mutable struct ContainerWidget <: Widget
     
     function ContainerWidget(;
                              direction::Symbol = :column,
-                             gap::Float32 = 0.0f0,
+                             gap::Real = 0.0f0,
                              pack::Symbol = :start,
                              align::Symbol = :stretch,
                              props::WidgetProps = WidgetProps())
         dir = direction == :row ? DIRECTION_RIGHT : DIRECTION_DOWN
         pk = pack == :center ? PACK_CENTER : pack == :end ? PACK_END : PACK_START
         al = align == :center ? ALIGN_CENTER : align == :end ? ALIGN_END : ALIGN_STRETCH
-        new(props, Widget[], dir, gap, pk, al)
+        new(props, Widget[], dir, Float32(gap), pk, al)
     end
 end
 
@@ -302,11 +302,11 @@ mutable struct LabelWidget <: Widget
     
     function LabelWidget(;
                          text = "",
-                         font_size::Float32 = 14.0f0,
+                         font_size::Real = 14.0f0,
                          font_weight::Symbol = :normal,
                          color::String = "#000000",
                          props::WidgetProps = WidgetProps())
-        new(props, text, font_size, font_weight, color)
+        new(props, text, Float32(font_size), font_weight, color)
     end
 end
 
@@ -316,7 +316,7 @@ end
 Create a label widget.
 """
 function label(; text = "",
-               font_size::Float32 = 14.0f0,
+               font_size::Real = 14.0f0,
                font_weight::Symbol = :normal,
                color::String = "#000000",
                kwargs...)
@@ -457,9 +457,9 @@ mutable struct SliderWidget <: Widget
     
     function SliderWidget(;
                           value::Union{Number, Signal{Float32}} = 0.0f0,
-                          min::Float32 = 0.0f0,
-                          max::Float32 = 100.0f0,
-                          step::Float32 = 1.0f0,
+                          min::Real = 0.0f0,
+                          max::Real = 100.0f0,
+                          step::Real = 1.0f0,
                           on_change::Union{Function, Nothing} = nothing,
                           props::WidgetProps = WidgetProps())
         sig_value = if value isa Signal{Float32}
@@ -477,7 +477,7 @@ mutable struct SliderWidget <: Widget
         props.focusable = true
         props.role = :slider
         
-        new(props, sig_value, min, max, step, on_change, false)
+        new(props, sig_value, Float32(min), Float32(max), Float32(step), on_change, false)
     end
 end
 
@@ -487,9 +487,9 @@ end
 Create a slider widget.
 """
 function slider(; value::Union{Number, Signal{Float32}} = 0.0f0,
-                min::Float32 = 0.0f0,
-                max::Float32 = 100.0f0,
-                step::Float32 = 1.0f0,
+                min::Real = 0.0f0,
+                max::Real = 100.0f0,
+                step::Real = 1.0f0,
                 on_change::Union{Function, Nothing} = nothing,
                 kwargs...)
     props = WidgetProps(; kwargs...)
@@ -514,8 +514,8 @@ mutable struct ProgressBarWidget <: Widget
     color::String
     
     function ProgressBarWidget(;
-                               value::Union{Float32, Signal{Float32}} = 0.0f0,
-                               max::Float32 = 100.0f0,
+                               value::Union{Real, Signal{Float32}} = 0.0f0,
+                               max::Real = 100.0f0,
                                indeterminate::Bool = false,
                                color::String = "#2196F3",
                                props::WidgetProps = WidgetProps())
@@ -530,7 +530,8 @@ mutable struct ProgressBarWidget <: Widget
         end
         props.role = :progressbar
         
-        new(props, value, max, indeterminate, color)
+        val = value isa Signal{Float32} ? value : Float32(value)
+        new(props, val, Float32(max), indeterminate, color)
     end
 end
 
@@ -539,8 +540,8 @@ end
 
 Create a progress bar widget.
 """
-function progress_bar(; value::Union{Float32, Signal{Float32}} = 0.0f0,
-                      max::Float32 = 100.0f0,
+function progress_bar(; value::Union{Real, Signal{Float32}} = 0.0f0,
+                      max::Real = 100.0f0,
                       indeterminate::Bool = false,
                       color::String = "#2196F3",
                       kwargs...)
@@ -562,8 +563,8 @@ mutable struct SpacerWidget <: Widget
     props::WidgetProps
     flex::Float32
     
-    function SpacerWidget(; flex::Float32 = 1.0f0, props::WidgetProps = WidgetProps())
-        new(props, flex)
+    function SpacerWidget(; flex::Real = 1.0f0, props::WidgetProps = WidgetProps())
+        new(props, Float32(flex))
     end
 end
 
@@ -572,7 +573,7 @@ end
 
 Create a spacer widget.
 """
-function spacer(; flex::Float32 = 1.0f0, kwargs...)
+function spacer(; flex::Real = 1.0f0, kwargs...)
     props = WidgetProps(; kwargs...)
     s = SpacerWidget(; flex=flex, props=props)
     _add_to_parent(s)
