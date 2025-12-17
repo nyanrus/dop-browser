@@ -7,62 +7,31 @@ This module provides an abstraction layer for windowing systems, enabling
 the Content-- UI library to run as interactive desktop applications.
 
 ## Supported Backends
-- **Cairo** (default): High-quality 2D rendering with Cairo (headless/offscreen)
+- **Gtk** (default for onscreen): Native platform windows using Gtk4 with Cairo rendering
+- **Cairo**: High-quality 2D rendering with Cairo (headless/offscreen)
 - **Software**: In-memory rendering for headless/testing
-- Future: Native platform windows (X11, Wayland, Win32, Cocoa)
-
-Note: Currently only headless/offscreen rendering is supported. The Cairo and 
-software backends do not create actual desktop windows. Use `inject_event!` for 
-testing event handling.
 
 ## Usage
 
-### Basic Window with Event Loop (Headless/Testing)
+### Onscreen Window with Event Loop (Gtk Backend)
 
 ```julia
 using DOPBrowser.Window
 
-# Create a window configuration
+# Create a window configuration with Gtk backend for real desktop windows
 config = WindowConfig(
     title = "My App",
     width = 800,
     height = 600,
     resizable = true,
-    backend = :software  # Use software backend for testing
+    backend = :gtk  # Use Gtk for onscreen rendering
 )
 
 # Create a window
 window = create_window(config)
 
-# Simulate events for testing
-inject_event!(window, WindowEvent(EVENT_KEY_DOWN, key=Int32(65)))  # 'A' key
-
-# Process events
-events = poll_events!(window)
-for event in events
-    println("Received event: \$(event.type)")
-end
-
-# Get current state
-width, height = get_size(window)
-mx, my = get_mouse_position(window)
-
-# Clean up
-destroy!(window)
-```
-
-### Main Loop Example (with timeout for testing)
-
-```julia
-using DOPBrowser.Window
-
-window = create_window(WindowConfig(backend=:software))
-
-# Run loop with timeout (for testing/headless mode)
-start_time = time()
-max_duration = 5.0  # seconds
-
-while is_open(window) && (time() - start_time) < max_duration
+# Main loop
+while is_open(window)
     events = poll_events!(window)
     
     for event in events
@@ -73,7 +42,37 @@ while is_open(window) && (time() - start_time) < max_duration
         end
     end
     
+    # Render your content
+    render!(window, your_ui_context)
+    
     sleep(0.016)  # ~60 FPS
+end
+
+destroy!(window)
+```
+
+### Headless Mode (for Testing)
+
+```julia
+using DOPBrowser.Window
+
+# Create a window with software backend for testing
+config = WindowConfig(
+    title = "Test",
+    width = 800,
+    height = 600,
+    backend = :software  # Use software backend for headless testing
+)
+
+window = create_window(config)
+
+# Simulate events for testing
+inject_event!(window, WindowEvent(EVENT_KEY_DOWN, key=Int32(65)))  # 'A' key
+
+# Process events
+events = poll_events!(window)
+for event in events
+    println("Received event: \$(event.type)")
 end
 
 destroy!(window)
@@ -346,7 +345,9 @@ function create_window(config::WindowConfig = WindowConfig())::WindowHandle
     handle = WindowHandle(config)
     
     # Initialize backend
-    if config.backend == :cairo
+    if config.backend == :gtk
+        initialize_gtk_backend!(handle)
+    elseif config.backend == :cairo
         initialize_cairo_backend!(handle)
     elseif config.backend == :software
         initialize_software_backend!(handle)
@@ -356,6 +357,219 @@ function create_window(config::WindowConfig = WindowConfig())::WindowHandle
     end
     
     return handle
+end
+
+"""
+Initialize Gtk windowing backend for onscreen rendering.
+"""
+function initialize_gtk_backend!(handle::WindowHandle)
+    try
+        # Import Gtk4
+        Gtk4 = @eval begin
+            import Gtk4 as G
+            G
+        end
+        
+        # Import Cairo for rendering
+        CairoRenderer = @eval begin
+            import ...Renderer.CairoRenderer as CR
+            CR
+        end
+        
+        # Create the Gtk application and window
+        gtk_data = Dict{Symbol, Any}()
+        
+        # Create drawing area for Cairo rendering
+        drawing_area = Gtk4.GtkDrawingArea()
+        Gtk4.content_width(drawing_area, Int(handle.width))
+        Gtk4.content_height(drawing_area, Int(handle.height))
+        
+        # Create the main window
+        win = Gtk4.GtkWindow(handle.config.title, Int(handle.width), Int(handle.height))
+        
+        if !handle.config.resizable
+            Gtk4.resizable(win, false)
+        end
+        
+        if !handle.config.decorated
+            Gtk4.decorated(win, false)
+        end
+        
+        # Set the drawing area as the window child
+        Gtk4.child(win, drawing_area)
+        
+        # Create Cairo context for rendering
+        handle.cairo_context = CairoRenderer.create_cairo_context(
+            Int(handle.width), Int(handle.height)
+        )
+        
+        # Store Gtk objects
+        gtk_data[:window] = win
+        gtk_data[:drawing_area] = drawing_area
+        gtk_data[:pending_events] = WindowEvent[]
+        gtk_data[:draw_requested] = false
+        
+        # Set up drawing function
+        Gtk4.set_draw_func(drawing_area, (widget, cr, w, h) -> begin
+            if handle.cairo_context !== nothing
+                # Get the Cairo surface from our render context
+                surface = handle.cairo_context.surface
+                Gtk4.set_source_surface(cr, surface, 0, 0)
+                Gtk4.paint(cr)
+            end
+        end)
+        
+        # Set up event controllers for keyboard input
+        key_controller = Gtk4.GtkEventControllerKey(drawing_area)
+        
+        Gtk4.signal_connect(key_controller, "key-pressed") do controller, keyval, keycode, state
+            modifiers = _gtk_state_to_modifiers(state)
+            event = WindowEvent(EVENT_KEY_DOWN,
+                               key=Int32(keyval),
+                               scancode=Int32(keycode),
+                               modifiers=modifiers)
+            push!(gtk_data[:pending_events], event)
+            return true
+        end
+        
+        Gtk4.signal_connect(key_controller, "key-released") do controller, keyval, keycode, state
+            modifiers = _gtk_state_to_modifiers(state)
+            event = WindowEvent(EVENT_KEY_UP,
+                               key=Int32(keyval),
+                               scancode=Int32(keycode),
+                               modifiers=modifiers)
+            push!(gtk_data[:pending_events], event)
+            return true
+        end
+        
+        # Set up motion controller for mouse events
+        motion_controller = Gtk4.GtkEventControllerMotion(drawing_area)
+        
+        Gtk4.signal_connect(motion_controller, "motion") do controller, x, y
+            event = WindowEvent(EVENT_MOUSE_MOVE, x=Float64(x), y=Float64(y))
+            push!(gtk_data[:pending_events], event)
+            handle.mouse_x = Float64(x)
+            handle.mouse_y = Float64(y)
+        end
+        
+        Gtk4.signal_connect(motion_controller, "enter") do controller, x, y
+            event = WindowEvent(EVENT_MOUSE_ENTER, x=Float64(x), y=Float64(y))
+            push!(gtk_data[:pending_events], event)
+        end
+        
+        Gtk4.signal_connect(motion_controller, "leave") do controller
+            event = WindowEvent(EVENT_MOUSE_LEAVE)
+            push!(gtk_data[:pending_events], event)
+        end
+        
+        # Set up click controller for mouse button events
+        click_controller = Gtk4.GtkGestureClick(drawing_area)
+        Gtk4.button(click_controller, 0)  # Listen to all buttons
+        
+        Gtk4.signal_connect(click_controller, "pressed") do gesture, n_press, x, y
+            btn = Gtk4.get_current_button(gesture)
+            button = _gtk_button_to_mouse_button(btn)
+            event = WindowEvent(EVENT_MOUSE_DOWN, button=button, x=Float64(x), y=Float64(y))
+            push!(gtk_data[:pending_events], event)
+        end
+        
+        Gtk4.signal_connect(click_controller, "released") do gesture, n_press, x, y
+            btn = Gtk4.get_current_button(gesture)
+            button = _gtk_button_to_mouse_button(btn)
+            event = WindowEvent(EVENT_MOUSE_UP, button=button, x=Float64(x), y=Float64(y))
+            push!(gtk_data[:pending_events], event)
+        end
+        
+        # Set up scroll controller
+        scroll_controller = Gtk4.GtkEventControllerScroll(drawing_area,
+            Gtk4.EventControllerScrollFlags_VERTICAL | Gtk4.EventControllerScrollFlags_HORIZONTAL)
+        
+        Gtk4.signal_connect(scroll_controller, "scroll") do controller, dx, dy
+            event = WindowEvent(EVENT_MOUSE_SCROLL, 
+                               scroll_x=Float64(dx), 
+                               scroll_y=Float64(dy),
+                               x=handle.mouse_x, 
+                               y=handle.mouse_y)
+            push!(gtk_data[:pending_events], event)
+            return true
+        end
+        
+        # Set up focus controller
+        focus_controller = Gtk4.GtkEventControllerFocus(drawing_area)
+        
+        Gtk4.signal_connect(focus_controller, "enter") do controller
+            handle.is_focused = true
+            event = WindowEvent(EVENT_FOCUS)
+            push!(gtk_data[:pending_events], event)
+        end
+        
+        Gtk4.signal_connect(focus_controller, "leave") do controller
+            handle.is_focused = false
+            event = WindowEvent(EVENT_BLUR)
+            push!(gtk_data[:pending_events], event)
+        end
+        
+        # Handle window close
+        Gtk4.signal_connect(win, "close-request") do window
+            handle.is_open = false
+            event = WindowEvent(EVENT_CLOSE)
+            push!(gtk_data[:pending_events], event)
+            return false  # Allow the window to close
+        end
+        
+        # Make window focusable for keyboard input
+        Gtk4.focusable(drawing_area, true)
+        Gtk4.grab_focus(drawing_area)
+        
+        # Show the window
+        Gtk4.show(win)
+        
+        handle.backend_data = gtk_data
+        
+    catch e
+        @warn "Gtk initialization failed, falling back to Cairo headless" exception=e
+        initialize_cairo_backend!(handle)
+    end
+end
+
+"""
+Convert Gtk modifier state to our modifier flags.
+"""
+function _gtk_state_to_modifiers(state)::UInt8
+    mods = MOD_NONE
+    # Gtk4 modifier masks
+    if (state & 0x01) != 0  # Shift
+        mods |= MOD_SHIFT
+    end
+    if (state & 0x04) != 0  # Control
+        mods |= MOD_CTRL
+    end
+    if (state & 0x08) != 0  # Alt/Mod1
+        mods |= MOD_ALT
+    end
+    if (state & 0x40) != 0  # Super/Mod4
+        mods |= MOD_SUPER
+    end
+    return mods
+end
+
+"""
+Convert Gtk button number to MouseButton enum.
+"""
+function _gtk_button_to_mouse_button(gtk_button::Integer)::MouseButton
+    if gtk_button == 1
+        return MOUSE_LEFT
+    elseif gtk_button == 2
+        return MOUSE_MIDDLE
+    elseif gtk_button == 3
+        return MOUSE_RIGHT
+    elseif gtk_button == 4
+        return MOUSE_X1
+    elseif gtk_button == 5
+        return MOUSE_X2
+    else
+        return MOUSE_LEFT
+    end
 end
 
 """
@@ -395,6 +609,22 @@ end
 Destroy a window and release its resources.
 """
 function destroy!(handle::WindowHandle)
+    # Close Gtk window if present
+    if handle.backend_data isa Dict && haskey(handle.backend_data, :window)
+        try
+            Gtk4 = @eval begin
+                import Gtk4 as G
+                G
+            end
+            win = handle.backend_data[:window]
+            if win !== nothing
+                Gtk4.close(win)
+            end
+        catch e
+            # Ignore errors during cleanup
+        end
+    end
+    
     handle.is_open = false
     handle.backend_data = nothing
     handle.cairo_context = nothing
@@ -430,42 +660,41 @@ Poll for pending events without blocking. Returns a copy of pending events
 and clears the event queue.
 """
 function poll_events!(handle::WindowHandle)::Vector{WindowEvent}
+    # Process Gtk events if using Gtk backend
+    if handle.backend_data isa Dict && haskey(handle.backend_data, :pending_events)
+        try
+            Gtk4 = @eval begin
+                import Gtk4 as G
+                G
+            end
+            
+            # Process pending Gtk events (non-blocking)
+            while Gtk4.events_pending()
+                Gtk4.main_iteration()
+            end
+            
+            # Get events from Gtk backend
+            gtk_events = handle.backend_data[:pending_events]
+            for event in gtk_events
+                push!(handle.event_queue, event)
+                _update_state_from_event!(handle, event)
+            end
+            empty!(gtk_events)
+            
+        catch e
+            # Fallback - just return internal queue
+        end
+    end
+    
     events = copy(handle.event_queue)
     empty!(handle.event_queue)
     return events
 end
 
 """
-    wait_events!(handle::WindowHandle; timeout::Float64 = Inf) -> Vector{WindowEvent}
-
-Wait for events with optional timeout. In the software/Cairo backends,
-this is equivalent to poll_events! since there's no actual window.
+Update internal state from an event.
 """
-function wait_events!(handle::WindowHandle; timeout::Float64 = Inf)::Vector{WindowEvent}
-    # For software backend, just return current events
-    return poll_events!(handle)
-end
-
-"""
-    post_redisplay!(handle::WindowHandle)
-
-Request a redisplay of the window.
-"""
-function post_redisplay!(handle::WindowHandle)
-    # For software backend, this is a no-op
-    # In a real windowing backend, this would mark the window as needing redraw
-end
-
-"""
-    inject_event!(handle::WindowHandle, event::WindowEvent)
-
-Inject an event into the window's event queue. Useful for testing
-or programmatic event generation.
-"""
-function inject_event!(handle::WindowHandle, event::WindowEvent)
-    push!(handle.event_queue, event)
-    
-    # Update internal state based on event
+function _update_state_from_event!(handle::WindowHandle, event::WindowEvent)
     if event.type == EVENT_KEY_DOWN
         push!(handle.key_states, event.key)
         handle.modifiers = event.modifiers
@@ -484,11 +713,73 @@ function inject_event!(handle::WindowHandle, event::WindowEvent)
     elseif event.type == EVENT_RESIZE
         handle.width = event.width
         handle.height = event.height
-        resize_backend!(handle)
     elseif event.type == EVENT_FOCUS
         handle.is_focused = true
     elseif event.type == EVENT_BLUR
         handle.is_focused = false
+    end
+end
+
+"""
+    wait_events!(handle::WindowHandle; timeout::Float64 = Inf) -> Vector{WindowEvent}
+
+Wait for events with optional timeout. 
+"""
+function wait_events!(handle::WindowHandle; timeout::Float64 = Inf)::Vector{WindowEvent}
+    # For Gtk backend, wait for events
+    if handle.backend_data isa Dict && haskey(handle.backend_data, :pending_events)
+        try
+            Gtk4 = @eval begin
+                import Gtk4 as G
+                G
+            end
+            
+            # Wait for events with timeout
+            start_time = time()
+            while isempty(handle.backend_data[:pending_events]) && (time() - start_time) < timeout
+                Gtk4.main_iteration_do(true)  # Wait for events
+            end
+        catch e
+            # Fallback
+        end
+    end
+    
+    return poll_events!(handle)
+end
+
+"""
+    post_redisplay!(handle::WindowHandle)
+
+Request a redisplay of the window.
+"""
+function post_redisplay!(handle::WindowHandle)
+    # For Gtk backend, queue a redraw
+    if handle.backend_data isa Dict && haskey(handle.backend_data, :drawing_area)
+        try
+            Gtk4 = @eval begin
+                import Gtk4 as G
+                G
+            end
+            Gtk4.queue_draw(handle.backend_data[:drawing_area])
+        catch e
+            # Ignore
+        end
+    end
+end
+
+"""
+    inject_event!(handle::WindowHandle, event::WindowEvent)
+
+Inject an event into the window's event queue. Useful for testing
+or programmatic event generation.
+"""
+function inject_event!(handle::WindowHandle, event::WindowEvent)
+    push!(handle.event_queue, event)
+    _update_state_from_event!(handle, event)
+    
+    # Handle resize specially
+    if event.type == EVENT_RESIZE
+        resize_backend!(handle)
     end
 end
 
@@ -512,6 +803,18 @@ function resize_backend!(handle::WindowHandle)
             )
         catch e
             @warn "Failed to resize Cairo context" exception=e
+        end
+    elseif handle.backend_data isa Dict  # Gtk backend
+        try
+            CairoRenderer = @eval begin
+                import ...Renderer.CairoRenderer as CR
+                CR
+            end
+            handle.cairo_context = CairoRenderer.create_cairo_context(
+                Int(handle.width), Int(handle.height)
+            )
+        catch e
+            @warn "Failed to resize Cairo context for Gtk" exception=e
         end
     end
 end
@@ -568,8 +871,17 @@ end
 Set the window title.
 """
 function set_title!(handle::WindowHandle, title::String)
-    # Note: For software backend, this just updates the config
-    # A real backend would update the native window title
+    if handle.backend_data isa Dict && haskey(handle.backend_data, :window)
+        try
+            Gtk4 = @eval begin
+                import Gtk4 as G
+                G
+            end
+            Gtk4.title(handle.backend_data[:window], title)
+        catch e
+            # Ignore errors
+        end
+    end
 end
 
 """
@@ -651,12 +963,46 @@ export is_key_pressed, is_mouse_button_pressed, get_mouse_position, get_modifier
 Render the UI context to the window.
 """
 function render!(handle::WindowHandle, ui_context)
-    if handle.backend_data == :cairo && handle.cairo_context !== nothing
-        # Use Cairo rendering
+    if handle.backend_data isa Dict  # Gtk backend
+        # Render to Cairo context, then update the Gtk drawing area
+        render_gtk!(handle, ui_context)
+    elseif handle.backend_data == :cairo && handle.cairo_context !== nothing
+        # Use Cairo rendering (headless)
         render_cairo!(handle, ui_context)
     else
         # Use software rendering
         render_software!(handle, ui_context)
+    end
+end
+
+"""
+Render using Gtk backend with Cairo.
+"""
+function render_gtk!(handle::WindowHandle, ui_context)
+    try
+        NativeUI = @eval begin
+            import ...ContentMM.NativeUI as NUI
+            NUI
+        end
+        
+        # Render to our Cairo context
+        if handle.cairo_context !== nothing
+            NativeUI.render_cairo!(ui_context, 
+                                   width=Int(handle.width), 
+                                   height=Int(handle.height),
+                                   cairo_context=handle.cairo_context)
+        end
+        
+        # Queue a redraw of the Gtk drawing area
+        if haskey(handle.backend_data, :drawing_area)
+            Gtk4 = @eval begin
+                import Gtk4 as G
+                G
+            end
+            Gtk4.queue_draw(handle.backend_data[:drawing_area])
+        end
+    catch e
+        @warn "Gtk rendering failed" exception=e
     end
 end
 
@@ -707,10 +1053,23 @@ end
     swap_buffers!(handle::WindowHandle)
 
 Swap front and back buffers (for double-buffered rendering).
-For software backend, this is a no-op.
 """
 function swap_buffers!(handle::WindowHandle)
-    # No-op for software backend
+    # For Gtk backend, process pending events and update display
+    if handle.backend_data isa Dict && haskey(handle.backend_data, :drawing_area)
+        try
+            Gtk4 = @eval begin
+                import Gtk4 as G
+                G
+            end
+            # Process any pending Gtk events
+            while Gtk4.events_pending()
+                Gtk4.main_iteration()
+            end
+        catch e
+            # Ignore
+        end
+    end
 end
 
 """
@@ -719,7 +1078,19 @@ end
 Get the current framebuffer contents.
 """
 function get_framebuffer(handle::WindowHandle)::Vector{UInt8}
-    if handle.backend_data == :cairo && handle.cairo_context !== nothing
+    if handle.backend_data isa Dict && handle.cairo_context !== nothing
+        # Gtk backend with Cairo
+        try
+            CairoRenderer = @eval begin
+                import ...Renderer.CairoRenderer as CR
+                CR
+            end
+            return CairoRenderer.get_surface_data(handle.cairo_context)
+        catch e
+            @warn "Failed to get Cairo framebuffer" exception=e
+            return UInt8[]
+        end
+    elseif handle.backend_data == :cairo && handle.cairo_context !== nothing
         try
             CairoRenderer = @eval begin
                 import ...Renderer.CairoRenderer as CR
@@ -743,7 +1114,8 @@ export get_framebuffer
 Save the current framebuffer to a PNG file.
 """
 function save_screenshot(handle::WindowHandle, filename::String)
-    if handle.backend_data == :cairo && handle.cairo_context !== nothing
+    if handle.cairo_context !== nothing
+        # Use Cairo's PNG export
         try
             CairoRenderer = @eval begin
                 import ...Renderer.CairoRenderer as CR
@@ -754,6 +1126,7 @@ function save_screenshot(handle::WindowHandle, filename::String)
             @warn "Failed to save Cairo screenshot" exception=e
         end
     else
+        # Use software framebuffer
         try
             PNGExport = @eval begin
                 import ...Renderer.PNGExport as PNG
@@ -768,5 +1141,25 @@ function save_screenshot(handle::WindowHandle, filename::String)
 end
 
 export save_screenshot
+
+# ============================================================================
+# Gtk Utility Functions
+# ============================================================================
+
+"""
+    is_gtk_available() -> Bool
+
+Check if Gtk backend is available.
+"""
+function is_gtk_available()::Bool
+    try
+        @eval import Gtk4
+        return true
+    catch
+        return false
+    end
+end
+
+export is_gtk_available
 
 end # module Window

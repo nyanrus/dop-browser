@@ -12,8 +12,9 @@ DOPBrowser now includes a **production-ready interactive UI framework** that can
 - **Widget Library**: High-level components (Button, TextInput, Checkbox, Slider, etc.)
 - **Application Lifecycle**: Full app management with initialization, update loop, and cleanup
 - **Window Integration**: Platform-agnostic window abstraction with event handling
+- **Onscreen Rendering**: Native desktop windows using Gtk4 backend
 
-### Quick Start
+### Quick Start (Onscreen Application)
 
 ```julia
 using DOPBrowser.Application
@@ -23,8 +24,8 @@ using DOPBrowser.State
 # Create reactive state
 count = signal(0)
 
-# Create application
-app = create_app(title="Counter App", width=400, height=200)
+# Create application with Gtk backend for onscreen rendering
+app = create_app(title="Counter App", width=400, height=200, backend=:gtk)
 
 # Define UI
 set_ui!(app) do
@@ -37,7 +38,7 @@ set_ui!(app) do
     end
 end
 
-# Run application
+# Run application (opens a desktop window)
 run!(app)
 ```
 

@@ -7,11 +7,13 @@ authors = ["DOP Browser Contributors"]
 Blobs = "163b9779-6631-5f90-a265-3de947924de8"
 Cairo = "159f3aea-2a34-519c-b102-8c37f9878175"
 FreeTypeAbstraction = "663a7486-cb36-511b-a19d-713bb74d65c9"
+Gtk4 = "9db2cae5-386f-4011-9d63-a5602296539b"
 
 [compat]
 Blobs = "1.2.0"
 Cairo = "1.0"
 FreeTypeAbstraction = "0.10"
+Gtk4 = "0.7"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

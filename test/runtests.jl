@@ -1767,6 +1767,36 @@ end
         @test config.resizable == true
     end
     
+    @testset "Backend Options" begin
+        # Test Gtk backend configuration
+        config_gtk = DOPBrowser.Window.WindowConfig(
+            title = "Gtk Window",
+            width = 800,
+            height = 600,
+            backend = :gtk
+        )
+        @test config_gtk.backend == :gtk
+        
+        # Test Cairo backend configuration
+        config_cairo = DOPBrowser.Window.WindowConfig(
+            title = "Cairo Window",
+            backend = :cairo
+        )
+        @test config_cairo.backend == :cairo
+        
+        # Test Software backend configuration
+        config_soft = DOPBrowser.Window.WindowConfig(
+            title = "Software Window",
+            backend = :software
+        )
+        @test config_soft.backend == :software
+    end
+    
+    @testset "is_gtk_available" begin
+        # Should return true since Gtk4 is a dependency
+        @test DOPBrowser.Window.is_gtk_available() isa Bool
+    end
+    
     @testset "Window Creation" begin
         window = DOPBrowser.Window.create_window()
         
