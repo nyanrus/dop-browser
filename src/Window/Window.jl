@@ -527,7 +527,9 @@ function initialize_gtk_backend!(handle::WindowHandle)
         handle.backend_data = gtk_data
         
     catch e
-        @warn "Gtk initialization failed, falling back to Cairo headless" exception=e
+        @warn "Gtk initialization failed. Native window support will not be available. " *
+              "The application will run in headless mode using Cairo for offscreen rendering. " *
+              "This is typically caused by missing display server (X11/Wayland) or Gtk libraries." exception=e
         initialize_cairo_backend!(handle)
     end
 end
