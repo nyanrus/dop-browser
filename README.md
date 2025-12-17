@@ -4,6 +4,104 @@ A **Data-Oriented Programming (DOP)** browser engine base implementation in Juli
 
 This project provides a render-friendly Intermediate Representation (IR) that replaces traditional DOM & CSSOM with cache-efficient, SIMD-friendly data structures.
 
+## Interactive UI Library
+
+DOPBrowser now includes a **production-ready interactive UI framework** that can be used to build native desktop applications. The framework provides:
+
+- **Reactive State Management**: Signals, computed values, and effects for automatic UI updates
+- **Widget Library**: High-level components (Button, TextInput, Checkbox, Slider, etc.)
+- **Application Lifecycle**: Full app management with initialization, update loop, and cleanup
+- **Window Integration**: Platform-agnostic window abstraction with event handling
+
+### Quick Start
+
+```julia
+using DOPBrowser.Application
+using DOPBrowser.Widgets
+using DOPBrowser.State
+
+# Create reactive state
+count = signal(0)
+
+# Create application
+app = create_app(title="Counter App", width=400, height=200)
+
+# Define UI
+set_ui!(app) do
+    column(gap=10.0f0) do
+        label(text=computed(() -> "Count: \$(count[])"))
+        row(gap=5.0f0) do
+            button(text="-", on_click=() -> count[] -= 1)
+            button(text="+", on_click=() -> count[] += 1)
+        end
+    end
+end
+
+# Run application
+run!(app)
+```
+
+### Reactive State Management
+
+```julia
+using DOPBrowser.State
+
+# Create signals (reactive values)
+name = signal("World")
+count = signal(0)
+
+# Create computed values (derived state)
+greeting = computed(() -> "Hello, \$(name[])! Count: \$(count[])")
+
+# Create effects (side effects)
+effect(() -> println(greeting[]))  # Runs on every change
+
+# Update signals
+count[] = 1        # Triggers effect automatically
+name[] = "Julia"   # Triggers effect automatically
+
+# Batch updates (single notification)
+batch(() -> begin
+    count[] = 10
+    name[] = "Everyone"
+end)
+
+# Store pattern for complex state
+store = create_store(
+    Dict{Symbol,Any}(:todos => [], :filter => :all),
+    Dict{Symbol,Function}(
+        :add_todo => (state, text) -> Dict(:todos => [state[:todos]..., text])
+    )
+)
+dispatch(store, :add_todo, "Learn Julia")
+```
+
+### Available Widgets
+
+| Widget | Description |
+|--------|-------------|
+| `button` | Clickable button with hover/pressed states |
+| `label` | Text display |
+| `text_input` | Single-line text entry |
+| `checkbox` | Boolean toggle |
+| `slider` | Numeric range selection |
+| `progress_bar` | Progress indicator |
+| `container` | Layout container |
+| `row` | Horizontal layout |
+| `column` | Vertical layout |
+| `spacer` | Flexible spacing |
+
+### Headless Mode
+
+For testing or server-side rendering:
+
+```julia
+app = create_app(headless=true, width=800, height=600)
+set_ui!(app, my_ui_builder)
+render_frame!(app)
+save_app_screenshot(app, "output.png")
+```
+
 ## Modular Architecture
 
 DOPBrowser is organized into well-defined modules for better maintainability:
@@ -19,6 +117,10 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 | **Network** | HTTP/HTTPS networking layer |
 | **Renderer** | GPU rendering and PNG export |
 | **EventLoop** | Browser main event loop |
+| **Window** | Platform windowing abstraction |
+| **State** | Reactive state management |
+| **Widgets** | High-level UI components |
+| **Application** | Application lifecycle management |
 
 See [docs/MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md) for detailed information about the module structure.
 

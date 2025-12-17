@@ -80,6 +80,22 @@ include("Network/Network.jl")
 include("Core.jl")
 
 # =============================================================================
+# Interactive UI Library Modules (Production-Ready)
+# =============================================================================
+
+# Window management for platform integration
+include("Window/Window.jl")
+
+# Reactive state management
+include("State/State.jl")
+
+# High-level widget components
+include("Widgets/Widgets.jl")
+
+# Application lifecycle management
+include("Application/Application.jl")
+
+# =============================================================================
 # Re-exports from Modular Submodules
 # =============================================================================
 
@@ -141,6 +157,19 @@ export Network
 # Rendering pipeline
 using .Renderer
 export Renderer
+
+# Interactive UI Library Modules
+using .Window
+export Window
+
+using .State
+export State
+
+using .Widgets
+export Widgets
+
+using .Application
+export Application
 
 # Export modules for direct access
 export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
