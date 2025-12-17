@@ -366,9 +366,8 @@ function render_to_buffer(ctx::UIContext; width::Int=800, height::Int=600)::Vect
     # Clear and render commands  
     rust_clear!(ctx.renderer)
     for cmd in get_commands(ctx.command_buffer)
-        x, y, w, h, r, g, b, a = cmd
-        add_rect!(ctx.renderer, Float32(x), Float32(y), Float32(w), Float32(h),
-                 Float32(r), Float32(g), Float32(b), Float32(a))
+        add_rect!(ctx.renderer, cmd.x, cmd.y, cmd.width, cmd.height,
+                 cmd.color_r, cmd.color_g, cmd.color_b, cmd.color_a)
     end
     
     # Render and get framebuffer

@@ -49,16 +49,16 @@ function build_rust_crate(name::String; release::Bool=true)
         error("Rust crate directory not found: $rust_dir")
     end
     
-    # Build the crate
-    cargo_flag = release ? "--release" : ""
+    # Determine target directory based on build mode
     target_dir = release ? "release" : "debug"
     
     @info "Building Rust crate: $name" release=release
     
     # Run cargo build with error handling
     cd(rust_dir) do
-        cmd = `cargo build $cargo_flag`
-        if !success(cmd)
+        cmd = release ? `cargo build --release` : `cargo build`
+        result = run(cmd; wait=true)
+        if !success(result)
             error("Failed to build Rust crate: $name. Run 'cargo build' in $rust_dir for details.")
         end
     end

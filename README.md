@@ -445,9 +445,46 @@ Note: The old Julia `Renderer` module has been deprecated. Use `RustRenderer` fo
 
 ## Installation
 
+### Prerequisites
+
+1. **Julia 1.10+**: The minimum required Julia version
+2. **Rust toolchain**: Required to build the native libraries
+
+### Build Steps
+
+First, build the required Rust libraries:
+
+```bash
+# Build the parser library
+cd rust/dop-parser && cargo build --release
+
+# Build the renderer library  
+cd ../dop-renderer && cargo build --release
+```
+
+Then install the Julia package:
+
 ```julia
 using Pkg
 Pkg.add(path="path/to/dop-browser")
+```
+
+Or for development:
+
+```julia
+using Pkg
+Pkg.develop(path="path/to/dop-browser")
+```
+
+### Verify Installation
+
+```julia
+using DOPBrowser
+
+# Check that Rust libraries are available
+rust = DOPBrowser.Pipeline.rust_available()
+println("Parser available: ", rust.parser)
+println("Renderer available: ", rust.renderer)
 ```
 
 ## Usage

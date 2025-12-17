@@ -137,15 +137,16 @@ impl SoftwareRenderer {
         // Sort commands by z-index
         self.commands.sort_by_key(|c| c.z_index);
 
-        // Render each rectangle (iterate by reference to avoid clone)
-        for cmd in &self.commands {
+        // Clone commands to avoid borrow conflict with mutable self
+        let commands: Vec<RenderCommand> = self.commands.clone();
+        for cmd in &commands {
             self.render_rect_internal(cmd);
         }
 
-        // Render text commands
-        for i in 0..self.text_commands.len() {
-            let text_cmd = self.text_commands[i].clone();
-            self.render_text(&text_cmd);
+        // Render text commands (also clone to avoid borrow conflicts)
+        let text_commands: Vec<TextCommand> = self.text_commands.clone();
+        for text_cmd in &text_commands {
+            self.render_text(text_cmd);
         }
     }
 

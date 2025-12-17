@@ -7,6 +7,9 @@ Manifest.toml
 rust/*/target/
 rust/**/target/
 
+# Built artifacts directory
+artifacts/
+
 # IDE
 .vscode/
 .idea/

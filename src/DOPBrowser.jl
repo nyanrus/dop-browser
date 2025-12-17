@@ -367,11 +367,12 @@ export render_to_png!
 """
     get_png_data(browser::Browser) -> Vector{UInt8}
 
-Render and get framebuffer data as bytes.
+Render and get PNG-encoded data as bytes.
 """
 function get_png_data(browser::Browser)::Vector{UInt8}
     render!(browser)
-    return RustRenderer.get_framebuffer(browser.renderer)
+    framebuffer = RustRenderer.get_framebuffer(browser.renderer)
+    return Pipeline.encode_png(framebuffer, browser.width, browser.height)
 end
 
 export get_png_data
