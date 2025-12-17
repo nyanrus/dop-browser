@@ -72,6 +72,26 @@ const TEXT_DECORATION_NONE, TEXT_DECORATION_UNDERLINE, TEXT_DECORATION_OVERLINE,
 # Box sizing constants
 const BOX_SIZING_CONTENT_BOX, BOX_SIZING_BORDER_BOX = UInt8(0), UInt8(1)
 
+# CSS length unit conversion constants (at 96 DPI)
+# These constants define pixel equivalents for various CSS length units
+const PX_PER_INCH = 96.0f0       # 1in = 96px
+const PX_PER_CM = 37.795f0       # 1cm = 37.795px (96/2.54)
+const PX_PER_MM = 3.7795f0       # 1mm = 3.7795px (96/25.4)
+const PX_PER_PT = 1.333f0        # 1pt = 1.333px (96/72)
+const PX_PER_PC = 16.0f0         # 1pc = 16px (12pt)
+
+# Default viewport size for vw/vh units (1920x1080)
+# Note: These are fallback values. Actual viewport size should be passed to parse_length.
+const DEFAULT_VIEWPORT_WIDTH = 1920.0f0
+const DEFAULT_VIEWPORT_HEIGHT = 1080.0f0
+const PX_PER_VW = DEFAULT_VIEWPORT_WIDTH / 100.0f0   # 19.2px per vw
+const PX_PER_VH = DEFAULT_VIEWPORT_HEIGHT / 100.0f0  # 10.8px per vh
+
+# Font-relative unit defaults
+const DEFAULT_FONT_SIZE = 16.0f0  # Default font size in px
+const DEFAULT_CH_WIDTH = 8.0f0    # Approximate '0' character width
+const DEFAULT_EX_HEIGHT = 8.0f0   # Approximate x-height
+
 "CSSStyles - Computed CSS styles for a node (CSS3 complete)."
 mutable struct CSSStyles
     # Positioning (CSS2.1 + CSS3 sticky)
@@ -367,28 +387,28 @@ function parse_length(value::AbstractString, container_size::Float32 = 0.0f0)::T
         num !== nothing && return (num / 100.0f0 * container_size, false)
     end
     
-    # Viewport units (relative to 1920x1080 default)
+    # Viewport units (using default 1920x1080 viewport; for actual viewport, use parse_length_with_viewport)
     if endswith(val, "vw")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 19.2f0, false)  # 1vw = 19.2px at 1920px viewport
+        num !== nothing && return (num * PX_PER_VW, false)
     end
     if endswith(val, "vh")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 10.8f0, false)  # 1vh = 10.8px at 1080px viewport
+        num !== nothing && return (num * PX_PER_VH, false)
     end
     if endswith(val, "vmin")
         num = tryparse(Float32, val[1:end-4])
-        num !== nothing && return (num * 10.8f0, false)  # min(vw, vh)
+        num !== nothing && return (num * min(PX_PER_VW, PX_PER_VH), false)
     end
     if endswith(val, "vmax")
         num = tryparse(Float32, val[1:end-4])
-        num !== nothing && return (num * 19.2f0, false)  # max(vw, vh)
+        num !== nothing && return (num * max(PX_PER_VW, PX_PER_VH), false)
     end
     
-    # Rem (relative to root, assume 16px)
+    # Rem (relative to root font size)
     if endswith(val, "rem")
         num = tryparse(Float32, val[1:end-3])
-        num !== nothing && return (num * 16.0f0, false)
+        num !== nothing && return (num * DEFAULT_FONT_SIZE, false)
     end
     
     # Pixels (explicit or implicit)
@@ -396,52 +416,52 @@ function parse_length(value::AbstractString, container_size::Float32 = 0.0f0)::T
     num = tryparse(Float32, num_str)
     num !== nothing && return (num, false)
     
-    # Em (relative to font-size, assume 16px)
+    # Em (relative to font-size)
     if endswith(val, "em")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 16.0f0, false)
+        num !== nothing && return (num * DEFAULT_FONT_SIZE, false)
     end
     
-    # Points (1pt = 1/72 inch = 1.333px at 96dpi)
+    # Points
     if endswith(val, "pt")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 1.333f0, false)
+        num !== nothing && return (num * PX_PER_PT, false)
     end
     
-    # Picas (1pc = 12pt = 16px)
+    # Picas
     if endswith(val, "pc")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 16.0f0, false)
+        num !== nothing && return (num * PX_PER_PC, false)
     end
     
-    # Millimeters (1mm = 3.7795px at 96dpi)
+    # Millimeters
     if endswith(val, "mm")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 3.7795275591f0, false)
+        num !== nothing && return (num * PX_PER_MM, false)
     end
     
-    # Centimeters (1cm = 10mm = 37.795px)
+    # Centimeters
     if endswith(val, "cm")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 37.7952755910f0, false)
+        num !== nothing && return (num * PX_PER_CM, false)
     end
     
-    # Inches (1in = 96px at 96dpi)
+    # Inches
     if endswith(val, "in")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 96.0f0, false)
+        num !== nothing && return (num * PX_PER_INCH, false)
     end
     
-    # Ch (width of '0' character, approximate as 0.5em = 8px)
+    # Ch (width of '0' character)
     if endswith(val, "ch")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 8.0f0, false)
+        num !== nothing && return (num * DEFAULT_CH_WIDTH, false)
     end
     
-    # Ex (x-height, approximate as 0.5em = 8px)
+    # Ex (x-height)
     if endswith(val, "ex")
         num = tryparse(Float32, val[1:end-2])
-        num !== nothing && return (num * 8.0f0, false)
+        num !== nothing && return (num * DEFAULT_EX_HEIGHT, false)
     end
     
     return (0.0f0, true)
@@ -817,19 +837,47 @@ function parse_box_shadow!(styles::CSSStyles, val::AbstractString)
     styles.box_shadow_inset = contains(val, "inset")
     val = replace(val, "inset" => "")
     
-    # Extract color first
+    # Extract color - try specific patterns first before generic word match
     color = (0x00, 0x00, 0x00, 0x80)  # Default semi-transparent black
-    for color_format in [r"(rgba?\s*\([^)]+\))", r"(#[0-9a-f]{3,8})", r"\b([a-z]+)\b"]
-        m = match(color_format, val)
+    color_found = false
+    
+    # Try rgba/rgb function first
+    m = match(r"(rgba?\s*\([^)]+\))", val)
+    if m !== nothing
+        parsed_color = parse_color(m.captures[1])
+        if parsed_color[4] != 0
+            color = parsed_color
+            val = replace(val, m.captures[1] => "")
+            color_found = true
+        end
+    end
+    
+    # Try hex color
+    if !color_found
+        m = match(r"(#[0-9a-f]{3,8})", val)
         if m !== nothing
             parsed_color = parse_color(m.captures[1])
-            if parsed_color[4] != 0  # Valid color
+            if parsed_color[4] != 0
                 color = parsed_color
                 val = replace(val, m.captures[1] => "")
+                color_found = true
+            end
+        end
+    end
+    
+    # Try named colors (check against known colors dictionary)
+    if !color_found
+        for word in split(val)
+            word = strip(word)
+            if haskey(NAMED_COLORS, word)
+                color = NAMED_COLORS[word]
+                val = replace(val, word => "")
+                color_found = true
                 break
             end
         end
     end
+    
     styles.box_shadow_r, styles.box_shadow_g, styles.box_shadow_b, styles.box_shadow_a = color
     
     # Parse lengths: offset-x, offset-y, blur?, spread?
