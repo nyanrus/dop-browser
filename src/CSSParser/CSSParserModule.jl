@@ -9,9 +9,8 @@ This module provides:
 - Length parsing (px, %, em, mm, auto)
 - Comprehensive CSS property support
 
-## Architecture
-
-CSS input → Parser → CSSStyles structure → Style application
+For high-performance parsing, consider using RustParser which provides
+Rust-based CSS parsing via cssparser.
 
 ## Usage
 
@@ -36,7 +35,6 @@ using .CSSCore: CSSStyles, parse_inline_style, parse_color, parse_length,
                 CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH,
                 BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED
 
-# Export all public API
 export CSSStyles, parse_inline_style, parse_color, parse_length
 export POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED
 export OVERFLOW_VISIBLE, OVERFLOW_HIDDEN
@@ -46,7 +44,6 @@ export FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT
 export CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH
 export BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED
 
-# Re-export submodule
 export CSSCore
 
 end # module CSSParserModule

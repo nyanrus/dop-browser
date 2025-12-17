@@ -1,6 +1,13 @@
 """
 CSSCore - CSS parsing and style computation.
-Supports position, overflow, display, visibility, colors, dimensions, margins, padding, borders.
+
+This module provides CSS parsing functionality including:
+- Inline style parsing
+- Color parsing (hex, rgb, rgba, named colors)
+- Length parsing (px, %, em, mm, auto)
+
+For high-performance parsing, consider using RustParser which provides
+Rust-based CSS parsing via cssparser.
 """
 module CSSCore
 
@@ -23,28 +30,23 @@ const DISPLAY_TABLE, DISPLAY_TABLE_CELL, DISPLAY_TABLE_ROW, DISPLAY_INLINE_BLOCK
 
 "CSSStyles - Computed CSS styles for a node."
 mutable struct CSSStyles
-    # Positioning
     position::UInt8; float::UInt8; clear::UInt8
     top::Float32; right::Float32; bottom::Float32; left::Float32
     top_auto::Bool; right_auto::Bool; bottom_auto::Bool; left_auto::Bool
     z_index::Int32
-    # Box model
     width::Float32; height::Float32; width_auto::Bool; height_auto::Bool
     min_width::Float32; max_width::Float32; min_height::Float32; max_height::Float32
     has_min_width::Bool; has_max_width::Bool; has_min_height::Bool; has_max_height::Bool
     margin_top::Float32; margin_right::Float32; margin_bottom::Float32; margin_left::Float32
     padding_top::Float32; padding_right::Float32; padding_bottom::Float32; padding_left::Float32
-    # Borders (width, style, rgba per side)
     border_top_width::Float32; border_right_width::Float32; border_bottom_width::Float32; border_left_width::Float32
     border_top_style::UInt8; border_right_style::UInt8; border_bottom_style::UInt8; border_left_style::UInt8
     border_top_r::UInt8; border_top_g::UInt8; border_top_b::UInt8; border_top_a::UInt8
     border_right_r::UInt8; border_right_g::UInt8; border_right_b::UInt8; border_right_a::UInt8
     border_bottom_r::UInt8; border_bottom_g::UInt8; border_bottom_b::UInt8; border_bottom_a::UInt8
     border_left_r::UInt8; border_left_g::UInt8; border_left_b::UInt8; border_left_a::UInt8
-    # Display & visibility
     display::UInt8; visibility::Bool; overflow::UInt8
     line_height::Float32; line_height_normal::Bool; font_size::Float32
-    # Colors & content
     background_r::UInt8; background_g::UInt8; background_b::UInt8; background_a::UInt8
     color_r::UInt8; color_g::UInt8; color_b::UInt8; color_a::UInt8
     has_background::Bool; content::String; has_content::Bool
@@ -53,16 +55,15 @@ mutable struct CSSStyles
         POSITION_STATIC, FLOAT_NONE, CLEAR_NONE,
         0.0f0, 0.0f0, 0.0f0, 0.0f0, true, true, true, true, Int32(0),
         0.0f0, 0.0f0, true, true, 0.0f0, Float32(Inf), 0.0f0, Float32(Inf), false, false, false, false,
-        0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0,  # margins & paddings
-        0.0f0, 0.0f0, 0.0f0, 0.0f0,  # border widths
+        0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0, 0.0f0,
+        0.0f0, 0.0f0, 0.0f0, 0.0f0,
         BORDER_STYLE_NONE, BORDER_STYLE_NONE, BORDER_STYLE_NONE, BORDER_STYLE_NONE,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  # border colors
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         DISPLAY_BLOCK, true, OVERFLOW_VISIBLE, 16.0f0, true, 16.0f0,
         0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0xff, false, "", false
     )
 end
 
-# Named color lookup table (const for performance)
 const NAMED_COLORS = Dict{String,Tuple{UInt8,UInt8,UInt8,UInt8}}(
     "black"=>(0x00,0x00,0x00,0xff), "white"=>(0xff,0xff,0xff,0xff), "red"=>(0xff,0x00,0x00,0xff),
     "green"=>(0x00,0x80,0x00,0xff), "lime"=>(0x00,0xff,0x00,0xff), "blue"=>(0x00,0x00,0xff,0xff),
@@ -90,7 +91,7 @@ function parse_color(value::AbstractString)::Tuple{UInt8,UInt8,UInt8,UInt8}
         m !== nothing && return (parse(UInt8, m.captures[1]), parse(UInt8, m.captures[2]), parse(UInt8, m.captures[3]), 
                                   m.captures[4] !== nothing ? round(UInt8, parse(Float64, m.captures[4]) * 255) : 0xff)
     end
-    (0x00, 0x00, 0x00, 0x00)  # transparent default
+    (0x00, 0x00, 0x00, 0x00)
 end
 
 "Parse CSS length (px, %, em, mm, auto)."
@@ -98,62 +99,37 @@ function parse_length(value::AbstractString, container_size::Float32 = 0.0f0)::T
     val = strip(lowercase(value))
     val == "auto" && return (0.0f0, true)
     
-    # Percentage
     if endswith(val, "%")
         num = tryparse(Float32, val[1:end-1])
-        if num !== nothing
-            return (num / 100.0f0 * container_size, false)
-        end
+        num !== nothing && return (num / 100.0f0 * container_size, false)
     end
     
-    # Pixels (default unit)
     num_str = replace(val, r"px$" => "")
     num = tryparse(Float32, num_str)
-    if num !== nothing
-        return (num, false)
-    end
+    num !== nothing && return (num, false)
     
-    # em units (assume 16px base)
     if endswith(val, "em")
         num = tryparse(Float32, val[1:end-2])
-        if num !== nothing
-            return (num * 16.0f0, false)
-        end
+        num !== nothing && return (num * 16.0f0, false)
     end
     
-    # mm units (1mm = 3.7795275591 pixels at 96 DPI)
     if endswith(val, "mm")
         num = tryparse(Float32, val[1:end-2])
-        if num !== nothing
-            return (num * 3.7795275591f0, false)
-        end
+        num !== nothing && return (num * 3.7795275591f0, false)
     end
     
     return (0.0f0, true)
 end
 
-"""
-    parse_inline_style(style_str::AbstractString) -> CSSStyles
-
-Parse an inline style attribute and return computed styles.
-"""
 function parse_inline_style(style_str::AbstractString)::CSSStyles
     styles = CSSStyles()
     
-    # Split by semicolon
-    declarations = split(style_str, ";")
-    
-    for decl in declarations
+    for decl in split(style_str, ";")
         decl = strip(decl)
-        if isempty(decl)
-            continue
-        end
+        isempty(decl) && continue
         
-        # Split by colon
         colon_idx = findfirst(':', decl)
-        if colon_idx === nothing
-            continue
-        end
+        colon_idx === nothing && continue
         
         prop = strip(lowercase(decl[1:colon_idx-1]))
         val = strip(decl[colon_idx+1:end])
@@ -164,458 +140,156 @@ function parse_inline_style(style_str::AbstractString)::CSSStyles
     return styles
 end
 
-"""
-    apply_property!(styles::CSSStyles, prop::AbstractString, val::AbstractString)
-
-Apply a CSS property to the styles.
-"""
 function apply_property!(styles::CSSStyles, prop::AbstractString, val::AbstractString)
     val_lower = lowercase(val)
     
     if prop == "position"
-        if val_lower == "static"
-            styles.position = POSITION_STATIC
-        elseif val_lower == "relative"
-            styles.position = POSITION_RELATIVE
-        elseif val_lower == "absolute"
-            styles.position = POSITION_ABSOLUTE
-        elseif val_lower == "fixed"
-            styles.position = POSITION_FIXED
-        end
-        
+        styles.position = val_lower == "static" ? POSITION_STATIC :
+                         val_lower == "relative" ? POSITION_RELATIVE :
+                         val_lower == "absolute" ? POSITION_ABSOLUTE :
+                         val_lower == "fixed" ? POSITION_FIXED : POSITION_STATIC
     elseif prop == "display"
-        if val_lower == "block"
-            styles.display = DISPLAY_BLOCK
-        elseif val_lower == "inline"
-            styles.display = DISPLAY_INLINE
-        elseif val_lower == "none"
-            styles.display = DISPLAY_NONE
-        elseif val_lower == "table"
-            styles.display = DISPLAY_TABLE
-        elseif val_lower == "table-cell"
-            styles.display = DISPLAY_TABLE_CELL
-        elseif val_lower == "table-row"
-            styles.display = DISPLAY_TABLE_ROW
-        elseif val_lower == "inline-block"
-            styles.display = DISPLAY_INLINE_BLOCK
-        end
-        
+        styles.display = val_lower == "block" ? DISPLAY_BLOCK :
+                        val_lower == "inline" ? DISPLAY_INLINE :
+                        val_lower == "none" ? DISPLAY_NONE :
+                        val_lower == "table" ? DISPLAY_TABLE :
+                        val_lower == "table-cell" ? DISPLAY_TABLE_CELL :
+                        val_lower == "table-row" ? DISPLAY_TABLE_ROW :
+                        val_lower == "inline-block" ? DISPLAY_INLINE_BLOCK : DISPLAY_BLOCK
     elseif prop == "visibility"
         styles.visibility = val_lower != "hidden"
-        
     elseif prop == "overflow"
-        if val_lower == "hidden"
-            styles.overflow = OVERFLOW_HIDDEN
-        else
-            styles.overflow = OVERFLOW_VISIBLE
-        end
-        
+        styles.overflow = val_lower == "hidden" ? OVERFLOW_HIDDEN : OVERFLOW_VISIBLE
     elseif prop == "background-color" || prop == "background"
         color = parse_color(val)
-        styles.background_r = color[1]
-        styles.background_g = color[2]
-        styles.background_b = color[3]
-        styles.background_a = color[4]
+        styles.background_r, styles.background_g, styles.background_b, styles.background_a = color
         styles.has_background = color[4] > 0
-        
     elseif prop == "color"
         color = parse_color(val)
-        styles.color_r = color[1]
-        styles.color_g = color[2]
-        styles.color_b = color[3]
-        styles.color_a = color[4]
-        
+        styles.color_r, styles.color_g, styles.color_b, styles.color_a = color
     elseif prop == "width"
         (px, auto) = parse_length(val)
-        styles.width = px
-        styles.width_auto = auto
-        
+        styles.width, styles.width_auto = px, auto
     elseif prop == "height"
         (px, auto) = parse_length(val)
-        styles.height = px
-        styles.height_auto = auto
-        
+        styles.height, styles.height_auto = px, auto
     elseif prop == "top"
         (px, auto) = parse_length(val)
-        styles.top = px
-        styles.top_auto = auto
-        
+        styles.top, styles.top_auto = px, auto
     elseif prop == "right"
         (px, auto) = parse_length(val)
-        styles.right = px
-        styles.right_auto = auto
-        
+        styles.right, styles.right_auto = px, auto
     elseif prop == "bottom"
         (px, auto) = parse_length(val)
-        styles.bottom = px
-        styles.bottom_auto = auto
-        
+        styles.bottom, styles.bottom_auto = px, auto
     elseif prop == "left"
         (px, auto) = parse_length(val)
-        styles.left = px
-        styles.left_auto = auto
-        
+        styles.left, styles.left_auto = px, auto
     elseif prop == "z-index"
         z = tryparse(Int32, val)
-        if z !== nothing
-            styles.z_index = z
-        end
-        
+        z !== nothing && (styles.z_index = z)
     elseif prop == "margin"
         values = parse_margin_shorthand(val)
-        styles.margin_top = values[1]
-        styles.margin_right = values[2]
-        styles.margin_bottom = values[3]
-        styles.margin_left = values[4]
-        
+        styles.margin_top, styles.margin_right, styles.margin_bottom, styles.margin_left = values
     elseif prop == "margin-top"
-        (px, _) = parse_length(val)
-        styles.margin_top = px
-        
+        (px, _) = parse_length(val); styles.margin_top = px
     elseif prop == "margin-right"
-        (px, _) = parse_length(val)
-        styles.margin_right = px
-        
+        (px, _) = parse_length(val); styles.margin_right = px
     elseif prop == "margin-bottom"
-        (px, _) = parse_length(val)
-        styles.margin_bottom = px
-        
+        (px, _) = parse_length(val); styles.margin_bottom = px
     elseif prop == "margin-left"
-        (px, _) = parse_length(val)
-        styles.margin_left = px
-        
+        (px, _) = parse_length(val); styles.margin_left = px
     elseif prop == "padding"
         values = parse_margin_shorthand(val)
-        styles.padding_top = values[1]
-        styles.padding_right = values[2]
-        styles.padding_bottom = values[3]
-        styles.padding_left = values[4]
-        
+        styles.padding_top, styles.padding_right, styles.padding_bottom, styles.padding_left = values
     elseif prop == "padding-top"
-        (px, _) = parse_length(val)
-        styles.padding_top = px
-        
+        (px, _) = parse_length(val); styles.padding_top = px
     elseif prop == "padding-right"
-        (px, _) = parse_length(val)
-        styles.padding_right = px
-        
+        (px, _) = parse_length(val); styles.padding_right = px
     elseif prop == "padding-bottom"
-        (px, _) = parse_length(val)
-        styles.padding_bottom = px
-        
+        (px, _) = parse_length(val); styles.padding_bottom = px
     elseif prop == "padding-left"
-        (px, _) = parse_length(val)
-        styles.padding_left = px
-        
-    # Float and clear
+        (px, _) = parse_length(val); styles.padding_left = px
     elseif prop == "float"
-        if val_lower == "left"
-            styles.float = FLOAT_LEFT
-        elseif val_lower == "right"
-            styles.float = FLOAT_RIGHT
-        else
-            styles.float = FLOAT_NONE
-        end
-        
+        styles.float = val_lower == "left" ? FLOAT_LEFT : val_lower == "right" ? FLOAT_RIGHT : FLOAT_NONE
     elseif prop == "clear"
-        if val_lower == "left"
-            styles.clear = CLEAR_LEFT
-        elseif val_lower == "right"
-            styles.clear = CLEAR_RIGHT
-        elseif val_lower == "both"
-            styles.clear = CLEAR_BOTH
-        else
-            styles.clear = CLEAR_NONE
-        end
-        
-    # Min/Max dimensions
+        styles.clear = val_lower == "left" ? CLEAR_LEFT : val_lower == "right" ? CLEAR_RIGHT : val_lower == "both" ? CLEAR_BOTH : CLEAR_NONE
     elseif prop == "min-width"
         (px, auto) = parse_length(val)
-        if !auto
-            styles.min_width = px
-            styles.has_min_width = true
-        end
-        
+        !auto && (styles.min_width = px; styles.has_min_width = true)
     elseif prop == "max-width"
         (px, auto) = parse_length(val)
-        if !auto
-            styles.max_width = px
-            styles.has_max_width = true
-        end
-        
+        !auto && (styles.max_width = px; styles.has_max_width = true)
     elseif prop == "min-height"
         (px, auto) = parse_length(val)
-        if !auto
-            styles.min_height = px
-            styles.has_min_height = true
-        end
-        
+        !auto && (styles.min_height = px; styles.has_min_height = true)
     elseif prop == "max-height"
         (px, auto) = parse_length(val)
-        if !auto
-            styles.max_height = px
-            styles.has_max_height = true
-        end
-        
-    # Border properties
+        !auto && (styles.max_height = px; styles.has_max_height = true)
     elseif prop == "border" || prop == "border-width"
-        # Shorthand for all borders
         if prop == "border"
-            # Extract width from border shorthand (e.g., "1px solid black")
             parts = split(strip(val))
-            width_val = ""
-            style_val = ""
-            color_val = ""
             for part in parts
                 part_lower = lowercase(part)
                 if occursin(r"^\d+", part)
-                    width_val = part
+                    (px, _) = parse_length(part)
+                    styles.border_top_width = styles.border_right_width = styles.border_bottom_width = styles.border_left_width = px
                 elseif part_lower in ["solid", "dotted", "dashed", "none"]
-                    style_val = part_lower
+                    style = parse_border_style(part_lower)
+                    styles.border_top_style = styles.border_right_style = styles.border_bottom_style = styles.border_left_style = style
                 else
-                    color_val = part
+                    color = parse_color(part)
+                    styles.border_top_r, styles.border_top_g, styles.border_top_b, styles.border_top_a = color
+                    styles.border_right_r, styles.border_right_g, styles.border_right_b, styles.border_right_a = color
+                    styles.border_bottom_r, styles.border_bottom_g, styles.border_bottom_b, styles.border_bottom_a = color
+                    styles.border_left_r, styles.border_left_g, styles.border_left_b, styles.border_left_a = color
                 end
-            end
-            if !isempty(width_val)
-                (px, _) = parse_length(width_val)
-                styles.border_top_width = px
-                styles.border_right_width = px
-                styles.border_bottom_width = px
-                styles.border_left_width = px
-            end
-            if !isempty(style_val)
-                border_style = parse_border_style(style_val)
-                styles.border_top_style = border_style
-                styles.border_right_style = border_style
-                styles.border_bottom_style = border_style
-                styles.border_left_style = border_style
-            end
-            if !isempty(color_val)
-                color = parse_color(color_val)
-                styles.border_top_r, styles.border_top_g, styles.border_top_b, styles.border_top_a = color
-                styles.border_right_r, styles.border_right_g, styles.border_right_b, styles.border_right_a = color
-                styles.border_bottom_r, styles.border_bottom_g, styles.border_bottom_b, styles.border_bottom_a = color
-                styles.border_left_r, styles.border_left_g, styles.border_left_b, styles.border_left_a = color
             end
         else
             values = parse_margin_shorthand(val)
-            styles.border_top_width = values[1]
-            styles.border_right_width = values[2]
-            styles.border_bottom_width = values[3]
-            styles.border_left_width = values[4]
+            styles.border_top_width, styles.border_right_width, styles.border_bottom_width, styles.border_left_width = values
         end
-        
-    elseif prop == "border-top" || prop == "border-right" || prop == "border-bottom" || prop == "border-left"
-        # Individual border shorthands
-        parts = split(strip(val))
-        width_val = ""
-        style_val = ""
-        color_val = ""
-        for part in parts
-            part_lower = lowercase(part)
-            if occursin(r"^\d+", part)
-                width_val = part
-            elseif part_lower in ["solid", "dotted", "dashed", "none"]
-                style_val = part_lower
-            else
-                color_val = part
-            end
-        end
-        
-        if prop == "border-top"
-            if !isempty(width_val)
-                (px, _) = parse_length(width_val)
-                styles.border_top_width = px
-            end
-            if !isempty(style_val)
-                styles.border_top_style = parse_border_style(style_val)
-            end
-            if !isempty(color_val)
-                color = parse_color(color_val)
-                styles.border_top_r, styles.border_top_g, styles.border_top_b, styles.border_top_a = color
-            end
-        elseif prop == "border-right"
-            if !isempty(width_val)
-                (px, _) = parse_length(width_val)
-                styles.border_right_width = px
-            end
-            if !isempty(style_val)
-                styles.border_right_style = parse_border_style(style_val)
-            end
-            if !isempty(color_val)
-                color = parse_color(color_val)
-                styles.border_right_r, styles.border_right_g, styles.border_right_b, styles.border_right_a = color
-            end
-        elseif prop == "border-bottom"
-            if !isempty(width_val)
-                (px, _) = parse_length(width_val)
-                styles.border_bottom_width = px
-            end
-            if !isempty(style_val)
-                styles.border_bottom_style = parse_border_style(style_val)
-            end
-            if !isempty(color_val)
-                color = parse_color(color_val)
-                styles.border_bottom_r, styles.border_bottom_g, styles.border_bottom_b, styles.border_bottom_a = color
-            end
-        elseif prop == "border-left"
-            if !isempty(width_val)
-                (px, _) = parse_length(width_val)
-                styles.border_left_width = px
-            end
-            if !isempty(style_val)
-                styles.border_left_style = parse_border_style(style_val)
-            end
-            if !isempty(color_val)
-                color = parse_color(color_val)
-                styles.border_left_r, styles.border_left_g, styles.border_left_b, styles.border_left_a = color
-            end
-        end
-        
-    elseif prop == "border-top-width"
-        (px, _) = parse_length(val)
-        styles.border_top_width = px
-        
-    elseif prop == "border-right-width"
-        (px, _) = parse_length(val)
-        styles.border_right_width = px
-        
-    elseif prop == "border-bottom-width"
-        (px, _) = parse_length(val)
-        styles.border_bottom_width = px
-        
-    elseif prop == "border-left-width"
-        (px, _) = parse_length(val)
-        styles.border_left_width = px
-        
     elseif prop == "border-style"
-        # All sides
-        border_style = parse_border_style(val_lower)
-        styles.border_top_style = border_style
-        styles.border_right_style = border_style
-        styles.border_bottom_style = border_style
-        styles.border_left_style = border_style
-        
-    elseif prop == "border-top-style"
-        styles.border_top_style = parse_border_style(val_lower)
-        
-    elseif prop == "border-right-style"
-        styles.border_right_style = parse_border_style(val_lower)
-        
-    elseif prop == "border-bottom-style"
-        styles.border_bottom_style = parse_border_style(val_lower)
-        
-    elseif prop == "border-left-style"
-        styles.border_left_style = parse_border_style(val_lower)
-        
+        style = parse_border_style(val_lower)
+        styles.border_top_style = styles.border_right_style = styles.border_bottom_style = styles.border_left_style = style
     elseif prop == "border-color"
-        # All sides
         color = parse_color(val)
         styles.border_top_r, styles.border_top_g, styles.border_top_b, styles.border_top_a = color
         styles.border_right_r, styles.border_right_g, styles.border_right_b, styles.border_right_a = color
         styles.border_bottom_r, styles.border_bottom_g, styles.border_bottom_b, styles.border_bottom_a = color
         styles.border_left_r, styles.border_left_g, styles.border_left_b, styles.border_left_a = color
-        
-    elseif prop == "border-top-color"
-        color = parse_color(val)
-        styles.border_top_r, styles.border_top_g, styles.border_top_b, styles.border_top_a = color
-        
-    elseif prop == "border-right-color"
-        color = parse_color(val)
-        styles.border_right_r, styles.border_right_g, styles.border_right_b, styles.border_right_a = color
-        
-    elseif prop == "border-bottom-color"
-        color = parse_color(val)
-        styles.border_bottom_r, styles.border_bottom_g, styles.border_bottom_b, styles.border_bottom_a = color
-        
-    elseif prop == "border-left-color"
-        color = parse_color(val)
-        styles.border_left_r, styles.border_left_g, styles.border_left_b, styles.border_left_a = color
-        
-    # Text properties
     elseif prop == "line-height"
         if val_lower == "normal"
             styles.line_height_normal = true
         else
             (px, auto) = parse_length(val)
-            if !auto
-                styles.line_height = px
-                styles.line_height_normal = false
-            end
+            !auto && (styles.line_height = px; styles.line_height_normal = false)
         end
-        
     elseif prop == "font-size"
         (px, _) = parse_length(val)
         styles.font_size = px
-        
-    elseif prop == "font"
-        # Parse font shorthand: [style] [variant] [weight] size[/line-height] family
-        # e.g., "2px/4px serif" or "bold 12px/1.5 Arial"
-        parts = split(strip(val))
-        for i in 1:length(parts)
-            part = parts[i]
-            if contains(part, '/')
-                # size/line-height format
-                size_lh = split(part, '/')
-                if length(size_lh) >= 2
-                    (px, _) = parse_length(size_lh[1])
-                    styles.font_size = px
-                    (lh_px, auto) = parse_length(size_lh[2])
-                    if !auto
-                        styles.line_height = lh_px
-                        styles.line_height_normal = false
-                    end
-                end
-            elseif occursin(r"^\d", part) && !occursin(r"^(normal|bold|bolder|lighter|\d{3})$", part)
-                # Pure size value
-                (px, _) = parse_length(part)
-                styles.font_size = px
-            end
-        end
-        
     elseif prop == "content"
-        # Parse content property - extract string value from quotes
         content_val = strip(val)
         if content_val == "none" || content_val == "normal"
-            styles.has_content = false
-            styles.content = ""
+            styles.has_content = false; styles.content = ""
         else
-            # Extract content from quotes (single or double)
             m = match(r"^['\"](.*)['\"]\s*$", content_val)
             if m !== nothing
-                styles.content = m.captures[1]
-                styles.has_content = true
+                styles.content = m.captures[1]; styles.has_content = true
             elseif content_val == "''" || content_val == "\"\""
-                styles.content = ""
-                styles.has_content = true
+                styles.content = ""; styles.has_content = true
             end
         end
     end
 end
 
-"""
-    parse_border_style(val::AbstractString) -> UInt8
-
-Parse a border style value.
-"""
 function parse_border_style(val::AbstractString)::UInt8
     val_lower = lowercase(strip(val))
-    if val_lower == "solid"
-        return BORDER_STYLE_SOLID
-    elseif val_lower == "dotted"
-        return BORDER_STYLE_DOTTED
-    elseif val_lower == "dashed"
-        return BORDER_STYLE_DASHED
-    else
-        return BORDER_STYLE_NONE
-    end
+    val_lower == "solid" ? BORDER_STYLE_SOLID :
+    val_lower == "dotted" ? BORDER_STYLE_DOTTED :
+    val_lower == "dashed" ? BORDER_STYLE_DASHED : BORDER_STYLE_NONE
 end
 
-"""
-    parse_margin_shorthand(val::AbstractString) -> NTuple{4, Float32}
-
-Parse margin/padding shorthand (1-4 values) into top, right, bottom, left.
-"""
 function parse_margin_shorthand(val::AbstractString)::NTuple{4, Float32}
     parts = split(strip(val))
     values = Float32[]
@@ -625,15 +299,10 @@ function parse_margin_shorthand(val::AbstractString)::NTuple{4, Float32}
         push!(values, px)
     end
     
-    if length(values) == 1
-        return (values[1], values[1], values[1], values[1])
-    elseif length(values) == 2
-        return (values[1], values[2], values[1], values[2])
-    elseif length(values) == 3
-        return (values[1], values[2], values[3], values[2])
-    elseif length(values) >= 4
-        return (values[1], values[2], values[3], values[4])
-    end
+    length(values) == 1 && return (values[1], values[1], values[1], values[1])
+    length(values) == 2 && return (values[1], values[2], values[1], values[2])
+    length(values) == 3 && return (values[1], values[2], values[3], values[2])
+    length(values) >= 4 && return (values[1], values[2], values[3], values[4])
     
     return (0.0f0, 0.0f0, 0.0f0, 0.0f0)
 end
