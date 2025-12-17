@@ -317,6 +317,114 @@ end
 export get_size
 
 # ============================================================================
+# Threaded Window Handle (for onscreen rendering)
+# ============================================================================
+
+"""
+    RustThreadedWindowHandle
+
+Handle to a Rust-based onscreen window running in a separate thread.
+"""
+mutable struct RustThreadedWindowHandle
+    ptr::Ptr{Nothing}
+    is_valid::Bool
+    
+    function RustThreadedWindowHandle(ptr::Ptr{Nothing})
+        h = new(ptr, ptr != C_NULL)
+        finalizer(h) do handle
+            if handle.is_valid && handle.ptr != C_NULL
+                destroy_threaded!(handle)
+            end
+        end
+        return h
+    end
+end
+
+export RustThreadedWindowHandle
+
+"""
+    create_onscreen_window(; width=800, height=600, title="DOP Browser") -> RustThreadedWindowHandle
+
+Create a new onscreen window running in a separate thread with its own event loop.
+"""
+function create_onscreen_window(; width::Integer=800, height::Integer=600, title::String="DOP Browser")::RustThreadedWindowHandle
+    ptr = ccall(get_func(:dop_window_create_onscreen), 
+                Ptr{Nothing}, (Cint, Cint, Cstring), 
+                width, height, title)
+    return RustThreadedWindowHandle(ptr)
+end
+
+export create_onscreen_window
+
+"""
+    destroy_threaded!(handle::RustThreadedWindowHandle)
+
+Destroy a threaded window and release resources.
+"""
+function destroy_threaded!(handle::RustThreadedWindowHandle)
+    if handle.is_valid && handle.ptr != C_NULL
+        ccall(get_func(:dop_window_free_threaded), Cvoid, (Ptr{Nothing},), handle.ptr)
+        handle.ptr = C_NULL
+        handle.is_valid = false
+    end
+end
+
+export destroy_threaded!
+
+"""
+    is_open_threaded(handle::RustThreadedWindowHandle) -> Bool
+
+Check if the threaded window is still open.
+"""
+function is_open_threaded(handle::RustThreadedWindowHandle)::Bool
+    if !handle.is_valid || handle.ptr == C_NULL
+        return false
+    end
+    return ccall(get_func(:dop_window_is_open_threaded), Cint, (Ptr{Nothing},), handle.ptr) != 0
+end
+
+export is_open_threaded
+
+"""
+    poll_events_threaded!(handle::RustThreadedWindowHandle; max_events::Integer=100) -> Vector{DopEvent}
+
+Poll events from the threaded window.
+"""
+function poll_events_threaded!(handle::RustThreadedWindowHandle; max_events::Integer=100)::Vector{DopEvent}
+    if !handle.is_valid || handle.ptr == C_NULL
+        return DopEvent[]
+    end
+    
+    # Allocate buffer for events
+    events = Vector{DopEvent}(undef, max_events)
+    
+    count = ccall(get_func(:dop_window_poll_events_threaded),
+                  Cint, (Ptr{Nothing}, Ptr{DopEvent}, Cint),
+                  handle.ptr, pointer(events), max_events)
+    
+    # Return only the events that were actually filled
+    return events[1:count]
+end
+
+export poll_events_threaded!
+
+"""
+    get_size_threaded(handle::RustThreadedWindowHandle) -> Tuple{Int, Int}
+
+Get the size of the threaded window.
+"""
+function get_size_threaded(handle::RustThreadedWindowHandle)::Tuple{Int, Int}
+    if !handle.is_valid || handle.ptr == C_NULL
+        return (0, 0)
+    end
+    width = ccall(get_func(:dop_window_get_width_threaded), Cint, (Ptr{Nothing},), handle.ptr)
+    height = ccall(get_func(:dop_window_get_height_threaded), Cint, (Ptr{Nothing},), handle.ptr)
+    return (Int(width), Int(height))
+end
+
+export get_size_threaded
+
+# ============================================================================
 # Renderer Handle
 # ============================================================================
 

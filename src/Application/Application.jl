@@ -196,13 +196,23 @@ function create_app(;
         actual_headless = true
     end
     
+    # Determine actual backend to use
+    actual_backend = backend
+    if backend == :rust && !actual_headless
+        # Use onscreen Rust backend for non-headless mode
+        actual_backend = :rust_onscreen
+    elseif backend == :rust && actual_headless
+        # Use headless Rust backend
+        actual_backend = :rust
+    end
+    
     config = WindowConfig(
         title = title,
         width = width,
         height = height,
         resizable = resizable,
         vsync = vsync,
-        backend = backend
+        backend = actual_backend
     )
     
     return App(config; headless = actual_headless)

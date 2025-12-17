@@ -2,7 +2,7 @@
 //!
 //! Provides cross-platform window creation and event handling.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -391,6 +391,7 @@ fn key_to_code(key: &Key) -> i32 {
 pub struct DopApp {
     handle: Option<WindowHandle>,
     renderer: Option<crate::renderer::WgpuRenderer>,
+    event_queue: Option<Arc<Mutex<Vec<DopEvent>>>>,
 }
 
 impl DopApp {
@@ -398,6 +399,15 @@ impl DopApp {
         Self {
             handle: Some(WindowHandle::new(config)),
             renderer: None,
+            event_queue: None,
+        }
+    }
+
+    pub fn new_with_shared_events(config: WindowConfig, event_queue: Arc<Mutex<Vec<DopEvent>>>) -> Self {
+        Self {
+            handle: Some(WindowHandle::new(config)),
+            renderer: None,
+            event_queue: Some(event_queue),
         }
     }
 
@@ -407,6 +417,17 @@ impl DopApp {
 
     pub fn take_renderer(&mut self) -> Option<crate::renderer::WgpuRenderer> {
         self.renderer.take()
+    }
+
+    /// Push event to either local handle or shared queue
+    fn push_event(&mut self, event: DopEvent) {
+        if let Some(queue) = &self.event_queue {
+            if let Ok(mut q) = queue.lock() {
+                q.push(event);
+            }
+        } else if let Some(handle) = &mut self.handle {
+            handle.push_event(event);
+        }
     }
 }
 
@@ -438,8 +459,8 @@ impl ApplicationHandler for DopApp {
 
                 if let Some(handle) = &mut self.handle {
                     handle.window = Some(window);
-                    handle.push_event(DopEvent::resize(size.width, size.height));
                 }
+                self.push_event(DopEvent::resize(size.width, size.height));
                 self.renderer = Some(renderer);
             }
             Err(e) => {
@@ -455,30 +476,39 @@ impl ApplicationHandler for DopApp {
         _window_id: WindowId,
         event: WinitWindowEvent,
     ) {
-        let handle = match &mut self.handle {
-            Some(h) => h,
-            None => return,
+        // First, extract needed data from handle without keeping the borrow
+        let (current_modifiers, mouse_x, mouse_y) = if let Some(handle) = &self.handle {
+            (handle.current_modifiers, handle.mouse_x, handle.mouse_y)
+        } else {
+            return;
         };
 
         match event {
             WinitWindowEvent::CloseRequested => {
-                handle.push_event(DopEvent::close());
-                handle.is_open = false;
+                self.push_event(DopEvent::close());
+                if let Some(handle) = &mut self.handle {
+                    handle.is_open = false;
+                }
                 event_loop.exit();
             }
             WinitWindowEvent::Resized(size) => {
-                handle.push_event(DopEvent::resize(size.width, size.height));
+                self.push_event(DopEvent::resize(size.width, size.height));
                 if let Some(renderer) = &mut self.renderer {
                     renderer.resize(size.width, size.height);
                 }
             }
             WinitWindowEvent::RedrawRequested => {
-                handle.push_event(DopEvent::redraw());
+                self.push_event(DopEvent::redraw());
                 if let Some(renderer) = &mut self.renderer {
+                    let (width, height) = if let Some(handle) = &self.handle {
+                        handle.get_size()
+                    } else {
+                        (0, 0)
+                    };
+                    
                     match renderer.render() {
                         Ok(_) => {}
                         Err(wgpu::SurfaceError::Lost) => {
-                            let (width, height) = handle.get_size();
                             renderer.resize(width, height);
                         }
                         Err(wgpu::SurfaceError::OutOfMemory) => {
@@ -493,10 +523,10 @@ impl ApplicationHandler for DopApp {
                 let key_code = key_to_code(&event.logical_key);
                 match event.state {
                     ElementState::Pressed => {
-                        handle.push_event(DopEvent::key_down(key_code, handle.current_modifiers));
+                        self.push_event(DopEvent::key_down(key_code, current_modifiers));
                     }
                     ElementState::Released => {
-                        handle.push_event(DopEvent::key_up(key_code, handle.current_modifiers));
+                        self.push_event(DopEvent::key_up(key_code, current_modifiers));
                     }
                 }
 
@@ -504,7 +534,7 @@ impl ApplicationHandler for DopApp {
                 if event.state == ElementState::Pressed {
                     if let Key::Character(c) = &event.logical_key {
                         for ch in c.chars() {
-                            handle.push_event(DopEvent::char_input(ch));
+                            self.push_event(DopEvent::char_input(ch));
                         }
                     }
                 }
@@ -524,21 +554,25 @@ impl ApplicationHandler for DopApp {
                 if state.super_key() {
                     mods |= modifiers::SUPER;
                 }
-                handle.current_modifiers = mods;
+                if let Some(handle) = &mut self.handle {
+                    handle.current_modifiers = mods;
+                }
             }
             WinitWindowEvent::CursorMoved { position, .. } => {
-                handle.mouse_x = position.x;
-                handle.mouse_y = position.y;
-                handle.push_event(DopEvent::mouse_move(position.x, position.y));
+                if let Some(handle) = &mut self.handle {
+                    handle.mouse_x = position.x;
+                    handle.mouse_y = position.y;
+                }
+                self.push_event(DopEvent::mouse_move(position.x, position.y));
             }
             WinitWindowEvent::MouseInput { state, button, .. } => {
                 let btn = MouseButtonId::from(button);
                 match state {
                     ElementState::Pressed => {
-                        handle.push_event(DopEvent::mouse_down(btn, handle.mouse_x, handle.mouse_y));
+                        self.push_event(DopEvent::mouse_down(btn, mouse_x, mouse_y));
                     }
                     ElementState::Released => {
-                        handle.push_event(DopEvent::mouse_up(btn, handle.mouse_x, handle.mouse_y));
+                        self.push_event(DopEvent::mouse_up(btn, mouse_x, mouse_y));
                     }
                 }
             }
@@ -547,19 +581,19 @@ impl ApplicationHandler for DopApp {
                     winit::event::MouseScrollDelta::LineDelta(x, y) => (x as f64, y as f64),
                     winit::event::MouseScrollDelta::PixelDelta(pos) => (pos.x, pos.y),
                 };
-                handle.push_event(DopEvent::mouse_scroll(handle.mouse_x, handle.mouse_y, dx, dy));
+                self.push_event(DopEvent::mouse_scroll(mouse_x, mouse_y, dx, dy));
             }
             WinitWindowEvent::CursorEntered { .. } => {
-                handle.push_event(DopEvent::mouse_enter());
+                self.push_event(DopEvent::mouse_enter());
             }
             WinitWindowEvent::CursorLeft { .. } => {
-                handle.push_event(DopEvent::mouse_leave());
+                self.push_event(DopEvent::mouse_leave());
             }
             WinitWindowEvent::Focused(focused) => {
                 if focused {
-                    handle.push_event(DopEvent::focus());
+                    self.push_event(DopEvent::focus());
                 } else {
-                    handle.push_event(DopEvent::blur());
+                    self.push_event(DopEvent::blur());
                 }
             }
             _ => {}

@@ -355,20 +355,48 @@ end
 
 """
 Initialize Rust-based windowing and rendering backend.
-Uses tiny-skia for software rendering and winit for window management.
+For onscreen rendering, creates a real window with winit event loop.
+For headless rendering, uses tiny-skia software rendering.
 """
 function initialize_rust_backend!(handle::WindowHandle)
     try
-        # Try to use RustRenderer for software rendering
+        # Try to use RustRenderer
         RustRenderer = @eval begin
             import ...RustRenderer as RR
             RR
         end
         
-        if RustRenderer.is_available()
-            # Create a Rust renderer for this window
+        if !RustRenderer.is_available()
+            @warn "Rust renderer not available, falling back to software"
+            initialize_software_backend!(handle)
+            return
+        end
+        
+        # Check if we need headless rendering (backend is :rust, not :rust_onscreen)
+        if handle.config.backend != :rust_onscreen
+            # Headless Rust rendering
             renderer = RustRenderer.create_renderer(handle.width, handle.height)
-            handle.backend_data = (:rust, renderer)
+            handle.backend_data = (:rust_headless, renderer)
+            handle.framebuffer = zeros(UInt8, handle.width * handle.height * 4)
+            return
+        end
+        
+        # Try to create onscreen window
+        try
+            threaded_window = RustRenderer.create_onscreen_window(
+                width=Int(handle.width),
+                height=Int(handle.height),
+                title=handle.config.title
+            )
+            handle.backend_data = (:rust_onscreen, threaded_window)
+            handle.framebuffer = zeros(UInt8, handle.width * handle.height * 4)
+            @info "Created onscreen window with Rust backend"
+            return
+        catch e
+            @warn "Failed to create onscreen window, falling back to headless" exception=e
+            # Fall back to headless
+            renderer = RustRenderer.create_renderer(handle.width, handle.height)
+            handle.backend_data = (:rust_headless, renderer)
             handle.framebuffer = zeros(UInt8, handle.width * handle.height * 4)
             return
         end
@@ -397,16 +425,24 @@ Destroy a window and release its resources.
 function destroy!(handle::WindowHandle)
     handle.is_open = false
     
-    # Clean up Rust renderer if present
-    if handle.backend_data isa Tuple && handle.backend_data[1] == :rust
+    # Clean up Rust resources if present
+    if handle.backend_data isa Tuple
+        backend_type = handle.backend_data[1]
+        backend_obj = handle.backend_data[2]
+        
         try
             RustRenderer = @eval begin
                 import ...RustRenderer as RR
                 RR
             end
-            RustRenderer.destroy!(handle.backend_data[2])
-        catch
-            # Ignore cleanup errors
+            
+            if backend_type == :rust_headless || backend_type == :rust
+                RustRenderer.destroy!(backend_obj)
+            elseif backend_type == :rust_onscreen
+                RustRenderer.destroy_threaded!(backend_obj)
+            end
+        catch e
+            @warn "Error cleaning up Rust backend" exception=e
         end
     end
     
@@ -440,13 +476,118 @@ end
     poll_events!(handle::WindowHandle) -> Vector{WindowEvent}
 
 Poll for pending events without blocking. Returns a copy of pending events
-and clears the event queue.
+and clears the event_queue.
 """
 function poll_events!(handle::WindowHandle)::Vector{WindowEvent}
+    # Check if we have a threaded window that needs polling
+    if handle.backend_data isa Tuple && handle.backend_data[1] == :rust_onscreen
+        try
+            RustRenderer = @eval begin
+                import ...RustRenderer as RR
+                RR
+            end
+            
+            threaded_window = handle.backend_data[2]
+            
+            # Check if window is still open
+            if !RustRenderer.is_open_threaded(threaded_window)
+                handle.is_open = false
+                push!(handle.event_queue, WindowEvent(EVENT_CLOSE))
+            else
+                # Poll events from the threaded window
+                rust_events = RustRenderer.poll_events_threaded!(threaded_window)
+                
+                # Convert Rust events to Window events
+                for rust_event in rust_events
+                    window_event = convert_rust_event_to_window_event(rust_event)
+                    if window_event !== nothing
+                        push!(handle.event_queue, window_event)
+                    end
+                end
+            end
+        catch e
+            @warn "Error polling threaded window events" exception=e
+        end
+    end
+    
     # Return events from internal queue
     events = copy(handle.event_queue)
     empty!(handle.event_queue)
     return events
+end
+
+"""
+Convert a Rust DopEvent to a WindowEvent.
+"""
+function convert_rust_event_to_window_event(rust_event)
+    # Map Rust event types to Window event types
+    event_type_map = Dict(
+        RustRenderer.EVENT_CLOSE => EVENT_CLOSE,
+        RustRenderer.EVENT_RESIZE => EVENT_RESIZE,
+        RustRenderer.EVENT_KEY_DOWN => EVENT_KEY_DOWN,
+        RustRenderer.EVENT_KEY_UP => EVENT_KEY_UP,
+        RustRenderer.EVENT_CHAR => EVENT_CHAR,
+        RustRenderer.EVENT_MOUSE_DOWN => EVENT_MOUSE_DOWN,
+        RustRenderer.EVENT_MOUSE_UP => EVENT_MOUSE_UP,
+        RustRenderer.EVENT_MOUSE_MOVE => EVENT_MOUSE_MOVE,
+        RustRenderer.EVENT_MOUSE_SCROLL => EVENT_MOUSE_SCROLL,
+        RustRenderer.EVENT_MOUSE_ENTER => EVENT_MOUSE_ENTER,
+        RustRenderer.EVENT_MOUSE_LEAVE => EVENT_MOUSE_LEAVE,
+        RustRenderer.EVENT_FOCUS => EVENT_FOCUS,
+        RustRenderer.EVENT_BLUR => EVENT_BLUR,
+    )
+    
+    event_type = get(event_type_map, rust_event.event_type, nothing)
+    if event_type === nothing
+        return nothing
+    end
+    
+    return WindowEvent(
+        event_type,
+        key = rust_event.key,
+        scancode = rust_event.scancode,
+        modifiers = rust_event.modifiers,
+        char = Char(rust_event.char_code),
+        button = convert_rust_mouse_button(rust_event.button),
+        x = rust_event.x,
+        y = rust_event.y,
+        scroll_x = rust_event.scroll_x,
+        scroll_y = rust_event.scroll_y,
+        width = rust_event.width,
+        height = rust_event.height,
+        timestamp = rust_event.timestamp
+    )
+end
+
+"""
+Convert Rust mouse button to Window mouse button.
+"""
+function convert_rust_mouse_button(rust_button)
+    # Map RustRenderer mouse button enum to Window mouse button enum
+    try
+        RustRenderer = @eval begin
+            import ...RustRenderer as RR
+            RR
+        end
+        
+        # The enum values should match, but let's be explicit
+        if rust_button == RustRenderer.MOUSE_LEFT
+            return MOUSE_LEFT
+        elseif rust_button == RustRenderer.MOUSE_RIGHT
+            return MOUSE_RIGHT
+        elseif rust_button == RustRenderer.MOUSE_MIDDLE
+            return MOUSE_MIDDLE
+        elseif rust_button == RustRenderer.MOUSE_X1
+            return MOUSE_X1
+        elseif rust_button == RustRenderer.MOUSE_X2
+            return MOUSE_X2
+        else
+            return MOUSE_LEFT  # Default fallback
+        end
+    catch
+        # If we can't access RustRenderer, default to left
+        return MOUSE_LEFT
+    end
 end
 
 """
