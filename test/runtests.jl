@@ -2236,3 +2236,125 @@ end
     end
 
 end
+
+# ============================================================================
+# Rust Parser Tests
+# ============================================================================
+
+@testset "Rust Parser" begin
+    
+    @testset "Library Availability" begin
+        # Check if the Rust parser library is available
+        is_avail = DOPBrowser.RustParser.is_available()
+        @test is_avail isa Bool
+        
+        if is_avail
+            @info "Rust parser library is available"
+            
+            # Get library version
+            version = DOPBrowser.RustParser.get_version()
+            @test version == "0.1.0"
+        else
+            @warn "Rust parser library not found - skipping parser tests"
+        end
+    end
+    
+    if DOPBrowser.RustParser.is_available()
+        @testset "String Pool" begin
+            pool = DOPBrowser.RustParser.create_string_pool()
+            @test pool.is_valid == true
+            
+            # Test interning
+            id1 = DOPBrowser.RustParser.intern!(pool, "hello")
+            id2 = DOPBrowser.RustParser.intern!(pool, "world")
+            id3 = DOPBrowser.RustParser.intern!(pool, "hello")  # Duplicate
+            
+            @test id1 == id3  # Same string should have same ID
+            @test id1 != id2  # Different strings should have different IDs
+            
+            # Test retrieval
+            @test DOPBrowser.RustParser.get_string(pool, id1) == "hello"
+            @test DOPBrowser.RustParser.get_string(pool, id2) == "world"
+        end
+        
+        @testset "HTML Parsing" begin
+            result = DOPBrowser.RustParser.parse_html("<div><p>Hello</p></div>")
+            @test result.is_valid == true
+            
+            token_count = DOPBrowser.RustParser.token_count(result)
+            @test token_count > 0
+            
+            # Get first token type
+            first_type = DOPBrowser.RustParser.get_token_type(result, UInt32(0))
+            @test first_type > 0  # Should be a valid token type
+        end
+        
+        @testset "HTML Parsing with Attributes" begin
+            result = DOPBrowser.RustParser.parse_html("""<div id="main" class="container">Test</div>""")
+            @test result.is_valid == true
+            @test DOPBrowser.RustParser.token_count(result) > 0
+        end
+        
+        @testset "CSS Parsing - Inline Style" begin
+            styles = DOPBrowser.RustParser.parse_inline_style("width: 100px; height: 50px; background-color: red;")
+            @test styles.is_valid == true
+            
+            # Check width
+            @test DOPBrowser.RustParser.get_width(styles) == 100.0f0
+            @test DOPBrowser.RustParser.get_width_is_auto(styles) == false
+            
+            # Check height
+            @test DOPBrowser.RustParser.get_height(styles) == 50.0f0
+            @test DOPBrowser.RustParser.get_height_is_auto(styles) == false
+            
+            # Check background color
+            @test DOPBrowser.RustParser.has_background(styles) == true
+            bg_color = DOPBrowser.RustParser.get_background_color(styles)
+            @test bg_color[1] == 0xff  # Red
+            @test bg_color[2] == 0x00  # Green
+            @test bg_color[3] == 0x00  # Blue
+        end
+        
+        @testset "CSS Color Parsing" begin
+            # Named colors
+            @test DOPBrowser.RustParser.parse_color("black") == (0x00, 0x00, 0x00, 0xff)
+            @test DOPBrowser.RustParser.parse_color("white") == (0xff, 0xff, 0xff, 0xff)
+            @test DOPBrowser.RustParser.parse_color("red") == (0xff, 0x00, 0x00, 0xff)
+            @test DOPBrowser.RustParser.parse_color("transparent") == (0x00, 0x00, 0x00, 0x00)
+            
+            # Hex colors
+            @test DOPBrowser.RustParser.parse_color("#fff") == (0xff, 0xff, 0xff, 0xff)
+            @test DOPBrowser.RustParser.parse_color("#000") == (0x00, 0x00, 0x00, 0xff)
+            @test DOPBrowser.RustParser.parse_color("#ff0000") == (0xff, 0x00, 0x00, 0xff)
+        end
+        
+        @testset "CSS Length Parsing" begin
+            # Pixels
+            (val, auto) = DOPBrowser.RustParser.parse_length("100px")
+            @test val == 100.0f0
+            @test auto == false
+            
+            # Auto
+            (val, auto) = DOPBrowser.RustParser.parse_length("auto")
+            @test auto == true
+            
+            # No unit (default px)
+            (val, auto) = DOPBrowser.RustParser.parse_length("50")
+            @test val == 50.0f0
+            @test auto == false
+        end
+        
+        @testset "Text Shaping" begin
+            shaper = DOPBrowser.RustParser.create_text_shaper()
+            @test shaper.is_valid == true
+            
+            shaped = DOPBrowser.RustParser.shape_paragraph(shaper, "Hello World", 200.0f0)
+            @test shaped.is_valid == true
+            
+            @test DOPBrowser.RustParser.get_shaped_width(shaped) > 0.0f0
+            @test DOPBrowser.RustParser.get_shaped_height(shaped) > 0.0f0
+            @test DOPBrowser.RustParser.get_shaped_line_count(shaped) >= 1
+        end
+    end
+
+end

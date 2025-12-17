@@ -89,6 +89,9 @@ include("Window/Window.jl")
 # Rust-based rendering engine (winit + wgpu)
 include("RustRenderer/RustRenderer.jl")
 
+# Rust-based HTML/CSS parser and Content-- compiler
+include("RustParser/RustParser.jl")
+
 # Reactive state management
 include("State/State.jl")
 
@@ -168,6 +171,10 @@ export Window
 # Rust-based rendering (winit + wgpu)
 using .RustRenderer
 export RustRenderer
+
+# Rust-based parsing and compilation
+using .RustParser
+export RustParser
 
 using .State
 export State
