@@ -162,10 +162,41 @@ For **minimal size** (with trade-offs):
 
 1. All the above, plus:
 2. **Aggressive Julia optimization flags**: -50 MB
-3. **Static compilation** (experimental): -100 MB
-4. **Remove unused stdlib**: -30 MB
+3. **Remove unused stdlib**: -30 MB
 
 **Expected final size**: 60-100 MB (highly optimized, less portable)
+
+### 9. StaticCompiler (Experimental - Best Size Reduction)
+
+For the smallest possible binaries, use StaticCompiler instead of PackageCompiler. This creates a truly standalone executable without the Julia runtime.
+
+```bash
+# Install StaticCompiler (already in Project.toml)
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+
+# Verify setup
+julia --project=. scripts/verify_static_compilation_setup.jl
+
+# Compile with StaticCompiler
+julia --project=. scripts/static_compile_memo_app.jl
+
+# Run the compiled binary
+./build/static_memo_app
+```
+
+**Expected savings**: -330 MB (from ~350 MB to ~5-20 MB)
+**Trade-offs**: 
+- Significantly limited Julia feature support
+- Simplified application (headless rendering only)
+- No interactive mode
+- Requires C-compatible entry points
+- May require code refactoring for compatibility
+
+**When to use**:
+- Minimal binary size is critical
+- Application is simple and headless
+- Embedded systems or containers
+- Batch processing scenarios
 
 ## Benchmarking
 

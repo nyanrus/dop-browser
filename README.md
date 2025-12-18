@@ -156,9 +156,11 @@ save_app_screenshot(app, "output.png")
 
 ### Standalone Executables
 
-Applications built with DOPBrowser can be compiled into standalone executables using PackageCompiler. This creates a self-contained binary that doesn't require Julia to be installed.
+Applications built with DOPBrowser can be compiled into standalone executables using two approaches:
 
-**Example: Compile the memo application**
+#### Option 1: PackageCompiler (Full Runtime)
+
+PackageCompiler creates a self-contained binary that includes the full Julia runtime.
 
 ```bash
 # Verify setup
@@ -171,7 +173,26 @@ julia --project=. scripts/compile_memo_app.jl
 ./build/memo_app/bin/memo_app
 ```
 
-**Binary size**: 370-430 MB (can be reduced to 140-250 MB with optimizations)
+**Binary size**: 350-400 MB (can be reduced to 140-250 MB with optimizations)
+
+#### Option 2: StaticCompiler (Standalone Binary)
+
+StaticCompiler creates a truly standalone executable without the Julia runtime, resulting in much smaller binaries.
+
+```bash
+# Verify setup
+julia --project=. scripts/verify_static_compilation_setup.jl
+
+# Compile (takes a few minutes)
+julia --project=. scripts/static_compile_memo_app.jl
+
+# Run the compiled binary
+./build/static_memo_app
+```
+
+**Binary size**: 5-20 MB (no Julia runtime included)
+
+**Note**: StaticCompiler has limitations and only supports a subset of Julia features. The static memo app is a simplified version suitable for static compilation.
 
 See [`docs/PACKAGING.md`](docs/PACKAGING.md) for detailed packaging instructions and [`docs/BINARY_SIZE_REDUCTION.md`](docs/BINARY_SIZE_REDUCTION.md) for size optimization strategies.
 
