@@ -203,6 +203,17 @@ struct Color
     end
 end
 
+# Named colors - module-level constant for reuse
+const NAMED_COLORS = Dict{String, Color}(
+    "black" => Color(0x00, 0x00, 0x00, 0xff),
+    "white" => Color(0xff, 0xff, 0xff, 0xff),
+    "red" => Color(0xff, 0x00, 0x00, 0xff),
+    "green" => Color(0x00, 0x80, 0x00, 0xff),
+    "blue" => Color(0x00, 0x00, 0xff, 0xff),
+    "yellow" => Color(0xff, 0xff, 0x00, 0xff),
+    "transparent" => Color(0x00, 0x00, 0x00, 0x00),
+)
+
 """
     parse_color(value::AbstractString) -> Color
 
@@ -210,17 +221,6 @@ Parse a color from hex (#RGB, #RRGGBB) or named colors.
 """
 function parse_color(value::AbstractString)::Color
     val = strip(lowercase(value))
-    
-    # Named colors (using unicode for common mathematical/scientific colors)
-    const NAMED_COLORS = Dict{String, Color}(
-        "black" => Color(0x00, 0x00, 0x00, 0xff),
-        "white" => Color(0xff, 0xff, 0xff, 0xff),
-        "red" => Color(0xff, 0x00, 0x00, 0xff),
-        "green" => Color(0x00, 0x80, 0x00, 0xff),
-        "blue" => Color(0x00, 0x00, 0xff, 0xff),
-        "yellow" => Color(0xff, 0xff, 0x00, 0xff),
-        "transparent" => Color(0x00, 0x00, 0x00, 0x00),
-    )
     
     haskey(NAMED_COLORS, val) && return NAMED_COLORS[val]
     

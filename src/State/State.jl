@@ -161,10 +161,20 @@ Notify all observers of a signal change.
 function notify!(s::Signal)
     ctx = get_context()
     
-    # Queue notifications for batch or notify immediately
-    for observer in (ctx.is_batching ? s.observers : copy(s.observers))
-        ctx.is_batching ? push!(ctx.pending_notifications, observer) :
-                         try run!(observer) catch e; @warn "Error in observer" exception=e end
+    if ctx.is_batching
+        # Queue notifications for batch
+        for observer in s.observers
+            push!(ctx.pending_notifications, observer)
+        end
+    else
+        # Notify immediately with error handling
+        for observer in copy(s.observers)
+            try
+                run!(observer)
+            catch e
+                @warn "Error in observer" exception=e
+            end
+        end
     end
 end
 

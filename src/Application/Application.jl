@@ -245,8 +245,11 @@ end
 """
 Build the UI from the builder function.
 """
-build_app_ui!(app::App) = app.callbacks.ui_builder !== nothing && 
-                          (app.widget_tree = build_ui(app.callbacks.ui_builder))
+function build_app_ui!(app::App)
+    if app.callbacks.ui_builder !== nothing
+        app.widget_tree = build_ui(app.callbacks.ui_builder)
+    end
+end
 
 # ============================================================================
 # Lifecycle Callbacks

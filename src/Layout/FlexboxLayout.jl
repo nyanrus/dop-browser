@@ -160,6 +160,9 @@ end
 
 Resolve flexible lengths for flex items using the flex-grow and flex-shrink properties.
 Implements the CSS Flexbox flexible length resolution algorithm.
+
+Note: This is a simplified implementation. Full implementation requires mutable FlexItem
+or returning updated items.
 """
 function resolve_flexible_lengths!(items::Vector{FlexItem}, Δspace::Float32)
     # Calculate total basis with margins
@@ -170,19 +173,20 @@ function resolve_flexible_lengths!(items::Vector{FlexItem}, Δspace::Float32)
         # Distribute free space using flex-grow
         Σgrow = sum(item.flex_grow for item in items)
         
-        Σgrow > 0 && for item in items
-            item.flex_grow > 0 && (flex_share = Δfree * (item.flex_grow / Σgrow))
-            # Update computed_size (in-place modification would require mutable struct)
-            # This is a simplified implementation
-        end
+        # TODO: Update computed_size (requires mutable struct or new vector)
+        # for item in items where item.flex_grow > 0
+        #     flex_share = Δfree * (item.flex_grow / Σgrow)
+        #     item.computed_size += flex_share
+        # end
     elseif Δfree < 0
         # Shrink items using flex-shrink
         Σshrink = sum(item.flex_shrink * item.flex_basis for item in items)
         
-        Σshrink > 0 && for item in items
-            item.flex_shrink > 0 && (shrink_share = -Δfree * (item.flex_shrink * item.flex_basis / Σshrink))
-            # Update computed_size
-        end
+        # TODO: Update computed_size (requires mutable struct or new vector)
+        # for item in items where item.flex_shrink > 0
+        #     shrink_share = -Δfree * (item.flex_shrink * item.flex_basis / Σshrink)
+        #     item.computed_size -= shrink_share
+        # end
     end
 end
 
