@@ -8,6 +8,16 @@ This module provides the core data structures for representing UI content:
 - **Primitives**: Content node types (Stack, Grid, Rect, Paragraph, etc.)
 - **Properties**: Layout properties (Direction, Pack, Align, Inset, Offset, etc.)
 
+## StaticCompiler Compatibility
+
+Mathematical types are designed for StaticCompiler:
+- **Vec2, Box4, Rect** use StaticArrays.SVector (stack-allocated, fixed-size)
+- **All math functions** have @inline hints for performance
+- **Type-stable** with explicit return type annotations
+
+Dynamic structures (NodeTable, PropertyTable) require Vector for flexibility.
+See docs/STATICCOMPILER_READINESS.md for details.
+
 ## Architecture
 
 The rendering pipeline follows this structure:
