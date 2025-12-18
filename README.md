@@ -163,9 +163,9 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 | **Pipeline** | Simplified FP-style pipeline (parse_doc → layout → render → to_png) | Active |
 | **RustParser** | Rust-based HTML/CSS parser using html5ever and cssparser | **Required** |
 | **RustRenderer** | Rust-based GPU renderer via wgpu | **Required** |
+| **RustContent** | Rust-based Content IR builder | **Active** |
 | **ContentIR** | Content IR types (MathOps, Primitives, Properties) | **Active** |
 | **Layout** | SIMD-friendly layout calculation | Active |
-| **DOMCSSOM** | Virtual DOM/CSSOM representation | Active |
 | **Network** | HTTP/HTTPS networking layer | Active |
 | **EventLoop** | Browser main event loop | Active |
 | **Window** | Platform windowing abstraction | Active |
@@ -174,9 +174,9 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 | **Application** | Application lifecycle management | Active |
 | **HTMLParser** | HTML tokenization (internal use only) | Internal |
 | **CSSParserModule** | CSS parsing (internal use only) | Internal |
-| **DOMCSSOM** | Legacy DOM/CSSOM virtual tables (internal use only) | Internal |
+| **DOMCSSOM** | Virtual DOM/CSSOM (internal use only) | Internal |
 | **Core** | Legacy browser context (internal use only) | Internal |
-| **ContentMM** | Content IR and runtime (use ContentIR for new code) | Legacy |
+| **ContentMM** | Legacy Content IR (use ContentIR/RustContent for new code) | Legacy |
 
 **Note**: Modules marked as "Internal" are used by the legacy rendering pipeline but should not be used directly in new code. Use RustParser, ContentIR, and the new Pipeline API instead.
 
@@ -221,7 +221,7 @@ cd rust/dop-parser && cargo build --release
 cd ../dop-renderer && cargo build --release
 ```
 
-The Julia implementations (HTMLParser, CSSParserModule) are maintained for internal compatibility only and should not be used directly in new code.
+The Julia implementations (HTMLParser, CSSParserModule) are maintained for internal compatibility only and should not be used directly in new code. For new projects, use RustParser which provides standards-compliant parsing with better performance.
 
 ## Acid2 Test Support
 

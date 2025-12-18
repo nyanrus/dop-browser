@@ -191,8 +191,10 @@ using .Layout: LayoutData, resize_layout!, set_bounds!, get_bounds, set_position
 using .Core: BrowserContext, create_context, parse_html!, apply_styles!,
              compute_layouts!, generate_render_commands!, process_document!
 
-# Export modules for direct access
-export HTMLParser, Layout, DOMCSSOM, EventLoop, CSSParserModule
+# Export modules for direct access (public API only)
+# Note: HTMLParser, CSSParserModule, DOMCSSOM, and Core are internal modules
+# They should not be used directly in new code - use RustParser and Pipeline instead
+export Layout, EventLoop
 
 # Export Core functions
 export BrowserContext, create_context, parse_html!, apply_styles!,
