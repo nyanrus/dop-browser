@@ -1,6 +1,6 @@
-//! Content-- Rendering
+//! Content IR Rendering
 //!
-//! This module provides rendering functionality for Content-- trees.
+//! This module provides rendering functionality for Content IR trees.
 
 use crate::primitives::{NodeTable, NodeType};
 use crate::properties::PropertyTable;
@@ -42,7 +42,7 @@ struct LayoutState {
     height: f32,
 }
 
-/// Render the Content-- tree to a list of render commands
+/// Render the Content IR tree to a list of render commands
 pub fn render(nodes: &NodeTable, props: &PropertyTable, viewport_width: f32, viewport_height: f32) -> Vec<RenderCommand> {
     let mut commands = Vec::new();
     let mut layout_states = vec![LayoutState::default(); nodes.len()];

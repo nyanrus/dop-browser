@@ -2,7 +2,7 @@
 name = "dop-parser"
 version = "0.1.0"
 edition = "2021"
-description = "HTML/CSS parsers and Content-- compiler for DOP Browser"
+description = "HTML/CSS parsers and Content IR compiler for DOP Browser"
 license = "MIT"
 
 [lib]

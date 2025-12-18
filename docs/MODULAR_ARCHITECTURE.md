@@ -12,8 +12,8 @@ The browser engine is organized into the following modules:
 | **CSSParserModule** | CSS parsing and style computation | `src/CSSParser/` |
 | **Layout** | SIMD-friendly layout calculation | `src/Layout/` |
 | **DOMCSSOM** | Virtual DOM/CSSOM representation | `src/DOMCSSOM/` |
-| **Compiler** | HTML+CSS to Content-- compilation | `src/Compiler/` |
-| **ContentMM** | Content-- IR and runtime | `src/ContentMM/` |
+| **Compiler** | HTML+CSS to Content IR compilation | `src/Compiler/` |
+| **ContentMM** | Content IR and runtime | `src/ContentMM/` |
 | **Network** | HTTP/HTTPS networking layer | `src/Network/` |
 | **Renderer** | GPU rendering and PNG export | `src/Renderer/` |
 | **EventLoop** | Browser main event loop | `src/EventLoop/` |
@@ -81,7 +81,7 @@ root_id = add_node!(dom, NODE_DOCUMENT)
 
 ### Compiler
 
-HTML+CSS to Content-- compilation with pre-evaluation:
+HTML+CSS to Content IR compilation with pre-evaluation:
 
 ```julia
 using DOPBrowser.Compiler
@@ -165,7 +165,7 @@ Note: The old Julia `Renderer` module has been deprecated. Use `RustRenderer` fo
 │                            ▼                                             │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────────────┐ │
 │  │  Compiler   │───→│   Layout    │───→│       ContentMM             │ │
-│  │ (HTML→IR)   │    │   (Calc)    │    │   (Content-- Runtime)       │ │
+│  │ (HTML→IR)   │    │   (Calc)    │    │   (Content IR Runtime)       │ │
 │  └─────────────┘    └─────────────┘    └─────────────────────────────┘ │
 │                            │                        │                    │
 │                            ▼                        │                    │

@@ -356,7 +356,7 @@ load_html!(browser, """
 render_to_png!(browser, "output.png")
 ```
 
-### 2. Content-- Text Format (Native)
+### 2. Content Text Format (Native)
 
 A human-readable text format for direct Content-- authoring. Ideal for:
 - Native application UIs

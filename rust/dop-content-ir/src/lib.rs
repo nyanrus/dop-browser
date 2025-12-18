@@ -1,8 +1,8 @@
-//! Content-- Intermediate Representation and Builder
+//! Content IR (Intermediate Representation) and Builder
 //!
-//! This library provides a Rust implementation of the Content-- IR,
+//! This library provides a Rust implementation of the Content IR,
 //! including node primitives, properties, and a builder API for constructing
-//! Content-- trees from Julia.
+//! Content IR trees from Julia.
 
 pub mod primitives;
 pub mod properties;
