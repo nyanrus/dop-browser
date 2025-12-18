@@ -45,8 +45,16 @@ end
 const RendererHandle = Ptr{Cvoid}
 const WindowHandle = Ptr{Cvoid}
 
-# Rust library path (will be resolved at runtime or link time)
-const LIBRENDERER = c"libdop_renderer.so"
+# Rust library path (will be resolved at link time or runtime)
+# For static compilation, the library should be linked directly
+# For development/testing with ccall, use platform-specific extension
+const LIBRENDERER = if Sys.iswindows()
+    c"dop_renderer.dll"
+elseif Sys.isapple()
+    c"libdop_renderer.dylib"
+else
+    c"libdop_renderer.so"
+end
 
 # ============================================================================
 # Renderer FFI - Direct ccall wrappers
@@ -243,12 +251,22 @@ Base.@ccallable function c_main(argc::Int32, argv::Ptr{Ptr{UInt8}})::Int32
     # Check for --onscreen flag
     if argc > Int32(1)
         arg_ptr = unsafe_load(argv, 2)  # argv[1] in C notation
-        # Simple check for --onscreen
-        if unsafe_load(arg_ptr, 1) == UInt8('-')
-            if unsafe_load(arg_ptr, 2) == UInt8('-')
-                if unsafe_load(arg_ptr, 3) == UInt8('o')  # --onscreen
+        # Check for --onscreen (simple string matching for static compilation)
+        # Format: --onscreen or -o
+        c1 = unsafe_load(arg_ptr, 1)
+        if c1 == UInt8('-')
+            c2 = unsafe_load(arg_ptr, 2)
+            if c2 == UInt8('-')
+                # Check for --onscreen (check 'o', 'n', 's')
+                c3 = unsafe_load(arg_ptr, 3)
+                c4 = unsafe_load(arg_ptr, 4)
+                c5 = unsafe_load(arg_ptr, 5)
+                if c3 == UInt8('o') && c4 == UInt8('n') && c5 == UInt8('s')
                     onscreen = true
                 end
+            elseif c2 == UInt8('o')
+                # Short form: -o
+                onscreen = true
             end
         end
     end
