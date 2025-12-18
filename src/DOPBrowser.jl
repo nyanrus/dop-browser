@@ -53,6 +53,9 @@ module DOPBrowser
 # - CSSParserModule (use RustParser instead)
 # - Renderer (use RustRenderer instead)
 
+# Rust-based Content-- builder (REQUIRED)
+include("RustContent/RustContent.jl")
+
 # Rust-based HTML/CSS parser and Content-- compiler (REQUIRED)
 include("RustParser/RustParser.jl")
 
@@ -75,7 +78,7 @@ include("Compiler/Compiler.jl")
 # Event Loop module
 include("EventLoop/EventLoop.jl")
 
-# Content-- IR modules
+# Content-- IR modules (DEPRECATED - use RustContent instead)
 include("ContentMM/ContentMM.jl")
 
 # Network layer
@@ -127,72 +130,12 @@ using .Layout: LayoutData, resize_layout!, set_bounds!, get_bounds, set_position
                     set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!,
                     set_background_color!, get_background_color, set_borders!, has_border
 
-# Re-exports from CSSParserModule
-using .CSSParserModule: CSSStyles, parse_inline_style, parse_color, parse_length,
-                  POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
-                  OVERFLOW_VISIBLE, OVERFLOW_HIDDEN,
-                  DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE,
-                  FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT,
-                  CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH,
-                  BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED
-
-export StringPool, intern!, get_string, get_id
-export TokenType, Token, Tokenizer, tokenize!, reset!, get_tokens
-export NodeKind, DOMTable, add_node!, get_parent, get_first_child, get_next_sibling, get_tag, set_parent!, set_first_child!, set_next_sibling!, node_count,
-       NODE_ELEMENT, NODE_TEXT, NODE_COMMENT, NODE_DOCUMENT, NODE_DOCTYPE,
-       get_id_attr, get_class_attr, get_style_attr, set_attributes!
-export StyleProperty, Archetype, ArchetypeTable, get_or_create_archetype!, apply_archetype!, get_archetype, archetype_count
-export LayoutData, resize_layout!, set_bounds!, get_bounds, set_position!, get_position, compute_layout!,
-       set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!,
-       set_background_color!, get_background_color, set_borders!, has_border
-export RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, emit_stroke!, clear!, get_commands, command_count
-export CSSStyles, parse_inline_style, parse_color, parse_length,
-       POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED,
-       OVERFLOW_VISIBLE, OVERFLOW_HIDDEN,
-       DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE, DISPLAY_TABLE, DISPLAY_TABLE_CELL, DISPLAY_TABLE_ROW, DISPLAY_INLINE_BLOCK,
-       FLOAT_NONE, FLOAT_LEFT, FLOAT_RIGHT,
-       CLEAR_NONE, CLEAR_LEFT, CLEAR_RIGHT, CLEAR_BOTH,
-       BORDER_STYLE_NONE, BORDER_STYLE_SOLID, BORDER_STYLE_DOTTED, BORDER_STYLE_DASHED
-
-# Core API
-using .Core: BrowserContext, create_context, parse_html!, apply_styles!, compute_layouts!, generate_render_commands!, process_document!
-export BrowserContext, create_context, parse_html!, apply_styles!, compute_layouts!, generate_render_commands!, process_document!
-
-# Content-- IR
-using .ContentMM
-export ContentMM
-
-# Network layer
-using .Network
-export Network
-
-# Interactive UI Library Modules
-using .Window
-export Window
-
-# Rust-based rendering (winit + wgpu + tiny-skia)
-using .RustRenderer
-export RustRenderer
-
-# Rust-based parsing and compilation
-using .RustParser
-export RustParser
-
-using .State
-export State
-
-using .Widgets
-export Widgets
-
-using .Application
-export Application
-
-# Simplified Pipeline module
-using .Pipeline
-export Pipeline
-
 # Export modules for direct access
 export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
+
+# Rust Content-- builder
+using .RustContent
+export RustContent
 
 # ============================================================================
 # Complete Browser Process
@@ -204,19 +147,19 @@ export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
 Complete browser instance with full pipeline:
 Network → Parse → Style → Layout → Render → GPU/PNG Output
 
+NOTE: This is a legacy compatibility layer. For new applications,
+use the Application/Widgets framework with RustContent builder.
+
 ## Usage
 ```julia
 browser = Browser(width=1920, height=1080)
-load!(browser, "https://example.com")
+load_html!(browser, "<div>Hello World</div>")
 render_to_png!(browser, "output.png")
 ```
 """
 mutable struct Browser
     # Core context
     context::BrowserContext
-    
-    # Content-- runtime
-    runtime::ContentMM.Runtime.RuntimeContext
     
     # Networking
     network::Network.NetworkContext
@@ -228,9 +171,6 @@ mutable struct Browser
     width::UInt32
     height::UInt32
     
-    # JS interface
-    js_interface::ContentMM.Runtime.JSInterface
-    
     # State
     current_url::String
     title::String
@@ -238,12 +178,10 @@ mutable struct Browser
     
     function Browser(; width::UInt32 = UInt32(1920), height::UInt32 = UInt32(1080))
         ctx = create_context(viewport_width=Float32(width), viewport_height=Float32(height))
-        runtime = ContentMM.Runtime.RuntimeContext(Float32(width), Float32(height))
         network = Network.NetworkContext()
         renderer = RustRenderer.create_renderer(Int(width), Int(height))
-        js = ContentMM.Runtime.JSInterface(runtime)
         
-        new(ctx, runtime, network, renderer, width, height, js, "", "", false)
+        new(ctx, network, renderer, width, height, "", "", false)
     end
 end
 
@@ -271,20 +209,6 @@ function load!(browser::Browser, url::String)::Bool
     html = String(response.body)
     process_document!(browser.context, html)
     
-    # Sync layout data to runtime for JS interface access
-    n = node_count(browser.context.dom)
-    resize!(browser.runtime.layout_x, n)
-    resize!(browser.runtime.layout_y, n)
-    resize!(browser.runtime.layout_width, n)
-    resize!(browser.runtime.layout_height, n)
-    
-    for i in 1:n
-        browser.runtime.layout_x[i] = browser.context.layout.x[i]
-        browser.runtime.layout_y[i] = browser.context.layout.y[i]
-        browser.runtime.layout_width[i] = browser.context.layout.width[i]
-        browser.runtime.layout_height[i] = browser.context.layout.height[i]
-    end
-    
     browser.is_loading = false
     return true
 end
@@ -302,22 +226,6 @@ function load_html!(browser::Browser, html::String)
     
     process_document!(browser.context, html)
     
-    # Sync layout data to runtime for JS interface access
-    n = node_count(browser.context.dom)
-    if n > 0
-        resize!(browser.runtime.layout_x, n)
-        resize!(browser.runtime.layout_y, n)
-        resize!(browser.runtime.layout_width, n)
-        resize!(browser.runtime.layout_height, n)
-        
-        for i in 1:n
-            browser.runtime.layout_x[i] = browser.context.layout.x[i]
-            browser.runtime.layout_y[i] = browser.context.layout.y[i]
-            browser.runtime.layout_width[i] = browser.context.layout.width[i]
-            browser.runtime.layout_height[i] = browser.context.layout.height[i]
-        end
-    end
-    
     browser.is_loading = false
 end
 
@@ -329,9 +237,6 @@ export load_html!
 Render the current document using the Rust renderer.
 """
 function render!(browser::Browser)
-    # Update runtime
-    ContentMM.Runtime.update!(browser.runtime, 0.016f0)  # ~60fps
-    
     # Clear renderer
     RustRenderer.clear!(browser.renderer)
     RustRenderer.set_clear_color!(browser.renderer, 1.0f0, 1.0f0, 1.0f0, 1.0f0)
@@ -385,67 +290,12 @@ Resize the browser viewport.
 function set_viewport!(browser::Browser, width::UInt32, height::UInt32)
     browser.context.viewport_width = Float32(width)
     browser.context.viewport_height = Float32(height)
-    browser.runtime.viewport_width = Float32(width)
-    browser.runtime.viewport_height = Float32(height)
     browser.width = width
     browser.height = height
     RustRenderer.renderer_resize!(browser.renderer, Int(width), Int(height))
 end
 
 export set_viewport!
-
-"""
-    scroll_to!(browser::Browser, x::Float32, y::Float32)
-
-Scroll the viewport.
-"""
-function scroll_to!(browser::Browser, x::Float32, y::Float32)
-    browser.runtime.scroll_x = x
-    browser.runtime.scroll_y = y
-    ContentMM.Runtime.resolve_sticky!(browser.runtime)
-end
-
-export scroll_to!
-
-"""
-    dispatch_event!(browser::Browser, node_id::UInt32, 
-                    event_type::ContentMM.Reactive.EventType,
-                    event_data::Dict{Symbol, Any}) -> Bool
-
-Dispatch an event to a node.
-"""
-function dispatch_event!(browser::Browser, node_id::UInt32,
-                         event_type::ContentMM.Reactive.EventType,
-                         event_data::Dict{Symbol, Any})::Bool
-    return ContentMM.Runtime.dispatch_event!(browser.runtime, node_id, 
-                                              event_type, event_data)
-end
-
-export dispatch_event!
-
-"""
-    js_eval(browser::Browser, node_id::UInt32, property::Symbol) -> Any
-
-Get a property value via the virtual JS interface.
-"""
-function js_eval(browser::Browser, node_id::UInt32, property::Symbol)::Any
-    return ContentMM.Runtime.js_get_property(browser.js_interface, node_id, property)
-end
-
-export js_eval
-
-"""
-    js_call(browser::Browser, node_id::UInt32, 
-            method::Symbol, args::Vector{Any}) -> Any
-
-Call a method via the virtual JS interface.
-"""
-function js_call(browser::Browser, node_id::UInt32,
-                 method::Symbol, args::Vector{Any})::Any
-    return ContentMM.Runtime.js_call_method(browser.js_interface, node_id, method, args)
-end
-
-export js_call
 
 # ============================================================================
 # Module Initialization - Verify Rust Libraries

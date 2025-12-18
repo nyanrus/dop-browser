@@ -1,0 +1,18 @@
+[package]
+name = "dop-content"
+version = "0.1.0"
+edition = "2021"
+description = "Content-- IR and builder for DOP Browser"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+zerocopy = { version = "0.8", features = ["derive"] }
+libc = "0.2"
+log = "0.4"
+
+[profile.release]
+lto = true
+opt-level = 3

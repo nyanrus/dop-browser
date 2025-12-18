@@ -7,7 +7,7 @@
 #   julia deps/build.jl          # Build all crates in release mode
 #   julia deps/build.jl debug    # Build all crates in debug mode
 
-const RUST_CRATES = ["dop-parser", "dop-renderer"]
+const RUST_CRATES = ["dop-parser", "dop-renderer", "dop-content"]
 
 """
     get_artifact_dir(name::String) -> String
