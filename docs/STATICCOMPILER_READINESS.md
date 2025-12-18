@@ -2,12 +2,15 @@
 
 This document explains the StaticCompiler compatibility status of DOPBrowser source files and provides guidance for future development.
 
+For comprehensive distribution strategies targeting sub-10MB binaries, see [STATICCOMPILER_DISTRIBUTION_GUIDE.md](./STATICCOMPILER_DISTRIBUTION_GUIDE.md).
+
 ## Overview
 
 DOPBrowser uses a hybrid approach for StaticCompiler compatibility:
 - **Mathematical types** (Vec2, Box4) use `StaticArrays.SVector` ✅
 - **Core data structures** use dynamic `Vector` for flexibility ⚠️
 - **Entry points** like `StaticMemoMain.jl` are fully StaticCompiler-compatible ✅
+- **StaticCore module** provides pure StaticCompiler-compatible types ✅ NEW
 
 ## StaticCompiler Limitations
 
@@ -27,6 +30,13 @@ StaticCompiler CAN handle:
 ## Module Compatibility Status
 
 ### Fully Compatible ✅
+
+**src/ContentIR/StaticCore.jl** (NEW)
+- Pure StaticCompiler-compatible module
+- Re-exports all safe types from MathOps, Properties, Primitives
+- Adds StaticNode, StaticNodeTable for bounded static contexts
+- Includes StaticColor, StaticInset for zero-allocation layouts
+- See [STATICCOMPILER_DISTRIBUTION_GUIDE.md](./STATICCOMPILER_DISTRIBUTION_GUIDE.md) for usage
 
 **src/StaticMemoMain.jl**
 - Pure StaticCompiler-compatible entry point

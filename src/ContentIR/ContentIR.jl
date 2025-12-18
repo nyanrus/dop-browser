@@ -7,6 +7,7 @@ This module provides the core data structures for representing UI content:
 - **MathOps**: Mathematical types and operators for layout computation
 - **Primitives**: Content node types (Stack, Grid, Rect, Paragraph, etc.)
 - **Properties**: Layout properties (Direction, Pack, Align, Inset, Offset, etc.)
+- **StaticCore**: StaticCompiler-compatible subset for standalone executables
 
 ## StaticCompiler Compatibility
 
@@ -15,8 +16,11 @@ Mathematical types are designed for StaticCompiler:
 - **All math functions** have @inline hints for performance
 - **Type-stable** with explicit return type annotations
 
+For StaticCompiler contexts, use `ContentIR.StaticCore` which provides only
+the types and functions that work without GC allocations.
+
 Dynamic structures (NodeTable, PropertyTable) require Vector for flexibility.
-See docs/STATICCOMPILER_READINESS.md for details.
+See docs/STATICCOMPILER_READINESS.md and docs/STATICCOMPILER_DISTRIBUTION_GUIDE.md for details.
 
 ## Architecture
 
@@ -96,5 +100,11 @@ export Inset, Offset, Gap
 export PropertyValue, PropertyTable, set_property!, get_property, resize_properties!
 export Color, parse_color, color_to_rgba
 export direction_to_vec2, to_vec2, to_box4
+
+# StaticCore - StaticCompiler-compatible subset
+# Use this module for standalone executable compilation
+include("StaticCore.jl")
+# Note: StaticCore exports are accessed via ContentIR.StaticCore.*
+# This keeps the namespace clean while providing StaticCompiler-compatible types
 
 end # module ContentIR

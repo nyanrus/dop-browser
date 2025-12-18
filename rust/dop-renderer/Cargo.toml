@@ -12,6 +12,8 @@ crate-type = ["cdylib", "rlib"]
 default = ["software"]
 software = ["tiny-skia", "softbuffer"]
 gpu = []
+# Minimal feature for smallest binary size (software rendering only)
+minimal = ["tiny-skia"]
 
 [dependencies]
 winit = "0.30.0"
@@ -29,3 +31,13 @@ softbuffer = { version = "0.4.6", optional = true }
 [profile.release]
 lto = true
 opt-level = 3
+
+# Size-optimized release profile for minimal binary size
+# Use with: cargo build --profile release-small
+[profile.release-small]
+inherits = "release"
+opt-level = "z"      # Optimize for size
+lto = "fat"          # Full link-time optimization
+codegen-units = 1    # Better optimization (slower compile)
+panic = "abort"      # No unwinding code
+strip = "symbols"    # Strip debug symbols
