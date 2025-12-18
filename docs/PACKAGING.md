@@ -1,22 +1,22 @@
 # Packaging the Memo Application
 
-This guide explains how to create standalone executables of the memo application using two different approaches: PackageCompiler (includes full Julia runtime) and StaticCompiler (standalone without runtime).
+This guide explains how to create standalone executables of the memo application using two different approaches: JuliaC (includes full Julia runtime with modern features) and StaticCompiler (standalone without runtime).
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
 2. [Building Rust Libraries](#building-rust-libraries)
-3. [Option 1: PackageCompiler](#option-1-packagecompiler)
+3. [Option 1: JuliaC](#option-1-juliac)
 4. [Option 2: StaticCompiler](#option-2-staticcompiler)
 5. [Comparison](#comparison)
 6. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
-1. **Julia 1.10+**: The minimum required Julia version
+1. **Julia 1.12+**: Required for JuliaC
 2. **Rust toolchain**: Required to build the native libraries
 3. **Built Rust libraries**: All three Rust crates must be built before compilation
-4. **Clang compiler** (for StaticCompiler): Required for static compilation
+4. **C compiler**: Required for JuliaC and StaticCompiler (clang or gcc)
 
 ## Building Rust Libraries
 
@@ -39,9 +39,9 @@ The build script will:
 
 ## Compiling the Memo Application
 
-### Option 1: PackageCompiler
+### Option 1: JuliaC
 
-Once the Rust libraries are built, you can compile the memo application with PackageCompiler:
+Once the Rust libraries are built, you can compile the memo application with JuliaC:
 
 ```bash
 # Verify setup
@@ -54,12 +54,19 @@ julia --project=. scripts/compile_memo_app.jl
 This will:
 1. Create a `build/` directory in the project root
 2. Compile the DOPBrowser package and all dependencies
-3. Create a standalone executable at `build/memo_app/bin/memo_app`
-4. Generate a size report at `build/size_report.txt`
+3. Create a standalone executable at `build/bin/memo_app`
+4. Bundle Julia runtime and libraries in `build/lib/`
+5. Generate a size report at `build/size_report.txt`
 
-The compilation process may take **10-20 minutes** depending on your system.
+The compilation process may take **several minutes** depending on your system.
 
-**Binary size**: ~350-400 MB (includes full Julia runtime)
+**Binary size**: Smaller than old PackageCompiler approach due to code trimming
+
+**Features**:
+- Code trimming (`--trim=safe`) removes unreachable code
+- Bundled distribution with relative rpaths
+- Faster compilation than PackageCompiler
+- Built on top of PackageCompiler.jl with modern enhancements
 
 ### Option 2: StaticCompiler
 
@@ -79,32 +86,32 @@ This will:
 3. Create a standalone executable at `build/static_memo_app`
 4. Generate a size report at `build/static_size_report.txt`
 
-The compilation process takes **a few minutes** (much faster than PackageCompiler).
+The compilation process takes **a few minutes** (much faster than JuliaC).
 
 **Binary size**: ~5-20 MB (no Julia runtime)
 
-**Note**: The StaticCompiler version is a simplified memo app due to limitations in what Julia features can be statically compiled. It demonstrates the rendering capabilities but has fewer features than the full PackageCompiler version.
+**Note**: The StaticCompiler version is a simplified memo app due to limitations in what Julia features can be statically compiled. It demonstrates the rendering capabilities but has fewer features than the full JuliaC version.
 
 ## Running the Compiled Applications
 
-### PackageCompiler Version
+### JuliaC Version
 
 After compilation, you can run the full-featured executable:
 
 ```bash
 # Run in interactive mode (default)
-./build/memo_app/bin/memo_app
+./build/bin/memo_app
 
 # Run in simple demo mode
-./build/memo_app/bin/memo_app --simple
+./build/bin/memo_app --simple
 
 # Run in headless mode (no window)
-HEADLESS=1 ./build/memo_app/bin/memo_app
+HEADLESS=1 ./build/bin/memo_app
 ```
 
 The compiled application includes:
 - All Julia code and dependencies
-- The Julia runtime
+- The Julia runtime (bundled in lib/ directory)
 - All required Rust libraries
 - Font files and other resources
 
@@ -129,10 +136,10 @@ The static executable:
 
 ## Comparison
 
-| Feature | PackageCompiler | StaticCompiler |
-|---------|----------------|----------------|
-| Binary size | 350-400 MB | 5-20 MB |
-| Compilation time | 10-20 minutes | Few minutes |
+| Feature | JuliaC | StaticCompiler |
+|---------|--------|----------------|
+| Binary size | Smaller with trimming | 5-20 MB |
+| Compilation time | Several minutes | Few minutes |
 | Startup time | Fast (precompiled) | Very fast (native) |
 | Julia features | Full support | Limited subset |
 | Interactive mode | ✓ | **✓ (via Rust FFI)** |
@@ -140,12 +147,14 @@ The static executable:
 | Event handling | ✓ | **✓ (via Rust FFI)** |
 | External deps | Julia runtime + libs | Rust libs only |
 | Distribution | Need full bundle | Single executable |
+| Code trimming | ✓ Yes | N/A |
 
-**When to use PackageCompiler:**
+**When to use JuliaC:**
 - Full application with all features
 - Complex Julia code patterns
 - Maximum Julia language support
 - Development and testing
+- Want smaller binaries than old PackageCompiler
 
 **When to use StaticCompiler:**
 - Minimal binary size critical
@@ -156,30 +165,35 @@ The static executable:
 
 ## Size Reduction Techniques
 
-PackageCompiler provides several options to reduce binary size:
+JuliaC provides several options to reduce binary size:
 
-### 1. Filter Standard Libraries
+### 1. Code Trimming (Built-in)
 
-The compilation script already uses `filter_stdlibs=true`, which excludes unused standard library modules.
+The compilation script uses `trim_mode="safe"`, which removes unreachable code and unused IR:
+
+```julia
+img = ImageRecipe(
+    trim_mode = "safe",  # Removes unreachable code
+    # ...
+)
+```
+
+This significantly reduces binary size compared to old PackageCompiler.
 
 ### 2. CPU Target
 
 By default, the script uses `cpu_target="generic"` for maximum portability. For a specific CPU, you can modify the compilation script to use:
 
 ```julia
-cpu_target="native"  # Optimize for current CPU
+cpu_target = "native"  # Optimize for current CPU
 ```
 
-### 3. Minimal Precompilation
-
-To reduce compilation time and potentially size, you can modify or remove the precompile execution file. Edit `scripts/precompile_memo_app.jl` to include only the most common code paths.
-
-### 4. Strip Debug Symbols
+### 3. Strip Debug Symbols
 
 After compilation, you can strip debug symbols from the executable:
 
 ```bash
-strip build/memo_app/bin/memo_app
+strip build/bin/memo_app
 ```
 
 This can reduce the executable size by 30-50%.
@@ -215,12 +229,11 @@ HEADLESS=1 julia --project=. examples/memo_app.jl --simple
 
 To distribute the compiled application:
 
-1. Package the entire `build/memo_app/` directory
+1. Package the entire `build/` directory
 2. Or create an archive:
 
 ```bash
-cd build
-tar czf memo_app.tar.gz memo_app/
+tar czf memo_app.tar.gz build/
 ```
 
 Recipients will need:

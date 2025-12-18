@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
-# Compile the memo application into a standalone executable using PackageCompiler
+# Compile the memo application into a standalone executable using JuliaC
 
-using PackageCompiler
+using JuliaC
 using Dates
 
 # Configuration
@@ -9,7 +9,7 @@ const APP_NAME = "memo_app"
 const PROJECT_DIR = dirname(dirname(@__FILE__))
 const EXAMPLES_DIR = joinpath(PROJECT_DIR, "examples")
 const OUTPUT_DIR = joinpath(PROJECT_DIR, "build")
-const PRECOMPILE_FILE = joinpath(PROJECT_DIR, "scripts", "precompile_memo_app.jl")
+const ENTRY_FILE = joinpath(PROJECT_DIR, "src", "MemoAppMain.jl")
 
 println("=== Compiling Memo Application ===")
 println("Project directory: $PROJECT_DIR")
@@ -20,28 +20,46 @@ println()
 mkpath(OUTPUT_DIR)
 
 # Compile the application
-println("Starting compilation with PackageCompiler...")
+println("Starting compilation with JuliaC...")
 println("This may take several minutes...")
 println()
 
 try
-    create_app(
-        PROJECT_DIR,                    # Project to compile
-        joinpath(OUTPUT_DIR, APP_NAME), # Output directory
-        precompile_execution_file=PRECOMPILE_FILE,
-        executables=["memo_app" => "julia_main"],
-        force=true,                     # Overwrite existing build
-        include_lazy_artifacts=true,    # Include artifacts
-        filter_stdlibs=true,           # Reduce size by filtering standard libraries
-        cpu_target="generic"           # Generic CPU target for portability
+    # Create image recipe
+    img = ImageRecipe(
+        output_type = "--output-exe",
+        file = PROJECT_DIR,           # Package directory
+        project = PROJECT_DIR,         # Project to use
+        trim_mode = "safe",           # Enable code trimming for smaller binaries
+        verbose = true,               # Print detailed output
+        cpu_target = "generic"        # Generic CPU target for portability
     )
+    
+    # Create link recipe
+    link = LinkRecipe(
+        image_recipe = img,
+        outname = APP_NAME,           # Just the name, bundle will place it
+        rpath = JuliaC.RPATH_BUNDLE   # Use bundle-relative rpath
+    )
+    
+    # Create bundle recipe
+    bundle = BundleRecipe(
+        link_recipe = link,
+        output_dir = OUTPUT_DIR,      # Bundle everything to build/
+        privatize = false             # Don't privatize libjulia for now
+    )
+    
+    # Compile, link, and bundle
+    compile_products(img)
+    link_products(link)
+    bundle_products(bundle)
     
     println()
     println("✓ Compilation successful!")
     println()
     
     # Report binary size
-    executable_path = joinpath(OUTPUT_DIR, APP_NAME, "bin", "memo_app")
+    executable_path = joinpath(OUTPUT_DIR, "bin", APP_NAME)
     if Sys.iswindows()
         executable_path *= ".exe"
     end
@@ -54,8 +72,7 @@ try
         
         # Report total application size
         total_size = 0
-        app_dir = joinpath(OUTPUT_DIR, APP_NAME)
-        for (root, dirs, files) in walkdir(app_dir)
+        for (root, dirs, files) in walkdir(OUTPUT_DIR)
             for file in files
                 total_size += filesize(joinpath(root, file))
             end
@@ -70,11 +87,17 @@ try
             println(io, "===========================")
             println(io, "Build date: $(Dates.now())")
             println(io, "Julia version: $(VERSION)")
+            println(io, "JuliaC version: $(pkgversion(JuliaC))")
             println(io, "")
             println(io, "Executable size: $size_mb MB ($size_bytes bytes)")
             println(io, "Total application size: $total_mb MB ($total_size bytes)")
             println(io, "")
             println(io, "Executable path: $executable_path")
+            println(io, "")
+            println(io, "Compilation options:")
+            println(io, "  - Code trimming: safe")
+            println(io, "  - CPU target: generic")
+            println(io, "  - Bundled: yes")
         end
         println()
         println("Size report saved to: $report_file")
@@ -91,5 +114,5 @@ end
 
 println()
 println("=== Compilation Complete ===")
-println("You can find the compiled application in: $(joinpath(OUTPUT_DIR, APP_NAME))")
-println("Run it with: $(joinpath(OUTPUT_DIR, APP_NAME, "bin", "memo_app"))")
+println("You can find the compiled application in: $OUTPUT_DIR")
+println("Run it with: $(joinpath(OUTPUT_DIR, "bin", APP_NAME))")
