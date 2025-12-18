@@ -494,7 +494,7 @@ function poll_events!(handle::WindowHandle)::Vector{WindowEvent}
                 handle.is_open = false
                 push!(handle.event_queue, WindowEvent(EVENT_CLOSE))
             else
-                # Poll events from the threaded window
+                # Poll events from the threaded window and convert to Window events
                 rust_events = RustRenderer.poll_events_threaded!(threaded_window)
                 
                 # Convert Rust events to Window events

@@ -252,43 +252,22 @@ end
 """
 Get the button's current text.
 """
-function get_text(btn::ButtonWidget)::String
-    if btn.text isa Signal
-        return btn.text[]
-    else
-        return btn.text
-    end
-end
+# Simplified getter with ternary operator
+get_text(btn::ButtonWidget)::String = btn.text isa Signal ? btn.text[] : btn.text
 
 """
 Get button background color based on state.
 """
 function get_button_background(btn::ButtonWidget)::String
-    if !btn.props.enabled
-        return "#9E9E9E"  # Disabled gray
-    elseif btn.is_pressed
-        if btn.variant == :primary
-            return "#1565C0"  # Darker blue
-        else
-            return "#E0E0E0"
-        end
-    elseif btn.is_hovered
-        if btn.variant == :primary
-            return "#1976D2"  # Slightly darker blue
-        else
-            return "#EEEEEE"
-        end
-    else
-        if btn.variant == :primary
-            return "#2196F3"  # Primary blue
-        elseif btn.variant == :secondary
-            return "#757575"  # Secondary gray
-        elseif btn.variant == :outline
-            return "transparent"
-        else
-            return "transparent"
-        end
-    end
+    !btn.props.enabled && return "#9E9E9E"  # Disabled gray
+    
+    btn.is_pressed && return btn.variant == :primary ? "#1565C0" : "#E0E0E0"
+    btn.is_hovered && return btn.variant == :primary ? "#1976D2" : "#EEEEEE"
+    
+    # Default state
+    btn.variant == :primary   ? "#2196F3" :
+    btn.variant == :secondary ? "#757575" :
+                                "transparent"  # :outline or other
 end
 
 # ============================================================================
