@@ -2,25 +2,23 @@
 """
     DOPBrowser Rendering Showcase
 
-This script demonstrates both rendering approaches available in DOPBrowser:
+This script demonstrates the HTML+CSS rendering capability of DOPBrowser:
 
-1. **Browser Rendering (HTML+CSS)**: Traditional web content rendering
-2. **NativeUI with Content-- Text Format**: High-performance native UI rendering
+**Browser Rendering (HTML+CSS)**: Traditional web content rendering using the legacy pipeline
 
-Both approaches can use either:
-- GPU Renderer: Software-based WebGPU-style rendering
-- Cairo Renderer: Vector graphics with high-quality text rendering via FreeTypeAbstraction
+For modern UI construction examples, see:
+- examples/memo_app.jl - RustContent builder API
+- examples/interactive_ui_examples.jl - Application/Widgets framework
 
 ## Usage
 ```julia
 julia --project=. scripts/showcase.jl
 ```
 
-This will generate several PNG files demonstrating different rendering capabilities.
+This will generate several PNG files demonstrating HTML/CSS rendering capabilities.
 """
 
 using DOPBrowser
-using DOPBrowser.ContentMM.NativeUI
 
 # Ensure output directory exists
 const OUTPUT_DIR = joinpath(@__DIR__, "..", "showcase_output")
@@ -32,10 +30,10 @@ println("=" ^ 60)
 println()
 
 # ============================================================================
-# Part 1: Browser HTML+CSS Rendering
+# Browser HTML+CSS Rendering
 # ============================================================================
 
-println("Part 1: Browser HTML+CSS Rendering")
+println("Browser HTML+CSS Rendering")
 println("-" ^ 40)
 
 # Example 1: Simple colored boxes
@@ -175,186 +173,6 @@ println("    ✓ Saved: html_smiley_face.png")
 println()
 
 # ============================================================================
-# Part 2: NativeUI with Content-- Text Format (GPU Renderer)
-# ============================================================================
-
-println("Part 2: NativeUI with Content-- Text Format (GPU Renderer)")
-println("-" ^ 40)
-
-# Example 1: Simple Stack layout
-println("  → Rendering: Stack layout (Content--)")
-ui_stack = create_ui("""
-Stack(Direction: Down, Fill: #FFFFFF, Inset: 20) {
-    Rect(Size: (300, 60), Fill: #FF6B6B);
-    Rect(Size: (300, 60), Fill: #4ECDC4);
-    Rect(Size: (300, 60), Fill: #45B7D1);
-    Rect(Size: (300, 60), Fill: #96CEB4);
-}
-""")
-render_to_png!(ui_stack, joinpath(OUTPUT_DIR, "contentmm_stack.png"), width=400, height=320)
-println("    ✓ Saved: contentmm_stack.png")
-
-# Example 2: Grid-like layout using nested stacks
-println("  → Rendering: Grid layout (Content--)")
-ui_grid = create_ui("""
-Stack(Direction: Down, Fill: #1A1A2E, Inset: 15, Gap: 10) {
-    Stack(Direction: Right, Gap: 10) {
-        Rect(Size: (90, 90), Fill: #E94560);
-        Rect(Size: (90, 90), Fill: #0F3460);
-        Rect(Size: (90, 90), Fill: #16213E);
-    }
-    Stack(Direction: Right, Gap: 10) {
-        Rect(Size: (90, 90), Fill: #16213E);
-        Rect(Size: (90, 90), Fill: #E94560);
-        Rect(Size: (90, 90), Fill: #0F3460);
-    }
-    Stack(Direction: Right, Gap: 10) {
-        Rect(Size: (90, 90), Fill: #0F3460);
-        Rect(Size: (90, 90), Fill: #16213E);
-        Rect(Size: (90, 90), Fill: #E94560);
-    }
-}
-""")
-render_to_png!(ui_grid, joinpath(OUTPUT_DIR, "contentmm_grid.png"), width=350, height=350)
-println("    ✓ Saved: contentmm_grid.png")
-
-# Example 3: Color palette
-println("  → Rendering: Color palette (Content--)")
-ui_palette = create_ui("""
-Stack(Direction: Down, Fill: #2C3E50, Inset: 20, Gap: 5) {
-    Stack(Direction: Right, Gap: 5) {
-        Rect(Size: (50, 50), Fill: #E74C3C);
-        Rect(Size: (50, 50), Fill: #E67E22);
-        Rect(Size: (50, 50), Fill: #F1C40F);
-        Rect(Size: (50, 50), Fill: #2ECC71);
-        Rect(Size: (50, 50), Fill: #3498DB);
-        Rect(Size: (50, 50), Fill: #9B59B6);
-    }
-    Stack(Direction: Right, Gap: 5) {
-        Rect(Size: (50, 50), Fill: #C0392B);
-        Rect(Size: (50, 50), Fill: #D35400);
-        Rect(Size: (50, 50), Fill: #F39C12);
-        Rect(Size: (50, 50), Fill: #27AE60);
-        Rect(Size: (50, 50), Fill: #2980B9);
-        Rect(Size: (50, 50), Fill: #8E44AD);
-    }
-    Stack(Direction: Right, Gap: 5) {
-        Rect(Size: (50, 50), Fill: #ECF0F1);
-        Rect(Size: (50, 50), Fill: #BDC3C7);
-        Rect(Size: (50, 50), Fill: #95A5A6);
-        Rect(Size: (50, 50), Fill: #7F8C8D);
-        Rect(Size: (50, 50), Fill: #34495E);
-        Rect(Size: (50, 50), Fill: #1ABC9C);
-    }
-}
-""")
-render_to_png!(ui_palette, joinpath(OUTPUT_DIR, "contentmm_palette.png"), width=400, height=230)
-println("    ✓ Saved: contentmm_palette.png")
-
-println()
-
-# ============================================================================
-# Part 3: Text Rendering with Content--
-# ============================================================================
-
-println("Part 3: Text Rendering with Content--")
-println("-" ^ 40)
-
-# Example 1: Text in boxes
-println("  → Rendering: Text in colored boxes")
-ui_text_boxes = create_ui("""
-Stack(Direction: Down, Fill: #FFFFFF, Inset: 20, Gap: 15) {
-    Rect(Size: (350, 80), Fill: #3498DB) {
-        Paragraph { Span(Text: "Hello, World!"); }
-    }
-    Rect(Size: (350, 80), Fill: #2ECC71) {
-        Paragraph { Span(Text: "Content-- Text Format"); }
-    }
-    Rect(Size: (350, 80), Fill: #E74C3C) {
-        Paragraph { Span(Text: "Rust Renderer with winit"); }
-    }
-}
-""")
-render_to_png!(ui_text_boxes, joinpath(OUTPUT_DIR, "rust_text_boxes.png"), width=420, height=340)
-println("    ✓ Saved: rust_text_boxes.png")
-
-# Example 2: Multi-paragraph text
-println("  → Rendering: Multi-paragraph text")
-ui_paragraphs = create_ui("""
-Stack(Direction: Down, Fill: #F8F9FA, Inset: 25, Gap: 20) {
-    Rect(Size: (400, 50), Fill: #343A40) {
-        Paragraph { Span(Text: "DOPBrowser Showcase"); }
-    }
-    Paragraph { 
-        Span(Text: "This is the first paragraph with some text."); 
-    }
-    Paragraph { 
-        Span(Text: "The second paragraph demonstrates text flow."); 
-    }
-    Paragraph { 
-        Span(Text: "Rust provides high-quality native rendering."); 
-    }
-    Rect(Size: (400, 3), Fill: #DEE2E6);
-    Paragraph { 
-        Span(Text: "winit handles cross-platform windowing."); 
-    }
-}
-""")
-render_to_png!(ui_paragraphs, joinpath(OUTPUT_DIR, "rust_paragraphs.png"), width=500, height=350)
-println("    ✓ Saved: rust_paragraphs.png")
-
-# Example 3: UI Card with text
-println("  → Rendering: UI Card design")
-ui_card = create_ui("""
-Stack(Direction: Down, Fill: #ECEFF1, Inset: 30, Gap: 0) {
-    Stack(Direction: Down, Fill: #FFFFFF, Inset: 20, Gap: 10, Round: 8) {
-        Rect(Size: (340, 150), Fill: #1976D2);
-        Paragraph { Span(Text: "Material Design Card"); }
-        Paragraph { Span(Text: "This is a sample card component"); }
-        Paragraph { Span(Text: "built using Content-- text format."); }
-        Stack(Direction: Right, Gap: 10) {
-            Rect(Size: (80, 35), Fill: #2196F3);
-            Rect(Size: (80, 35), Fill: #E0E0E0);
-        }
-    }
-}
-""")
-render_to_png!(ui_card, joinpath(OUTPUT_DIR, "rust_card.png"), width=440, height=380)
-println("    ✓ Saved: rust_card.png")
-
-println()
-
-# ============================================================================
-# Part 4: Programmatic UI Builder
-# ============================================================================
-
-println("Part 4: Programmatic UI Builder")
-println("-" ^ 40)
-
-println("  → Rendering: Programmatic layout (Builder API)")
-builder = UIBuilder()
-
-with_stack!(builder, direction=:down, fill="#FAFAFA", inset=20.0f0, gap=10.0f0) do
-    rect!(builder, width=250.0f0, height=50.0f0, fill="#673AB7")
-    with_stack!(builder, direction=:row, gap=10.0f0) do
-        rect!(builder, width=120.0f0, height=120.0f0, fill="#9C27B0")
-        rect!(builder, width=120.0f0, height=120.0f0, fill="#E91E63")
-    end
-    with_stack!(builder, direction=:row, gap=10.0f0) do
-        rect!(builder, width=80.0f0, height=80.0f0, fill="#F44336")
-        rect!(builder, width=80.0f0, height=80.0f0, fill="#FF5722")
-        rect!(builder, width=80.0f0, height=80.0f0, fill="#FF9800")
-    end
-    rect!(builder, width=250.0f0, height=30.0f0, fill="#FFC107")
-end
-
-ctx = get_context(builder)
-render_to_png!(ctx, joinpath(OUTPUT_DIR, "builder_programmatic.png"), width=320, height=380)
-println("    ✓ Saved: builder_programmatic.png")
-
-println()
-
-# ============================================================================
 # Summary
 # ============================================================================
 
@@ -372,9 +190,7 @@ for f in readdir(OUTPUT_DIR)
     end
 end
 println()
-println("Rendering Methods Demonstrated:")
-println("  1. Browser HTML+CSS → GPU Renderer → PNG")
-println("  2. Content-- Text Format → GPU Renderer → PNG")
-println("  3. Content-- Text Format → Cairo/FreeType → PNG")
-println("  4. Programmatic Builder API → GPU Renderer → PNG")
+println("For more rendering examples, see:")
+println("  • examples/memo_app.jl - RustContent builder API")
+println("  • examples/interactive_ui_examples.jl - Application/Widgets framework")
 println()

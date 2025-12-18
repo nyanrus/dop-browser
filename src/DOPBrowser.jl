@@ -59,8 +59,11 @@ module DOPBrowser
 # - Window: Window abstraction
 # - EventLoop: Browser event loop
 #
-# LEGACY (Backward Compatibility):
-# - HTMLParser, CSSParserModule, DOMCSSOM, Compiler: For existing code
+# INTERNAL/LEGACY (Backward Compatibility - accessible but not exported):
+# - HTMLParser, CSSParserModule: Used internally by legacy pipeline
+# - DOMCSSOM, Core: Legacy virtual DOM/CSSOM and browser context
+# - ContentMM: Legacy Content IR (use ContentIR for new code)
+#   Note: ContentMM is included but not exported, access via DOPBrowser.ContentMM if needed
 
 # =============================================================================
 # Core Content IR Module (NEW - Clean Architecture)
@@ -83,13 +86,13 @@ include("RustParser/RustParser.jl")
 include("RustRenderer/RustRenderer.jl")
 
 # =============================================================================
-# Legacy/Backward Compatibility Modules
+# Internal/Legacy Modules (Used by legacy pipeline, not for direct use)
 # =============================================================================
 
-# HTMLParser - Legacy tokenization (use RustParser for new code)
+# HTMLParser - Internal HTML tokenization (use RustParser for new code)
 include("HTMLParser/HTMLParser.jl")
 
-# CSSParser - Legacy CSS parsing (use RustParser for new code)
+# CSSParser - Internal CSS parsing (use RustParser for new code)
 include("CSSParser/CSSParserModule.jl")
 
 # Layout module (LayoutArrays) - Still active for Julia-side layout computation
@@ -97,9 +100,6 @@ include("Layout/Layout.jl")
 
 # DOM/CSSOM module - Legacy virtual DOM/CSSOM (use ContentIR for new code)
 include("DOMCSSOM/DOMCSSOM.jl")
-
-# Compiler module - Legacy HTML+CSS to Content-- compilation
-include("Compiler/Compiler.jl")
 
 # Event Loop module
 include("EventLoop/EventLoop.jl")
@@ -192,8 +192,10 @@ using .Layout: LayoutData, resize_layout!, set_bounds!, get_bounds, set_position
 using .Core: BrowserContext, create_context, parse_html!, apply_styles!,
              compute_layouts!, generate_render_commands!, process_document!
 
-# Export modules for direct access
-export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
+# Export modules for direct access (public API only)
+# Note: HTMLParser, CSSParserModule, DOMCSSOM, and Core are internal modules
+# They should not be used directly in new code - use RustParser and Pipeline instead
+export Layout, EventLoop
 
 # Export Core functions
 export BrowserContext, create_context, parse_html!, apply_styles!,

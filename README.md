@@ -163,19 +163,22 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 | **Pipeline** | Simplified FP-style pipeline (parse_doc → layout → render → to_png) | Active |
 | **RustParser** | Rust-based HTML/CSS parser using html5ever and cssparser | **Required** |
 | **RustRenderer** | Rust-based GPU renderer via wgpu | **Required** |
+| **RustContent** | Rust-based Content IR builder | **Active** |
 | **ContentIR** | Content IR types (MathOps, Primitives, Properties) | **Active** |
 | **Layout** | SIMD-friendly layout calculation | Active |
-| **DOMCSSOM** | Virtual DOM/CSSOM representation | Active |
 | **Network** | HTTP/HTTPS networking layer | Active |
 | **EventLoop** | Browser main event loop | Active |
 | **Window** | Platform windowing abstraction | Active |
 | **State** | Reactive state management | Active |
 | **Widgets** | High-level UI components | Active |
 | **Application** | Application lifecycle management | Active |
-| **ContentMM** | Content IR and runtime (legacy, use ContentIR for new code) | Deprecated |
-| **Compiler** | HTML+CSS to Content-- compilation (legacy) | Deprecated |
-| **HTMLParser** | HTML tokenization and string interning | **Deprecated** |
-| **CSSParserModule** | CSS parsing and style computation | **Deprecated** |
+| **HTMLParser** | HTML tokenization (internal use only) | Internal |
+| **CSSParserModule** | CSS parsing (internal use only) | Internal |
+| **DOMCSSOM** | Virtual DOM/CSSOM (internal use only) | Internal |
+| **Core** | Legacy browser context (internal use only) | Internal |
+| **ContentMM** | Legacy Content IR (use ContentIR/RustContent for new code) | Legacy |
+
+**Note**: Modules marked as "Internal" are used by the legacy rendering pipeline but should not be used directly in new code. Use RustParser, ContentIR, and the new Pipeline API instead.
 
 See [docs/MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md) for detailed information about the module structure.
 
@@ -207,9 +210,10 @@ Window and Eventloop in Rust → Apply in Content IR → Compute layout in Julia
 
 **DOPBrowser now requires Rust libraries to be built and available.**
 
-The Rust-based implementations are mandatory for production use:
+The Rust-based implementations are the recommended approach for production use:
 - **RustParser**: Uses html5ever and cssparser crates for standards-compliant parsing
 - **RustRenderer**: Uses winit/wgpu for GPU-accelerated rendering
+- **RustContent**: Content IR builder for efficient UI construction
 
 To build the Rust libraries:
 ```bash
@@ -217,7 +221,7 @@ cd rust/dop-parser && cargo build --release
 cd ../dop-renderer && cargo build --release
 ```
 
-The Julia implementations (HTMLParser, CSSParserModule, Renderer) are **deprecated** and maintained only for backward compatibility. They will be removed in a future version.
+The Julia implementations (HTMLParser, CSSParserModule) are maintained for internal compatibility only and should not be used directly in new code. For new projects, use RustParser which provides standards-compliant parsing with better performance.
 
 ## Acid2 Test Support
 
@@ -435,6 +439,8 @@ Style system with AOT inheritance flattening. All inheritance resolved at compil
 
 ### ContentMM.Compiler
 AOT compiler generating specialized binary files per environment.
+
+**Note on Compiler Modules**: ContentMM.Compiler is a submodule within the legacy ContentMM package, providing AOT compilation functionality for Content-- IR. This is distinct from the top-level Compiler module that was previously deprecated and has now been removed from the codebase.
 
 ### ContentMM.TextJIT
 JIT text shaping for Paragraph nodes with caching.

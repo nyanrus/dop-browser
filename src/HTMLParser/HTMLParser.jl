@@ -3,31 +3,15 @@
 
 HTML parsing module providing zero-copy tokenization and string interning.
 
-**DEPRECATED**: This Julia implementation is deprecated in favor of RustParser.
-Please use RustParser for production code, which provides:
+**INTERNAL USE ONLY**: This Julia implementation is used internally by legacy modules.
+For new code, use RustParser which provides:
 - HTML parsing using html5ever
 - CSS parsing using cssparser  
 - Better performance and standards compliance
 
-This module is maintained for compatibility only and will be removed in a future version.
-
-## Migration
-
-```julia
-# Old (deprecated):
-using DOPBrowser.HTMLParser
-pool = StringPool()
-tokenizer = Tokenizer(pool)
-tokens = tokenize!(tokenizer, "<div><p>Hello</p></div>")
-
-# New (recommended):
-using DOPBrowser.RustParser
-result = RustParser.parse_html("<div><p>Hello</p></div>")
-```
+This module is maintained for internal compatibility only.
 """
 module HTMLParser
-
-@warn "HTMLParser module is deprecated. Please use RustParser instead. This module will be removed in a future version." maxlog=1
 
 include("StringInterner.jl")
 include("TokenTape.jl")

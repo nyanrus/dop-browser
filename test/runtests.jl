@@ -1553,21 +1553,6 @@ end
         @test domcssom.command_count(buffer) == 1
     end
     
-    @testset "Compiler Module" begin
-        compiler = DOPBrowser.Compiler
-        
-        # Create compiler context
-        ctx = compiler.CompilerContext()
-        @test ctx.optimize == true
-        
-        # Test source registration
-        file_id = compiler.register_source!(ctx, "<html></html>")
-        @test file_id == UInt32(1)
-        
-        # Test basic compilation
-        result = compiler.compile_document!("<html><body>Test</body></html>")
-        @test result.success == true
-    end
     
     @testset "EventLoop Module" begin
         eventloop = DOPBrowser.EventLoop
