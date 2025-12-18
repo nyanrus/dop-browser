@@ -35,13 +35,10 @@ jobs:
           version: '1.10'
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -50,7 +47,7 @@ jobs:
             ~/.cargo/git/db/
             rust/dop-parser/target/
             rust/dop-renderer/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/dop-parser/Cargo.lock', 'rust/dop-renderer/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
@@ -67,7 +64,7 @@ jobs:
           ls -la target/release/
 
       - name: Cache Julia packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.julia
           key: ${{ runner.os }}-julia-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
@@ -99,11 +96,11 @@ jobs:
           echo "=== Running in simple mode (PNG generation) ==="
           julia --project=. examples/memo_app.jl --simple
 
-          # Then, test onscreen mode by NOT setting HEADLESS or CI
-          # We unset CI to ensure the app tries onscreen mode
+          # Then, test onscreen mode by explicitly setting CI=false
+          # This ensures the app tries onscreen mode with X server
           echo ""
           echo "=== Testing onscreen mode with X server ==="
-          (unset CI HEADLESS && timeout 10 julia --project=. examples/memo_app.jl --interactive) || \
+          (CI=false timeout 10 julia --project=. examples/memo_app.jl --interactive) || \
             echo "Onscreen mode completed or timed out (expected for automated testing)"
 
           # Stop Xvfb
@@ -133,7 +130,7 @@ jobs:
           ls -lh *.png 2>/dev/null || echo "No PNG files in root directory"
 
       - name: Upload screenshots as artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: memo-app-screenshots
           path: |
