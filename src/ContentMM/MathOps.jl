@@ -662,12 +662,17 @@ child.pos = parent.content_origin + (0, preceding_height) + child.offset
                                 preceding_size::Vec2,
                                 child_offset::Box4,
                                 direction::Symbol)
-    δ = Vec2(child_offset.left, child_offset.top)  # offset delta (unicode for clarity)
+    offset = Vec2(child_offset.left, child_offset.top)
     
-    direction == :down  ? parent_content_origin + Vec2(0.0f0, preceding_size.y) + δ :
-    direction == :up    ? parent_content_origin + Vec2(0.0f0, -preceding_size.y) + δ :
-    direction == :right ? parent_content_origin + Vec2(preceding_size.x, 0.0f0) + δ :
-                          parent_content_origin + Vec2(-preceding_size.x, 0.0f0) + δ  # :left
+    if direction == :down
+        parent_content_origin + Vec2(0.0f0, preceding_size.y) + offset
+    elseif direction == :up
+        parent_content_origin + Vec2(0.0f0, -preceding_size.y) + offset
+    elseif direction == :right
+        parent_content_origin + Vec2(preceding_size.x, 0.0f0) + offset
+    else  # :left
+        parent_content_origin + Vec2(-preceding_size.x, 0.0f0) + offset
+    end
 end
 
 end # module MathOps
