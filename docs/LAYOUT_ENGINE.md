@@ -147,7 +147,7 @@ High-performance caching system with full thread safety:
 using DOPBrowser.Layout
 
 # Create cache (thread-safe)
-cache = LayoutCache(capacity=1000)
+cache = Layout.LayoutCache.LayoutCache(capacity=1000)
 
 # Cache a layout (from any thread)
 cache_layout!(cache, node_id, x, y, width, height, 
@@ -281,7 +281,7 @@ Compute CSS Grid layout for a specific container.
 
 ### Caching Functions
 
-#### `LayoutCache(; capacity::Int, enable_eviction::Bool)`
+#### `Layout.LayoutCache.LayoutCache(; capacity::Int, enable_eviction::Bool)`
 Create a thread-safe layout cache.
 
 #### `cache_layout!(cache, node_id, x, y, width, height; ...)`

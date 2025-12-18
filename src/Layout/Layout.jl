@@ -43,7 +43,7 @@ set_margins!(layout, 1, top=10.0f0, left=10.0f0)
 compute_layout!(layout, parents, first_children, next_siblings)
 
 # Use layout cache for performance
-cache = LayoutCache(capacity=1000)
+cache = Layout.LayoutCache.LayoutCache(capacity=1000)
 cache_layout!(cache, node_id, x, y, width, height)
 
 # Invalidate and reflow
@@ -87,7 +87,7 @@ using .LayoutArrays: LayoutData, resize_layout!, set_bounds!, get_bounds,
 
 using .FlexboxLayout: compute_flexbox_layout!
 using .GridLayout: compute_grid_layout!
-using .LayoutCache: LayoutCache, cache_layout!, get_cached_layout, has_cached_layout,
+using .LayoutCache: cache_layout!, get_cached_layout, has_cached_layout,
                     invalidate_node!, invalidate_subtree!, clear_cache!,
                     precache_layouts!, get_cache_stats
 
@@ -126,11 +126,11 @@ export ALIGN_CONTENT_START, ALIGN_CONTENT_END, ALIGN_CONTENT_CENTER,
 export compute_flexbox_layout!, compute_grid_layout!
 
 # Layout caching
-export LayoutCache, cache_layout!, get_cached_layout, has_cached_layout
+export cache_layout!, get_cached_layout, has_cached_layout
 export invalidate_node!, invalidate_subtree!, clear_cache!
 export precache_layouts!, get_cache_stats
 
 # Re-export submodules (but not the types with conflicting names)
-export LayoutArrays, FlexboxLayout, GridLayout
+export LayoutArrays, FlexboxLayout, GridLayout, LayoutCache
 
 end # module Layout

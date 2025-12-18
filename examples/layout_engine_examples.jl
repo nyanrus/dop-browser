@@ -97,7 +97,7 @@ println("Example 3: Thread-Safe Layout Caching")
 println("=" ^ 50)
 
 # Create a cache
-cache = LayoutCache(capacity=100)
+cache = Layout.LayoutCache.LayoutCache(capacity=100)
 
 # Cache some layouts
 cache_layout!(cache, UInt32(1), 0.0f0, 0.0f0, 800.0f0, 600.0f0,
@@ -143,7 +143,7 @@ println()
 println("Example 4: Precaching for Performance")
 println("=" ^ 50)
 
-cache = LayoutCache(capacity=1000)
+cache = Layout.LayoutCache.LayoutCache(capacity=1000)
 
 # Queue nodes for precaching
 nodes_to_precache = UInt32[10, 11, 12, 13, 14, 15]
@@ -167,7 +167,7 @@ println()
 println("Example 5: Thread-Safe Operations")
 println("=" ^ 50)
 
-cache = LayoutCache(capacity=1000)
+cache = Layout.LayoutCache.LayoutCache(capacity=1000)
 
 println("Demonstrating thread-safety...")
 println("(In production, this would run on multiple threads)")
@@ -208,7 +208,7 @@ println("=" ^ 50)
 
 layout = LayoutData()
 resize_layout!(layout, 20)
-cache = LayoutCache(capacity=100)
+cache = Layout.LayoutCache.LayoutCache(capacity=100)
 
 # Initial layout
 layout.display[1] = DISPLAY_FLEX
