@@ -34,8 +34,16 @@ Window and Eventloop in Rust → Apply in Content IR → Compute layout in Julia
 
 - **Structure of Arrays (SoA)**: DOM treated as flat arrays, not object trees
 - **SIMD-friendly Layout**: Contiguous float arrays for vectorized computation in Julia
+- **StaticArrays for Math**: Vec2, Box4, Rect use StaticArrays.SVector for zero-cost abstractions
 - **Rust for Performance**: Parsing, lowering, and rendering done in Rust
 - **Julia for Flexibility**: Layout computation and interaction logic in Julia
+
+## StaticCompiler Support
+
+Mathematical types (Vec2, Box4, Rect) are designed for StaticCompiler compatibility:
+- Use `StaticArrays.SVector` internally for stack allocation
+- All math functions have inline hints for performance
+- See docs/STATICCOMPILER_READINESS.md for details
 """
 module DOPBrowser
 
