@@ -6,32 +6,36 @@ A Data-Oriented Programming (DOP) browser engine base implementation in Julia.
 This module provides a render-friendly Intermediate Representation (IR) that replaces
 traditional DOM & CSSOM with cache-efficient, SIMD-friendly data structures.
 
+## Architecture
+
+The rendering pipeline follows a clear separation between Rust and Julia:
+
+### Content Text Rendering
+```
+Content Text Format In → Parse in Rust → Compute Layout in Julia → Flatten Content IR in Rust and Render
+```
+
+### Web Rendering  
+```
+HTML&CSS In w/ Network → Parse in Rust → Lower in Rust → Compute Layout in Julia → Flatten Content IR in Rust and Render
+```
+
+### Interaction
+```
+Extract action-related codes (:hover, :click, etc.) in Julia → Pass to Rendering
+```
+
+### Feedback
+```
+Window and Eventloop in Rust → Apply in Content IR → Compute layout in Julia if needed → Flatten and Render in Rust
+```
+
 ## Key Design Principles
 
 - **Structure of Arrays (SoA)**: DOM treated as flat arrays, not object trees
-- **Zero-Copy Parsing**: Flat token tape with immediate string interning
-- **Index-based Nodes**: Use UInt32 indices instead of pointers
-- **Archetype System**: Solve unique style combinations once, memcpy to nodes
-- **SIMD-friendly Layout**: Contiguous float arrays for vectorized computation
-- **Linear Render Buffer**: Direct WebGPU upload-ready command buffer
-- **Cache Maximization**: Batch costly operations for optimal CPU cache usage
-
-## Content-- Language Support
-
-This browser implements the Content-- v6.0 specification:
-- **Hybrid AOT/JIT Model**: AOT for static structure, JIT for dynamic text
-- **Layout Primitives**: Stack, Grid, Scroll, Rect
-- **Text Primitives**: Paragraph, Span, Link (JIT-compiled TextClusters)
-- **Reactive System**: Environment switches, variable injection, event bindings
-- **Virtual JS Interface**: DOM-like API without actual DOM
-
-## Complete Browser Pipeline
-
-1. **Network** → Fetch HTML, CSS, images, fonts
-2. **Parse** → HTML tokenization → DOM construction
-3. **Style** → CSS parsing → Archetype resolution → Style flattening
-4. **Layout** → Content-- layout engine → Position computation
-5. **Render** → GPU command buffer → WebGPU rendering → PNG export
+- **SIMD-friendly Layout**: Contiguous float arrays for vectorized computation in Julia
+- **Rust for Performance**: Parsing, lowering, and rendering done in Rust
+- **Julia for Flexibility**: Layout computation and interaction logic in Julia
 """
 module DOPBrowser
 
@@ -39,52 +43,74 @@ module DOPBrowser
 # Modular Architecture
 # =============================================================================
 # The browser engine is organized into the following modules:
-# 1. RustParser - Rust-based HTML/CSS parser (REQUIRED for production)
-# 2. RustRenderer - Rust-based GPU renderer (REQUIRED for production)
-# 3. Layout - SIMD-friendly layout calculation
-# 4. DOMCSSOM - Virtual DOM/CSSOM representation
-# 5. Compiler - HTML+CSS to Content-- compilation
-# 6. ContentMM - Content IR and runtime
-# 7. Network - HTTP/HTTPS networking layer
-# 8. EventLoop - Browser main event loop
 #
-# DEPRECATED modules (maintained for compatibility, will be removed):
-# - HTMLParser (use RustParser instead)
-# - CSSParserModule (use RustParser instead)
-# - Renderer (use RustRenderer instead)
+# RUST SIDE (Required):
+# - RustParser: HTML/CSS parsing using html5ever/cssparser
+# - RustContent: Content IR building
+# - RustRenderer: GPU rendering via wgpu, window management via winit
+#
+# JULIA SIDE (Layout & Interaction):
+# - ContentIR: Core IR types (MathOps, Primitives, Properties)
+# - Layout: SIMD-friendly layout calculation
+# - Pipeline: Orchestration of the rendering pipeline
+# - State: Reactive state management
+# - Widgets: High-level UI components
+# - Application: Application lifecycle
+# - Window: Window abstraction
+# - EventLoop: Browser event loop
+#
+# LEGACY (Backward Compatibility):
+# - HTMLParser, CSSParserModule, DOMCSSOM, Compiler: For existing code
 
-# Rust-based Content IR builder (REQUIRED)
+# =============================================================================
+# Core Content IR Module (NEW - Clean Architecture)
+# =============================================================================
+
+# Content IR - MathOps, Primitives, Properties
+include("ContentIR/ContentIR.jl")
+
+# =============================================================================
+# Rust-based Modules (REQUIRED)
+# =============================================================================
+
+# Rust-based Content IR builder
 include("RustContent/RustContent.jl")
 
-# Rust-based HTML/CSS parser and Content IR compiler (REQUIRED)
+# Rust-based HTML/CSS parser and Content IR compiler
 include("RustParser/RustParser.jl")
 
-# Rust-based rendering engine (winit + wgpu) (REQUIRED)
+# Rust-based rendering engine (winit + wgpu)
 include("RustRenderer/RustRenderer.jl")
 
-# DEPRECATED: Julia implementations (for backward compatibility only)
+# =============================================================================
+# Legacy/Backward Compatibility Modules
+# =============================================================================
+
+# HTMLParser - Legacy tokenization (use RustParser for new code)
 include("HTMLParser/HTMLParser.jl")
+
+# CSSParser - Legacy CSS parsing (use RustParser for new code)
 include("CSSParser/CSSParserModule.jl")
 
-# Layout module (LayoutArrays)
+# Layout module (LayoutArrays) - Still active for Julia-side layout computation
 include("Layout/Layout.jl")
 
-# DOM/CSSOM module (NodeTable + StyleArchetypes + RenderBuffer + StringInterner)
+# DOM/CSSOM module - Legacy virtual DOM/CSSOM (use ContentIR for new code)
 include("DOMCSSOM/DOMCSSOM.jl")
 
-# Compiler module (HTML+CSS to Content--)
+# Compiler module - Legacy HTML+CSS to Content-- compilation
 include("Compiler/Compiler.jl")
 
 # Event Loop module
 include("EventLoop/EventLoop.jl")
 
-# Content IR modules (DEPRECATED - use RustContent instead)
+# ContentMM - Legacy Content IR (use ContentIR for new code)
 include("ContentMM/ContentMM.jl")
 
 # Network layer
 include("Network/Network.jl")
 
-# Core browser context (uses the modular components)
+# Core browser context (legacy)
 include("Core.jl")
 
 # =============================================================================
@@ -111,7 +137,39 @@ include("Widgets/Widgets.jl")
 include("Application/Application.jl")
 
 # =============================================================================
-# Re-exports from Modular Submodules
+# Re-exports from ContentIR (NEW - Clean Architecture)
+# =============================================================================
+
+# ContentIR exports
+using .ContentIR
+export ContentIR
+
+# Re-export MathOps types
+using .ContentIR.MathOps: Vec2, Box4, Rect, Transform2D, vec2, box4, rect
+using .ContentIR.MathOps: lerp, clamp01, remap, smoothstep
+using .ContentIR.MathOps: ZERO_VEC2, UNIT_VEC2, ZERO_BOX4, ZERO_RECT
+using .ContentIR.MathOps: norm, normalize, magnitude, dot
+using .ContentIR.MathOps: horizontal, vertical, total
+using .ContentIR.MathOps: IDENTITY_TRANSFORM, translate, scale, rotate
+using .ContentIR.MathOps: contains, intersects, intersection, inset_rect, outset_rect
+
+# Re-export Primitives
+using .ContentIR.Primitives: NodeType, NODE_ROOT, NODE_STACK, NODE_GRID, NODE_SCROLL, NODE_RECT
+using .ContentIR.Primitives: NODE_PARAGRAPH, NODE_SPAN, NODE_LINK, NODE_TEXT_CLUSTER, NODE_EXTERNAL
+using .ContentIR.Primitives: ContentNode, NodeTable
+using .ContentIR.Primitives: create_node! as create_content_node!, get_node, add_child!, get_children
+
+# Re-export Properties
+using .ContentIR.Properties: Direction, DIRECTION_DOWN, DIRECTION_UP, DIRECTION_RIGHT, DIRECTION_LEFT
+using .ContentIR.Properties: Pack, PACK_START, PACK_END, PACK_CENTER, PACK_BETWEEN, PACK_AROUND, PACK_EVENLY
+using .ContentIR.Properties: Align, ALIGN_START, ALIGN_END, ALIGN_CENTER, ALIGN_STRETCH, ALIGN_BASELINE
+using .ContentIR.Properties: Color, color_to_rgba
+# Note: parse_color from ContentIR.Properties is NOT exported to avoid conflict with CSSParserModule
+# Use ContentIR.Properties.parse_color for the struct-based version
+using .ContentIR.Properties: direction_to_vec2, to_vec2, to_box4
+
+# =============================================================================
+# Re-exports from Legacy Modules (Backward Compatibility)
 # =============================================================================
 
 # Re-exports from HTMLParser
@@ -140,6 +198,29 @@ export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
 # Export Core functions
 export BrowserContext, create_context, parse_html!, apply_styles!,
        compute_layouts!, generate_render_commands!, process_document!
+
+# Export legacy types for backward compatibility (tests)
+export StringPool, intern!, get_string, get_id
+export TokenType, Token, Tokenizer, tokenize!, reset!, get_tokens
+export NodeKind, DOMTable, add_node!, node_count, get_parent, get_first_child, get_next_sibling, get_tag
+export set_parent!, set_first_child!, set_next_sibling!
+export NODE_ELEMENT, NODE_TEXT, NODE_COMMENT, NODE_DOCUMENT, NODE_DOCTYPE
+export get_id_attr, get_class_attr, get_style_attr, set_attributes!
+export StyleProperty, Archetype, ArchetypeTable, get_or_create_archetype!, apply_archetype!, get_archetype, archetype_count
+export RenderCommand, CommandBuffer, emit_rect!, emit_text!, emit_image!, emit_stroke!, clear!, get_commands, command_count
+export LayoutData, resize_layout!, set_bounds!, get_bounds, set_position!, get_position, compute_layout!
+export set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!
+export set_background_color!, get_background_color, set_borders!, has_border
+
+# Re-export CSSParser functions for backward compatibility (legacy tests)
+using .CSSParserModule.CSSCore: parse_color, parse_inline_style, parse_length
+using .CSSParserModule.CSSCore: POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED
+using .CSSParserModule.CSSCore: OVERFLOW_VISIBLE, OVERFLOW_HIDDEN
+using .CSSParserModule.CSSCore: DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE, DISPLAY_TABLE
+export parse_color, parse_inline_style, parse_length
+export POSITION_STATIC, POSITION_RELATIVE, POSITION_ABSOLUTE, POSITION_FIXED
+export OVERFLOW_VISIBLE, OVERFLOW_HIDDEN
+export DISPLAY_BLOCK, DISPLAY_INLINE, DISPLAY_NONE, DISPLAY_TABLE
 
 # Rust Content-- builder
 using .RustContent

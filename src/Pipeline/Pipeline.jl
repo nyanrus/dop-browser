@@ -63,7 +63,7 @@ using ..DOMCSSOM.RenderBuffer: CommandBuffer, emit_rect!, command_count, get_com
 import ..DOMCSSOM.RenderBuffer: clear!
 using ..Layout.LayoutArrays: LayoutData, resize_layout!, set_bounds!, set_position!, compute_layout!
 using ..CSSParserModule.CSSCore: parse_inline_style
-using ..ContentMM.MathOps: Vec2, Box4, vec2, box4
+using ..ContentIR.MathOps: Vec2, Box4, vec2, box4
 
 export Document, RenderBuffer
 export parse_doc, layout, render, to_png, save_png

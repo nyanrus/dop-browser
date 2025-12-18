@@ -33,7 +33,7 @@ png = html |> parse_doc |> layout_hd |> render |> to_png
 
 ```julia
 using DOPBrowser.Pipeline
-using DOPBrowser.ContentMM.MathOps: vec2
+using DOPBrowser.ContentIR.MathOps: vec2
 
 # Hit testing
 doc = parse_doc("<div style='width: 100px; height: 50px'></div>") |> layout
@@ -163,21 +163,45 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 | **Pipeline** | Simplified FP-style pipeline (parse_doc → layout → render → to_png) | Active |
 | **RustParser** | Rust-based HTML/CSS parser using html5ever and cssparser | **Required** |
 | **RustRenderer** | Rust-based GPU renderer via wgpu | **Required** |
+| **ContentIR** | Content IR types (MathOps, Primitives, Properties) | **Active** |
 | **Layout** | SIMD-friendly layout calculation | Active |
 | **DOMCSSOM** | Virtual DOM/CSSOM representation | Active |
-| **Compiler** | HTML+CSS to Content-- compilation | Active |
-| **ContentMM** | Content IR and runtime | Active |
 | **Network** | HTTP/HTTPS networking layer | Active |
 | **EventLoop** | Browser main event loop | Active |
 | **Window** | Platform windowing abstraction | Active |
 | **State** | Reactive state management | Active |
 | **Widgets** | High-level UI components | Active |
 | **Application** | Application lifecycle management | Active |
+| **ContentMM** | Content IR and runtime (legacy, use ContentIR for new code) | Deprecated |
+| **Compiler** | HTML+CSS to Content-- compilation (legacy) | Deprecated |
 | **HTMLParser** | HTML tokenization and string interning | **Deprecated** |
 | **CSSParserModule** | CSS parsing and style computation | **Deprecated** |
-| **Renderer** | GPU rendering and PNG export | **Deprecated** |
 
 See [docs/MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md) for detailed information about the module structure.
+
+## Rendering Pipeline Architecture
+
+The browser engine follows a clear separation between Rust and Julia:
+
+### Content Text Rendering
+```
+Content Text Format In → Parse in Rust → Compute Layout in Julia → Flatten Content IR in Rust and Render
+```
+
+### Web Rendering  
+```
+HTML&CSS In w/ Network → Parse in Rust → Lower in Rust → Compute Layout in Julia → Flatten Content IR in Rust and Render
+```
+
+### Interaction
+```
+Extract action-related codes (:hover, :click, etc.) in Julia → Pass to Rendering
+```
+
+### Feedback
+```
+Window and Eventloop in Rust → Apply in Content IR → Compute layout in Julia if needed → Flatten and Render in Rust
+```
 
 ### Rust Implementation (Required)
 
@@ -284,7 +308,7 @@ Content-- uses a **math-first** approach inspired by linear algebra, leveraging 
 **Layout Equations (Vector Form):**
 
 ```julia
-using DOPBrowser.ContentMM.MathOps
+using DOPBrowser.ContentIR.MathOps
 using LinearAlgebra
 
 # Child position calculation with Unicode operators
@@ -309,7 +333,7 @@ total_size = size + inset.total + offset.total
 **Direction as Unit Vector:**
 
 ```julia
-using DOPBrowser.ContentMM.Properties
+using DOPBrowser.ContentIR.Properties
 
 # Direction maps to unit vectors for intuitive math
 flow_down  = direction_to_vec2(DIRECTION_DOWN)   # Vec2(0, 1)

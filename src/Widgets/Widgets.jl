@@ -47,13 +47,18 @@ render!(ui, window)
 module Widgets
 
 using ..State: Signal, signal, computed, effect, batch
-using ..ContentMM.Properties: Color, parse_color, Direction, 
+
+# Use ContentIR for core types (new architecture)
+using ..ContentIR.Properties: Color, parse_color, Direction, 
                               DIRECTION_DOWN, DIRECTION_RIGHT,
                               Pack, PACK_START, PACK_CENTER, PACK_END,
                               Align, ALIGN_START, ALIGN_END, ALIGN_CENTER, ALIGN_STRETCH
-using ..ContentMM.Primitives: NodeTable, NodeType, create_node!, node_count,
+using ..ContentIR.Primitives: NodeTable, NodeType, create_node!, node_count,
                                NODE_ROOT, NODE_STACK, NODE_RECT, NODE_PARAGRAPH, NODE_SPAN
-using ..ContentMM.Properties: PropertyTable, resize_properties!, set_property!
+using ..ContentIR.Properties: PropertyTable, resize_properties!, set_property!
+
+# UIContext still uses ContentMM.NativeUI for backward compatibility
+# TODO: Migrate to ContentIR-based UI system when available
 using ..ContentMM.NativeUI: UIContext, create_ui, render!
 
 export Widget, WidgetTree, WidgetProps
