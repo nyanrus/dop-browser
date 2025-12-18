@@ -148,14 +148,11 @@ end
 Set the value of a signal and notify observers.
 """
 function Base.setindex!(s::Signal{T}, value::T) where T
-    # Skip if value hasn't changed
-    if s.comparator(s.value, value)
-        return value
-    end
-    
+    # Skip if value hasn't changed, then update and notify
+    s.comparator(s.value, value) && return value
     s.value = value
     notify!(s)
-    return value
+    value
 end
 
 """
@@ -164,20 +161,10 @@ Notify all observers of a signal change.
 function notify!(s::Signal)
     ctx = get_context()
     
-    if ctx.is_batching
-        # Queue notifications for batch
-        for observer in s.observers
-            push!(ctx.pending_notifications, observer)
-        end
-    else
-        # Notify immediately
-        for observer in copy(s.observers)
-            try
-                run!(observer)
-            catch e
-                @warn "Error in observer" exception=e
-            end
-        end
+    # Queue notifications for batch or notify immediately
+    for observer in (ctx.is_batching ? s.observers : copy(s.observers))
+        ctx.is_batching ? push!(ctx.pending_notifications, observer) :
+                         try run!(observer) catch e; @warn "Error in observer" exception=e end
     end
 end
 
