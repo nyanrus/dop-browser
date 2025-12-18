@@ -1,4 +1,6 @@
-# Precompile execution file for memo app
+# LEGACY: Precompile execution file for memo app
+# This file was used with the old PackageCompiler approach and is kept for reference only.
+# JuliaC does not use explicit precompile execution files.
 # This file is executed during compilation to trace code paths that should be precompiled
 
 # Simulate the memo app execution in headless mode

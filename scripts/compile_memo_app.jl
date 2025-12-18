@@ -28,8 +28,8 @@ try
     # Create image recipe
     img = ImageRecipe(
         output_type = "--output-exe",
-        file = PROJECT_DIR,           # Package directory
-        project = PROJECT_DIR,         # Project to use
+        file = ENTRY_FILE,            # Entry file with @main function
+        project = PROJECT_DIR,         # Project to use for dependencies
         trim_mode = "safe",           # Enable code trimming for smaller binaries
         verbose = true,               # Print detailed output
         cpu_target = "generic"        # Generic CPU target for portability

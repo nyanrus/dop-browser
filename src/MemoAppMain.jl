@@ -15,7 +15,7 @@ include(joinpath(dirname(dirname(@__FILE__)), "examples", "memo_app.jl"))
 Entry point for the compiled application.
 Returns 0 on success, non-zero on failure.
 """
-function (@main)(args::Vector{String})
+function @main(args::Vector{String})
     try
         main()
         return 0  # Success
