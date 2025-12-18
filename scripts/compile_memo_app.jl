@@ -2,6 +2,7 @@
 # Compile the memo application into a standalone executable using PackageCompiler
 
 using PackageCompiler
+using Dates
 
 # Configuration
 const APP_NAME = "memo_app"
@@ -28,7 +29,7 @@ try
         PROJECT_DIR,                    # Project to compile
         joinpath(OUTPUT_DIR, APP_NAME), # Output directory
         precompile_execution_file=PRECOMPILE_FILE,
-        executables=["memo_app" => "julia_main"],
+        executables=["memo_app" => "MemoAppMain"],
         force=true,                     # Overwrite existing build
         include_lazy_artifacts=true,    # Include artifacts
         filter_stdlibs=true,           # Reduce size by filtering standard libraries

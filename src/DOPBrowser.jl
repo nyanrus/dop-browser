@@ -139,6 +139,13 @@ include("Application/Application.jl")
 include("Application/Utils.jl")
 
 # =============================================================================
+# PackageCompiler Entry Point
+# =============================================================================
+
+# Entry point for compiled memo application
+include("MemoAppMain.jl")
+
+# =============================================================================
 # Re-exports from ContentIR (NEW - Clean Architecture)
 # =============================================================================
 
