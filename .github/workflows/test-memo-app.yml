@@ -11,6 +11,10 @@ jobs:
   test-memo-app:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write  # Needed for committing screenshots
+      actions: read    # Needed for workflow execution
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
