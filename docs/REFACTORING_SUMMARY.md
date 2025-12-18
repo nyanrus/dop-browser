@@ -98,7 +98,7 @@ All existing tests pass:
 ```
 Test Summary: | Pass  Total
 DOPBrowser    |   90     90
-Content-- IR  |   63     63
+Content IR  |   63     63
 Network Layer |   17     17
 Renderer Pipeline |   13     13
 Complete Browser |   18     18

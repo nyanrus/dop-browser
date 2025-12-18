@@ -1,19 +1,19 @@
-# Content-- Migration to Rust - Implementation Summary
+# Content IR Migration to Rust - Implementation Summary
 
 ## Overview
 
-This PR migrates the Content-- implementation from Julia to Rust, providing a high-performance builder API for UI construction. The migration breaks backward compatibility with the old ContentMM Julia modules as requested.
+This PR migrates the Content IR implementation from Julia to Rust, providing a high-performance builder API for UI construction. The migration breaks backward compatibility with the old ContentMM Julia modules as requested.
 
 ## What Was Implemented
 
-### 1. Rust Content-- Core (`rust/dop-content/`)
+### 1. Rust Content IR Core (`rust/dop-content-ir/`)
 
-A new Rust crate that implements the core Content-- IR:
+A new Rust crate that implements the core Content IR:
 
 **Modules:**
 - `primitives.rs` - Node types and tree structure (NodeTable, ContentNode)
 - `properties.rs` - Property tables (layout, styling, text)
-- `builder.rs` - Fluent builder API for constructing Content-- trees
+- `builder.rs` - Fluent builder API for constructing Content IR trees
 - `ffi.rs` - C-compatible FFI layer for Julia interop
 - `render.rs` - Basic layout and render command generation
 
@@ -56,7 +56,7 @@ println("Nodes: ", node_count(builder))
 
 ### 3. Memo Application Example (`examples/memo_app.jl`)
 
-A complete example demonstrating the new Content-- builder:
+A complete example demonstrating the new Content IR builder:
 
 - Creates a multi-note memo application UI
 - Uses Stack layout with proper nesting
@@ -107,7 +107,7 @@ end_container!(builder)
 
 ```bash
 # Build the Rust library
-cd rust/dop-content
+cd rust/dop-content-ir
 cargo build --release
 
 # Or use the unified build script
@@ -141,7 +141,7 @@ julia --project=. examples/memo_app.jl
                │ dlopen/dlsym
                ▼
 ┌─────────────────────────────────────┐
-│  dop-content (Rust Crate)           │
+│  dop-content-ir (Rust Crate)           │
 │  - NodeTable (SoA)                  │
 │  - PropertyTable (SoA)              │
 │  - Builder (fluent API)             │
@@ -168,14 +168,14 @@ julia --project=. examples/memo_app.jl
 ## Files Changed
 
 ### Added:
-- `rust/dop-content/` - New Rust crate (5 modules)
+- `rust/dop-content-ir/` - New Rust crate (5 modules)
 - `src/RustContent/RustContent.jl` - Julia wrapper
 - `examples/memo_app.jl` - Memo application example
 - `test/test_rust_content.jl` - FFI tests
 
 ### Modified:
 - `src/DOPBrowser.jl` - Added RustContent module
-- `deps/build.jl` - Added dop-content to build list
+- `deps/build.jl` - Added dop-content-ir to build list
 - `Project.toml` - Added Libdl dependency
 
 ## Testing Status
@@ -188,6 +188,6 @@ julia --project=. examples/memo_app.jl
 
 ## Conclusion
 
-This PR successfully migrates Content-- to Rust, providing a robust, high-performance foundation for UI construction. The new builder API is easier to use, more type-safe, and significantly faster than the Julia implementation.
+This PR successfully migrates Content IR to Rust, providing a robust, high-performance foundation for UI construction. The new builder API is easier to use, more type-safe, and significantly faster than the Julia implementation.
 
 The migration follows the "no backward compatibility" requirement, establishing a clean break from the old ContentMM modules and setting the stage for a fully Rust-based rendering pipeline.

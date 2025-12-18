@@ -1,9 +1,9 @@
-//! DOP Parser - HTML/CSS parsers and Content-- compiler
+//! DOP Parser - HTML/CSS parsers and Content IR compiler
 //!
 //! This crate provides:
 //! - HTML parsing using html5ever
 //! - CSS parsing using cssparser
-//! - Content-- compiler with zerocopy binary format
+//! - Content IR compiler with zerocopy binary format
 //! - JIT text shaping infrastructure
 //!
 //! All modules expose FFI functions for Julia integration.

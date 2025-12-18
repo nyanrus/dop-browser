@@ -11,10 +11,10 @@ intuitive, pre-calculated IR that replaces traditional DOM & CSSOM.
 ### Two Ways to Input Content--
 
 1. **HTML & CSS (Source Language)**: Familiar authoring format, lowered to Content--
-2. **Content-- Text Format (Native)**: Human-readable format for direct authoring
+2. **Content Text Format (Native)**: Human-readable format for direct authoring
 
 HTML & CSS → (Lowering) → Content-- → (Rendering Engine)
-Content-- Text → (Parsing) → Content-- → (Rendering Engine)
+Content Text → (Parsing) → Content-- → (Rendering Engine)
 
 ### Key Invariant
 The rendering engine understands ONLY Content--, never HTML/CSS directly.
@@ -80,7 +80,7 @@ total_size = content_size + inset + offset
 - `Reactive`: Environment switches, variable injection, event bindings
 - `Runtime`: WASM-compatible runtime for dynamic interactions
 - `HTMLLowering`: Converts HTML/CSS (source) to Content-- (target)
-- `TextParser`: Parses Content-- text format (human-readable)
+- `TextParser`: Parses Content Text Format (human-readable)
 - `NativeUI`: Native UI library interface with pixel comparison testing
 """
 module ContentMM
@@ -101,7 +101,7 @@ include("Reactive.jl")
 include("Runtime.jl")
 include("HTMLLowering.jl")
 
-# Text format parser (human-readable Content-- syntax)
+# Text format parser (human-readable Content Text Format syntax)
 include("TextParser.jl")
 
 # Native UI library interface

@@ -1,6 +1,6 @@
-//! Content-- Builder API
+//! Content IR Builder API
 //!
-//! This module provides a fluent builder API for constructing Content-- trees.
+//! This module provides a fluent builder API for constructing Content IR trees.
 
 use crate::primitives::{NodeTable, NodeType};
 use crate::properties::{PropertyTable, Direction, Pack, Align, Color};

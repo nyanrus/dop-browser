@@ -1,9 +1,9 @@
 """
     RustContent
 
-Rust-based Content-- builder with FFI interface.
+Rust-based Content IR builder with FFI interface.
 
-This module provides a thin Julia wrapper around the Rust Content-- implementation,
+This module provides a thin Julia wrapper around the Rust Content IR implementation,
 replacing the old ContentMM Julia modules.
 """
 module RustContent
@@ -23,17 +23,17 @@ const FUNCTIONS = Dict{Symbol, Ptr{Cvoid}}()
 function __init__()
     # Try to find the library
     lib_name = if Sys.iswindows()
-        "dop_content.dll"
+        "dop_content_ir.dll"
     elseif Sys.isapple()
-        "libdop_content.dylib"
+        "libdop_content_ir.dylib"
     else
-        "libdop_content.so"
+        "libdop_content_ir.so"
     end
     
     # Search in artifacts directory and Rust target directory
     search_paths = [
-        joinpath(@__DIR__, "..", "..", "artifacts", "dop-content", lib_name),
-        joinpath(@__DIR__, "..", "..", "rust", "dop-content", "target", "release", lib_name),
+        joinpath(@__DIR__, "..", "..", "artifacts", "dop-content-ir", lib_name),
+        joinpath(@__DIR__, "..", "..", "rust", "dop-content-ir", "target", "release", lib_name),
     ]
     
     lib_path = nothing
@@ -45,7 +45,7 @@ function __init__()
     end
     
     if lib_path === nothing
-        error("Could not find dop-content library. Please build it first using: julia deps/build.jl")
+        error("Could not find dop-content-ir library. Please build it first using: julia deps/build.jl")
     end
     
     # Load the library
@@ -80,7 +80,7 @@ end
 """
     ContentBuilder
 
-Builder for constructing Content-- trees using Rust backend.
+Builder for constructing Content IR trees using Rust backend.
 """
 mutable struct ContentBuilder
     handle::Ptr{Cvoid}

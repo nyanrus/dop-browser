@@ -1,11 +1,11 @@
 """
     TextParser
 
-Content-- text format parser for human-readable UI definitions.
+Content Text Format parser for human-readable UI definitions.
 
 ## Syntax
 
-The Content-- text format uses a simple, intuitive syntax:
+The Content Text Format uses a simple, intuitive syntax:
 
 ```
 NodeType(Prop1: Value1, Prop2: Value2) {

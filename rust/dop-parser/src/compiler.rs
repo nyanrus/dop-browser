@@ -1,4 +1,4 @@
-//! Content-- Compiler and JIT infrastructure
+//! Content IR Compiler and JIT infrastructure
 //!
 //! This module provides:
 //! - AOT compilation to zero-copy binary format
@@ -12,7 +12,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 use crate::css_parser::Color;
 use crate::string_interner::StringId;
 
-/// Content-- binary format magic number "CMMB"
+/// Content IR binary format magic number "CMMB"
 pub const MAGIC_NUMBER: u32 = 0x434D4D42;
 /// Current binary format version
 pub const FORMAT_VERSION: u32 = 1;
@@ -21,7 +21,7 @@ pub const FORMAT_VERSION: u32 = 1;
 // Node Types
 // ============================================================================
 
-/// Content-- node type enum
+/// Content IR node type enum
 #[derive(Clone, Copy, Debug, PartialEq, Eq, IntoBytes, Immutable, KnownLayout)]
 #[repr(u8)]
 pub enum NodeType {
@@ -79,7 +79,7 @@ pub enum Align {
 // Node Data Structures (SoA - Structure of Arrays)
 // ============================================================================
 
-/// Node table storing Content-- nodes in SoA format
+/// Node table storing Content IR nodes in SoA format
 #[derive(Default)]
 pub struct NodeTable {
     /// Node types
@@ -420,7 +420,7 @@ fn compute_style_checksum(style: &FlatStyle) -> u64 {
 // Compiled Unit
 // ============================================================================
 
-/// A compiled Content-- unit ready for runtime
+/// A compiled Content IR unit ready for runtime
 #[derive(Default)]
 pub struct CompiledUnit {
     pub nodes: NodeTable,

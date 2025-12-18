@@ -239,18 +239,37 @@ This enables:
 ```
 Content-- Nodes
      ↓
-[Layout Engine] ← Uses pre-computed properties
+[Julia Layout Engine] ← Complex layout computation with mathematical precision
      ↓
-Layout Boxes (x, y, width, height)
+Layout Boxes (x, y, width, height) with detailed vectors
      ↓
-[Render Command Generator]
+[Rust Render Module] ← Minimal layout, focus on rendering
      ↓
-Command Buffer (rects, strokes, text)
+Render Commands (rects, strokes, text)
      ↓
 [GPU Renderer]
      ↓
 Framebuffer
 ```
+
+### Layout Engine Responsibilities
+
+**Julia Layout Engine** (`src/Layout/`):
+- Complex layout computation using mathematical libraries
+- Full CSS Flexbox and Grid support
+- Vector-based calculations (Vec2, Box4, etc.)
+- SIMD optimization for performance
+- Unicode support for text layout
+- Proper handling of all layout properties (direction, pack, align, gap)
+
+**Rust Rendering Module** (`rust/dop-content-ir/src/render.rs`):
+- Minimal layout calculations for immediate rendering needs
+- Accepts pre-computed layout from Julia
+- Focus on efficient render command generation
+- GPU-friendly output format
+
+This separation ensures that complex layout logic leverages Julia's mature mathematical
+libraries and Unicode support, while Rust focuses on what it does best: fast, safe rendering.
 
 ## Performance Characteristics
 
@@ -356,12 +375,19 @@ load_html!(browser, """
 render_to_png!(browser, "output.png")
 ```
 
-### 2. Content-- Text Format (Native)
+### 2. Content Text Format (Native)
 
 A human-readable text format for direct Content-- authoring. Ideal for:
 - Native application UIs
 - Design system prototyping
 - Unit testing UI components
+
+**Important distinction:**
+- **Content Text Format**: Human-readable format without detailed vector types. Uses simple scalar values.
+- **Content IR**: The internal representation with detailed vector types (Vec2, Box4, etc.) for optimal performance.
+
+The Content Text Format is parsed into Content IR, which contains the full mathematical vector representation
+used by the layout engine.
 
 #### Syntax
 

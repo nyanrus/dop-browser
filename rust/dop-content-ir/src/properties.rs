@@ -1,6 +1,6 @@
-//! Content-- Properties
+//! Content IR Properties
 //!
-//! This module defines property tables and enums for Content-- nodes.
+//! This module defines property tables and enums for Content IR nodes.
 
 use zerocopy::{Immutable, IntoBytes, KnownLayout};
 

@@ -1,10 +1,10 @@
-//! Content-- Primitives
+//! Content IR Primitives
 //!
-//! This module defines the core Content-- node types and node table structure.
+//! This module defines the core Content IR node types and node table structure.
 
 use zerocopy::{Immutable, IntoBytes, KnownLayout};
 
-/// Content-- node type enumeration
+/// Content IR node type enumeration
 #[derive(Clone, Copy, Debug, PartialEq, Eq, IntoBytes, Immutable, KnownLayout)]
 #[repr(u8)]
 pub enum NodeType {
@@ -19,7 +19,7 @@ pub enum NodeType {
     TextCluster = 8,
 }
 
-/// A single Content-- node (SoA row representation)
+/// A single Content IR node (SoA row representation)
 #[derive(Clone, Debug)]
 pub struct ContentNode {
     pub node_type: NodeType,
@@ -29,7 +29,7 @@ pub struct ContentNode {
     pub style_id: u32,
 }
 
-/// Node table storing Content-- nodes in Structure of Arrays (SoA) format
+/// Node table storing Content IR nodes in Structure of Arrays (SoA) format
 #[derive(Default, Debug)]
 pub struct NodeTable {
     /// Node types

@@ -166,7 +166,7 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 | **Layout** | SIMD-friendly layout calculation | Active |
 | **DOMCSSOM** | Virtual DOM/CSSOM representation | Active |
 | **Compiler** | HTML+CSS to Content-- compilation | Active |
-| **ContentMM** | Content-- IR and runtime | Active |
+| **ContentMM** | Content IR and runtime | Active |
 | **Network** | HTTP/HTTPS networking layer | Active |
 | **EventLoop** | Browser main event loop | Active |
 | **Window** | Platform windowing abstraction | Active |
@@ -325,7 +325,7 @@ next_pos = current_pos + flow_down * child_height
 Content-- supports two input methods:
 
 1. **HTML & CSS**: Traditional web authoring, lowered to Content--
-2. **Content-- Text Format**: Human-readable native format for direct authoring
+2. **Content Text Format**: Human-readable native format for direct authoring
 
 ```julia
 # Text format example
@@ -380,7 +380,7 @@ Linear command buffer for direct WebGPU upload. Generates a sequence of render c
 ### Core
 Central browser context that ties together all modules. Provides a unified API for document processing with batched operations.
 
-## Content-- IR Modules
+## Content IR Modules
 
 ### ContentMM.MathOps
 **High-performance mathematical types and operators for layout computation.**
@@ -422,7 +422,7 @@ Event bindings, variable injection (var()), and environment switches.
 WASM-compatible runtime with sticky positioning resolver and virtual JS interface.
 
 ### ContentMM.TextParser
-Parser for human-readable Content-- text format. Converts text syntax to Content-- primitives.
+Parser for human-readable Content Text Format. Converts text syntax to Content IR primitives.
 
 ### ContentMM.NativeUI
 Native UI library interface with programmatic builder API and pixel comparison testing.
@@ -592,7 +592,7 @@ Pkg.test("DOPBrowser")
 ├────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │   ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
-│   │   Network   │───→│    Parse    │───→│    Content-- IR     │   │
+│   │   Network   │───→│    Parse    │───→│    Content IR     │   │
 │   │  (HTTP/S)   │    │   (HTML)    │    │  (Primitives/Props) │   │
 │   └─────────────┘    └─────────────┘    └─────────────────────┘   │
 │                                                  │                  │

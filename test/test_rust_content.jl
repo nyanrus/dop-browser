@@ -2,14 +2,14 @@
 using Libdl
 
 lib_name = if Sys.iswindows()
-    "dop_content.dll"
+    "dop_content_ir.dll"
 elseif Sys.isapple()
-    "libdop_content.dylib"
+    "libdop_content_ir.dylib"
 else
-    "libdop_content.so"
+    "libdop_content_ir.so"
 end
 
-lib_path = joinpath(@__DIR__, "..", "rust", "dop-content", "target", "release", lib_name)
+lib_path = joinpath(@__DIR__, "..", "rust", "dop-content-ir", "target", "release", lib_name)
 
 if !isfile(lib_path)
     error("Library not found at: $lib_path")

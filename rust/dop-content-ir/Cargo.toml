@@ -1,8 +1,8 @@
 [package]
-name = "dop-content"
+name = "dop-content-ir"
 version = "0.1.0"
 edition = "2021"
-description = "Content-- IR and builder for DOP Browser"
+description = "Content IR and builder for DOP Browser"
 license = "MIT"
 
 [lib]
