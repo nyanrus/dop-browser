@@ -1,6 +1,17 @@
 //! Content IR Rendering
 //!
 //! This module provides rendering functionality for Content IR trees.
+//! 
+//! **Note on Layout:** Complex layout computation is handled by the Julia layout engine
+//! (see src/Layout/). This Rust module only performs minimal layout calculations needed
+//! for immediate rendering. The Julia layout engine provides:
+//! - Full CSS Flexbox and Grid support
+//! - Mathematical vector-based layout computation
+//! - SIMD optimization for performance
+//! - Unicode and mature mathematical libraries
+//!
+//! The Rust side should accept pre-computed layout positions from Julia and focus on
+//! efficient rendering with minimal layout overhead.
 
 use crate::primitives::{NodeTable, NodeType};
 use crate::properties::PropertyTable;
@@ -43,15 +54,22 @@ struct LayoutState {
 }
 
 /// Render the Content IR tree to a list of render commands
+/// 
+/// **Note:** This function performs only minimal layout calculations for immediate rendering.
+/// For complex layout, use the Julia layout engine (src/Layout/) which provides:
+/// - Full CSS Flexbox/Grid support with mathematical precision
+/// - Optimized SIMD computation using Julia's mature libraries
+/// - Unicode support for text layout
 pub fn render(nodes: &NodeTable, props: &PropertyTable, viewport_width: f32, viewport_height: f32) -> Vec<RenderCommand> {
     let mut commands = Vec::new();
     let mut layout_states = vec![LayoutState::default(); nodes.len()];
     
-    // Simple layout pass - start from root
+    // Minimal layout pass - just basic positioning
+    // For complex layout, delegate to Julia layout engine
     if !nodes.is_empty() {
         layout_states[0].width = viewport_width;
         layout_states[0].height = viewport_height;
-        layout_node(nodes, props, 1, 0.0, 0.0, viewport_width, viewport_height, &mut layout_states);
+        layout_node_minimal(nodes, props, 1, 0.0, 0.0, viewport_width, viewport_height, &mut layout_states);
     }
     
     // Render pass
@@ -60,8 +78,18 @@ pub fn render(nodes: &NodeTable, props: &PropertyTable, viewport_width: f32, vie
     commands
 }
 
-/// Layout a single node recursively
-fn layout_node(
+/// Perform minimal layout for a single node
+/// 
+/// This is a simplified layout function for immediate rendering needs.
+/// For production use with complex layouts (flexbox, grid, etc.), 
+/// use the Julia layout engine which provides:
+/// - Mathematical precision with Vec2/Box4 types
+/// - Full CSS Flexbox and Grid Layout algorithms  
+/// - SIMD-optimized computation
+/// - Proper text shaping with Unicode support
+///
+/// This minimal version only handles basic vertical stacking.
+fn layout_node_minimal(
     nodes: &NodeTable,
     props: &PropertyTable,
     node_id: u32,
@@ -76,9 +104,8 @@ fn layout_node(
     }
     
     let idx = node_id as usize - 1;
-    let node_type = nodes.node_types[idx];
     
-    // Get properties
+    // Use explicit size if provided, otherwise use available space
     let width = if props.width[idx] > 0.0 {
         props.width[idx]
     } else {
@@ -91,98 +118,42 @@ fn layout_node(
         available_height
     };
     
-    // Apply inset
-    let inset_left = props.inset_left[idx];
-    let inset_top = props.inset_top[idx];
-    let inset_right = props.inset_right[idx];
-    let inset_bottom = props.inset_bottom[idx];
-    
-    // Store layout
+    // Store layout state
     layout_states[idx].x = x;
     layout_states[idx].y = y;
     layout_states[idx].width = width;
     layout_states[idx].height = height;
     
-    // Layout children
+    // Minimal child layout - just stack vertically
+    // For complex layouts (direction, pack, align, gap), use Julia layout engine
     let children = nodes.get_children(node_id);
     if !children.is_empty() {
+        let inset_left = props.inset_left[idx];
+        let inset_top = props.inset_top[idx];
+        let inset_right = props.inset_right[idx];
+        let inset_bottom = props.inset_bottom[idx];
+        
         let content_x = x + inset_left;
-        let content_y = y + inset_top;
+        let mut content_y = y + inset_top;
         let content_width = width - inset_left - inset_right;
         let content_height = height - inset_top - inset_bottom;
         
-        match node_type {
-            NodeType::Stack => {
-                // Stack layout
-                let direction = props.direction[idx];
-                let gap_row = props.gap_row[idx];
-                let gap_col = props.gap_col[idx];
-                
-                let mut curr_x = content_x;
-                let mut curr_y = content_y;
-                
-                for child_id in children {
-                    layout_node(
-                        nodes,
-                        props,
-                        child_id,
-                        curr_x,
-                        curr_y,
-                        content_width,
-                        content_height,
-                        layout_states,
-                    );
-                    
-                    // Advance position based on direction
-                    let child_idx = child_id as usize - 1;
-                    match direction {
-                        crate::properties::Direction::Down => {
-                            curr_y += layout_states[child_idx].height + gap_row;
-                        }
-                        crate::properties::Direction::Right => {
-                            curr_x += layout_states[child_idx].width + gap_col;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            NodeType::Paragraph => {
-                // Paragraph layout - stack spans vertically
-                let curr_x = content_x;
-                let mut curr_y = content_y;
-                
-                for child_id in children {
-                    layout_node(
-                        nodes,
-                        props,
-                        child_id,
-                        curr_x,
-                        curr_y,
-                        content_width,
-                        20.0, // Default line height
-                        layout_states,
-                    );
-                    curr_y += 20.0;
-                }
-            }
-            _ => {
-                // Default: stack children vertically
-                let mut curr_y = content_y;
-                for child_id in children {
-                    layout_node(
-                        nodes,
-                        props,
-                        child_id,
-                        content_x,
-                        curr_y,
-                        content_width,
-                        content_height,
-                        layout_states,
-                    );
-                    let child_idx = child_id as usize - 1;
-                    curr_y += layout_states[child_idx].height;
-                }
-            }
+        // Simple vertical stacking only
+        for child_id in children {
+            layout_node_minimal(
+                nodes,
+                props,
+                child_id,
+                content_x,
+                content_y,
+                content_width,
+                content_height,
+                layout_states,
+            );
+            
+            // Stack vertically with minimal gap
+            let child_idx = child_id as usize - 1;
+            content_y += layout_states[child_idx].height;
         }
     }
 }
