@@ -130,8 +130,16 @@ using .Layout: LayoutData, resize_layout!, set_bounds!, get_bounds, set_position
                     set_css_position!, set_offsets!, set_margins!, set_paddings!, set_overflow!, set_visibility!, set_z_index!,
                     set_background_color!, get_background_color, set_borders!, has_border
 
+# Re-exports from Core
+using .Core: BrowserContext, create_context, parse_html!, apply_styles!,
+             compute_layouts!, generate_render_commands!, process_document!
+
 # Export modules for direct access
 export HTMLParser, Layout, DOMCSSOM, Compiler, EventLoop, CSSParserModule
+
+# Export Core functions
+export BrowserContext, create_context, parse_html!, apply_styles!,
+       compute_layouts!, generate_render_commands!, process_document!
 
 # Rust Content-- builder
 using .RustContent

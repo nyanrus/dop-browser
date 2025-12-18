@@ -1,41 +1,9 @@
-"""
-    LayoutCache
+# LayoutCache - Thread-safe layout caching and precaching system
+#
+# Provides fast layout retrieval and incremental reflow by caching computed layouts
+# and tracking dependencies between nodes. Supports multi-threaded access with
+# proper synchronization.
 
-Thread-safe layout caching and precaching system.
-
-Provides fast layout retrieval and incremental reflow by caching computed layouts
-and tracking dependencies between nodes. Supports multi-threaded access with
-proper synchronization.
-
-## Features
-
-- Thread-safe layout caching with ReentrantLock
-- Layout invalidation tracking
-- Incremental reflow (only recompute changed subtrees)
-- Precaching for predictive rendering
-- Memory-efficient storage with weak references
-- Cache statistics for monitoring
-
-## Usage
-
-```julia
-cache = LayoutCache(capacity=1000)
-
-# Cache a layout
-cache_layout!(cache, node_id, layout_data)
-
-# Retrieve from cache
-if has_cached_layout(cache, node_id)
-    layout = get_cached_layout(cache, node_id)
-end
-
-# Invalidate and trigger reflow
-invalidate_subtree!(cache, node_id)
-
-# Precache for future use
-precache_layouts!(cache, node_ids)
-```
-"""
 module LayoutCache
 
 export LayoutCacheEntry, LayoutCache

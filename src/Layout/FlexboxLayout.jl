@@ -1,32 +1,8 @@
-"""
-    FlexboxLayout
+# FlexboxLayout - CSS3 Flexbox layout engine implementation
+#
+# Implements the CSS Flexible Box Layout Module Level 1 specification
+# for flexible, responsive layouts with proper flex item sizing and alignment.
 
-CSS3 Flexbox layout engine implementation.
-
-Implements the CSS Flexible Box Layout Module Level 1 specification
-for flexible, responsive layouts with proper flex item sizing and alignment.
-
-## Features
-
-- Flex direction (row, row-reverse, column, column-reverse)
-- Flex wrap (nowrap, wrap, wrap-reverse)
-- Justify content (flex-start, flex-end, center, space-between, space-around, space-evenly)
-- Align items (flex-start, flex-end, center, baseline, stretch)
-- Align content (flex-start, flex-end, center, space-between, space-around, stretch)
-- Flex grow, shrink, and basis
-- Gap between flex items
-- Thread-safe computation
-
-## Algorithm
-
-1. Determine main axis and cross axis based on flex-direction
-2. Collect flex items (excluding out-of-flow positioned items)
-3. Resolve flexible lengths (flex-basis, grow, shrink)
-4. Distribute space along main axis (justify-content)
-5. Align items along cross axis (align-items)
-6. Handle flex line wrapping if flex-wrap is enabled
-7. Align flex lines (align-content for multi-line containers)
-"""
 module FlexboxLayout
 
 using ..LayoutArrays: LayoutData, DISPLAY_FLEX, DISPLAY_INLINE_FLEX

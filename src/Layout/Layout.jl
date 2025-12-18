@@ -130,7 +130,7 @@ export LayoutCache, cache_layout!, get_cached_layout, has_cached_layout
 export invalidate_node!, invalidate_subtree!, clear_cache!
 export precache_layouts!, get_cache_stats
 
-# Re-export submodules
-export LayoutArrays, FlexboxLayout, GridLayout, LayoutCache
+# Re-export submodules (but not the types with conflicting names)
+export LayoutArrays, FlexboxLayout, GridLayout
 
 end # module Layout

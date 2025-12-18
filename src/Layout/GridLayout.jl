@@ -1,30 +1,8 @@
-"""
-    GridLayout
+# GridLayout - CSS3 Grid layout engine implementation
+#
+# Implements the CSS Grid Layout Module Level 1 specification
+# for two-dimensional grid-based layouts.
 
-CSS3 Grid layout engine implementation.
-
-Implements the CSS Grid Layout Module Level 1 specification
-for two-dimensional grid-based layouts.
-
-## Features
-
-- Grid template columns and rows
-- Grid auto-flow (row, column, dense)
-- Grid gaps (row and column)
-- Grid item placement (grid-column, grid-row)
-- Grid alignment (justify-items, align-items, justify-content, align-content)
-- Implicit grid creation for auto-placed items
-- Thread-safe computation
-
-## Algorithm
-
-1. Parse grid template (columns and rows)
-2. Place explicitly positioned grid items
-3. Auto-place remaining items based on grid-auto-flow
-4. Resolve track sizes (fr units, auto, fixed sizes)
-5. Align items within grid cells
-6. Align grid tracks within container
-"""
 module GridLayout
 
 using ..LayoutArrays: LayoutData, DISPLAY_GRID, DISPLAY_INLINE_GRID
