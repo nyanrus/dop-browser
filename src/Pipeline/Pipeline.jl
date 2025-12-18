@@ -208,7 +208,12 @@ function parse_doc(html::AbstractString)::Document
     link_child!(parent_id::UInt32, child_id::UInt32,
                 first_children::Vector{UInt32}, next_siblings::Vector{UInt32}) = begin
         iszero(parent_id) && return
-        iszero(first_children[parent_id]) && (first_children[parent_id] = child_id; return)
+        
+        # If parent has no children yet, set this as first child
+        if iszero(first_children[parent_id])
+            first_children[parent_id] = child_id
+            return
+        end
         
         # Find last sibling
         sibling = first_children[parent_id]
