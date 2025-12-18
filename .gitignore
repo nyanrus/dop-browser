@@ -10,6 +10,9 @@ rust/**/target/
 # Built artifacts directory
 artifacts/
 
+# PackageCompiler build output
+build/
+
 # IDE
 .vscode/
 .idea/

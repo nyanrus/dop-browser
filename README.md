@@ -154,6 +154,27 @@ render_frame!(app)
 save_app_screenshot(app, "output.png")
 ```
 
+### Standalone Executables
+
+Applications built with DOPBrowser can be compiled into standalone executables using PackageCompiler. This creates a self-contained binary that doesn't require Julia to be installed.
+
+**Example: Compile the memo application**
+
+```bash
+# Verify setup
+julia --project=. scripts/verify_compilation_setup.jl
+
+# Compile (takes 10-20 minutes)
+julia --project=. scripts/compile_memo_app.jl
+
+# Run the compiled binary
+./build/memo_app/bin/memo_app
+```
+
+**Binary size**: 370-430 MB (can be reduced to 140-250 MB with optimizations)
+
+See [`docs/PACKAGING.md`](docs/PACKAGING.md) for detailed packaging instructions and [`docs/BINARY_SIZE_REDUCTION.md`](docs/BINARY_SIZE_REDUCTION.md) for size optimization strategies.
+
 ## Modular Architecture
 
 DOPBrowser is organized into well-defined modules for better maintainability:
