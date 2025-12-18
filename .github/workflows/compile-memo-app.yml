@@ -17,6 +17,9 @@ jobs:
   verify-compilation-setup:
     runs-on: ubuntu-latest
     
+    permissions:
+      contents: read  # Read repository contents
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
