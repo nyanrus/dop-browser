@@ -22,7 +22,7 @@ using DOPBrowser.RustRenderer: RustRendererHandle, create_renderer, destroy!,
     set_clear_color!, add_rect!, add_text!, render!, export_png!, get_framebuffer,
     create_onscreen_window, is_open_threaded, poll_events_threaded!, 
     destroy_threaded!, is_available, EVENT_MOUSE_DOWN
-using DOPBrowser.State: Signal, signal, effect, dispose!
+using DOPBrowser.State: Signal, signal
 
 # ============================================================================
 # Memo Data Types
@@ -31,18 +31,11 @@ using DOPBrowser.State: Signal, signal, effect, dispose!
 """
 Represents a single memo/note.
 """
-struct Memo
+Base.@kwdef struct Memo
     id::Int
     title::String
     content::Vector{String}
-    color::String  # Title color (hex)
-end
-
-"""
-Create a new memo with auto-incremented ID.
-"""
-function Memo(id::Int, title::String, content::Vector{String}; color::String="#1976D2")
-    return Memo(id, title, content, color)
+    color::String = "#1976D2"  # Title color (hex), default blue
 end
 
 # ============================================================================
@@ -54,9 +47,9 @@ Create initial memos for the application.
 """
 function create_initial_memos()::Vector{Memo}
     return [
-        Memo(1, "Shopping List", ["- Milk", "- Bread", "- Eggs"], color="#1976D2"),
-        Memo(2, "Ideas", ["Build a Content IR renderer in Rust", "Implement reactive state management"], color="#388E3C"),
-        Memo(3, "TODO", ["✓ Create Rust Content IR library", "✓ Add Julia FFI wrapper", "✓ Build memo application"], color="#F57C00")
+        Memo(id=1, title="Shopping List", content=["- Milk", "- Bread", "- Eggs"], color="#1976D2"),
+        Memo(id=2, title="Ideas", content=["Build a Content IR renderer in Rust", "Implement reactive state management"], color="#388E3C"),
+        Memo(id=3, title="TODO", content=["✓ Create Rust Content IR library", "✓ Add Julia FFI wrapper", "✓ Build memo application"], color="#F57C00")
     ]
 end
 
@@ -284,30 +277,18 @@ function run_interactive_memo_app(; width::Int=400, height::Int=600)
     memos_signal = signal(create_initial_memos())
     next_id = signal(4)  # Next memo ID
     
-    # Track if we need to re-render
-    needs_render = signal(true)
-    
-    # Set up effect to mark render needed when memos change
-    memo_effect = effect(() -> begin
-        _ = memos_signal[]  # Track dependency
-        needs_render[] = true
-    end)
-    
     # Check if we should run in headless mode
-    is_headless = get(ENV, "HEADLESS", "") == "1" || 
-                  get(ENV, "CI", "") == "true" ||
-                  !RustRenderer.is_available()
+    is_headless_mode = get(ENV, "HEADLESS", "") == "1" || 
+                       get(ENV, "CI", "") == "true" ||
+                       !is_available()
     
-    if is_headless
+    if is_headless_mode
         println("Running in headless mode...")
         run_headless_demo(memos_signal, next_id)
     else
         println("Attempting to create onscreen window...")
         run_onscreen_demo(memos_signal, next_id, width, height)
     end
-    
-    # Cleanup
-    dispose!(memo_effect)
     
     println("\nApplication closed.")
 end
@@ -329,7 +310,7 @@ function run_headless_demo(memos_signal::Signal, next_id::Signal)
     
     # Simulate adding a new memo
     println("\nSimulating: Add new memo...")
-    new_memo = Memo(next_id[], "New Note", ["This is a new note", "Added by user"])
+    new_memo = Memo(id=next_id[], title="New Note", content=["This is a new note", "Added by user"])
     next_id[] += 1
     memos_signal[] = [memos_signal[]..., new_memo]
     
@@ -392,8 +373,8 @@ function run_onscreen_demo(memos_signal::Signal, next_id::Signal,
                     
                     if hit_test(x, y, btn_x, btn_y, btn_w, btn_h)
                         println("Button clicked! Adding new memo...")
-                        new_memo = Memo(next_id[], "Note $(next_id[])", 
-                                       ["New content item"])
+                        new_memo = Memo(id=next_id[], title="Note $(next_id[])", 
+                                       content=["New content item"])
                         next_id[] += 1
                         memos_signal[] = [memos_signal[]..., new_memo]
                     end
