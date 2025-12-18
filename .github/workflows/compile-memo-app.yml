@@ -1,0 +1,137 @@
+name: Build and Test Compiled Memo App
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'examples/memo_app.jl'
+      - 'scripts/compile_memo_app.jl'
+      - 'scripts/precompile_memo_app.jl'
+      - 'Project.toml'
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  verify-compilation-setup:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v1
+        with:
+          version: '1.10'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            rust/dop-parser/target/
+            rust/dop-renderer/target/
+            rust/dop-content-ir/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache Julia packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia
+          key: ${{ runner.os }}-julia-pkg-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-pkg-
+
+      - name: Build Rust libraries
+        run: |
+          julia deps/build.jl
+
+      - name: Install Julia dependencies
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Verify compilation setup
+        run: |
+          julia --project=. scripts/verify_compilation_setup.jl
+
+  # Commented out: Full compilation takes 10-20 minutes
+  # Enable this job for release builds or manually via workflow_dispatch
+  # compile-application:
+  #   runs-on: ubuntu-latest
+  #   needs: verify-compilation-setup
+  #   if: github.event_name == 'workflow_dispatch'
+  #   
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  # 
+  #     - name: Setup Julia
+  #       uses: julia-actions/setup-julia@v1
+  #       with:
+  #         version: '1.10'
+  # 
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@stable
+  # 
+  #     - name: Cache Rust dependencies
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           ~/.cargo/bin/
+  #           ~/.cargo/registry/index/
+  #           ~/.cargo/registry/cache/
+  #           ~/.cargo/git/db/
+  #           rust/dop-parser/target/
+  #           rust/dop-renderer/target/
+  #           rust/dop-content-ir/target/
+  #         key: ${{ runner.os }}-cargo-${{ hashFiles('rust/**/Cargo.lock') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-cargo-
+  # 
+  #     - name: Cache Julia packages
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/.julia
+  #         key: ${{ runner.os }}-julia-pkg-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-julia-pkg-
+  # 
+  #     - name: Build Rust libraries
+  #       run: |
+  #         julia deps/build.jl
+  # 
+  #     - name: Install Julia dependencies
+  #       run: |
+  #         julia --project=. -e 'using Pkg; Pkg.instantiate()'
+  # 
+  #     - name: Compile application
+  #       run: |
+  #         julia --project=. scripts/compile_memo_app.jl
+  # 
+  #     - name: Test compiled application
+  #       run: |
+  #         HEADLESS=1 ./build/memo_app/bin/memo_app --simple
+  # 
+  #     - name: Upload compiled application
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: memo-app-linux-x64
+  #         path: build/memo_app/
+  #         retention-days: 30
+  # 
+  #     - name: Upload size report
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: size-report
+  #         path: build/size_report.txt
+  #         retention-days: 30
