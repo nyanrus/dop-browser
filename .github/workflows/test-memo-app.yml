@@ -100,30 +100,31 @@ jobs:
           # This ensures the app tries onscreen mode with X server
           echo ""
           echo "=== Testing onscreen mode with X server ==="
-          (CI=false timeout 10 julia --project=. examples/memo_app.jl --interactive) || \
-            echo "Onscreen mode completed or timed out (expected for automated testing)"
+          # Using timeout from coreutils (standard on Ubuntu)
+          if command -v timeout &> /dev/null; then
+            (CI=false timeout 10 julia --project=. examples/memo_app.jl --interactive) || \
+              echo "Onscreen mode completed or timed out (expected for automated testing)"
+          else
+            echo "Warning: timeout command not found, running without timeout"
+            (CI=false julia --project=. examples/memo_app.jl --interactive) &
+            APP_PID=$!
+            sleep 10
+            kill $APP_PID 2>/dev/null || true
+          fi
 
-          # Stop Xvfb
-          kill $XVFB_PID || true
-
-      - name: Capture X server display (if app created window)
-        run: |
-          export DISPLAY=:99
-          # Start Xvfb again briefly for screenshot capture
-          Xvfb :99 -screen 0 800x600x24 &
-          XVFB_PID=$!
-          sleep 1
-
-          # Try to capture the display (this captures what's on the X server)
+          # Try to capture the X display before stopping Xvfb
+          echo ""
+          echo "=== Capturing X server display ==="
           scrot -D :99 xserver_display.png 2>/dev/null || \
             echo "Note: Could not capture X display (no window may have been created)"
 
+          # Stop Xvfb
           kill $XVFB_PID || true
 
       - name: List generated screenshots
         run: |
           echo "=== Generated PNG files ==="
-          find . -name "*.png" -type f -newer .git -exec ls -lh {} \;
+          find . -maxdepth 1 -name "*.png" -type f -exec ls -lh {} \;
 
           echo ""
           echo "=== Screenshots in current directory ==="
