@@ -3,28 +3,14 @@
 
 CSS parsing module providing style computation and property parsing.
 
-**DEPRECATED**: This Julia implementation is deprecated in favor of RustParser.
-Please use RustParser for production code, which provides:
+**INTERNAL USE ONLY**: This Julia implementation is used internally by legacy modules.
+For new code, use RustParser which provides:
 - CSS parsing using cssparser crate
 - Better performance and standards compliance
 
-This module is maintained for compatibility only and will be removed in a future version.
-
-## Migration
-
-```julia
-# Old (deprecated):
-using DOPBrowser.CSSParserModule
-styles = parse_inline_style("width: 100px; background-color: red;")
-
-# New (recommended):
-using DOPBrowser.RustParser
-styles = RustParser.parse_inline_style("width: 100px; background-color: red;")
-```
+This module is maintained for internal compatibility only.
 """
 module CSSParserModule
-
-@warn "CSSParserModule is deprecated. Please use RustParser instead. This module will be removed in a future version." maxlog=1
 
 include("CSSCore.jl")
 

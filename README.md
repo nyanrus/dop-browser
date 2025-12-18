@@ -172,10 +172,13 @@ DOPBrowser is organized into well-defined modules for better maintainability:
 | **State** | Reactive state management | Active |
 | **Widgets** | High-level UI components | Active |
 | **Application** | Application lifecycle management | Active |
-| **ContentMM** | Content IR and runtime (legacy, use ContentIR for new code) | Deprecated |
-| **Compiler** | HTML+CSS to Content-- compilation (legacy) | Deprecated |
-| **HTMLParser** | HTML tokenization and string interning | **Deprecated** |
-| **CSSParserModule** | CSS parsing and style computation | **Deprecated** |
+| **HTMLParser** | HTML tokenization (internal use only) | Internal |
+| **CSSParserModule** | CSS parsing (internal use only) | Internal |
+| **DOMCSSOM** | Legacy DOM/CSSOM virtual tables (internal use only) | Internal |
+| **Core** | Legacy browser context (internal use only) | Internal |
+| **ContentMM** | Content IR and runtime (use ContentIR for new code) | Legacy |
+
+**Note**: Modules marked as "Internal" are used by the legacy rendering pipeline but should not be used directly in new code. Use RustParser, ContentIR, and the new Pipeline API instead.
 
 See [docs/MODULAR_ARCHITECTURE.md](docs/MODULAR_ARCHITECTURE.md) for detailed information about the module structure.
 
@@ -207,9 +210,10 @@ Window and Eventloop in Rust → Apply in Content IR → Compute layout in Julia
 
 **DOPBrowser now requires Rust libraries to be built and available.**
 
-The Rust-based implementations are mandatory for production use:
+The Rust-based implementations are the recommended approach for production use:
 - **RustParser**: Uses html5ever and cssparser crates for standards-compliant parsing
 - **RustRenderer**: Uses winit/wgpu for GPU-accelerated rendering
+- **RustContent**: Content IR builder for efficient UI construction
 
 To build the Rust libraries:
 ```bash
@@ -217,7 +221,7 @@ cd rust/dop-parser && cargo build --release
 cd ../dop-renderer && cargo build --release
 ```
 
-The Julia implementations (HTMLParser, CSSParserModule, Renderer) are **deprecated** and maintained only for backward compatibility. They will be removed in a future version.
+The Julia implementations (HTMLParser, CSSParserModule) are maintained for internal compatibility only and should not be used directly in new code.
 
 ## Acid2 Test Support
 
