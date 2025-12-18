@@ -204,15 +204,20 @@ function parse_doc(html::AbstractString)::Document
     # Simple state machine for parsing
     stack = UInt32[0]  # Parent stack
     
+    # Link child to parent's child list
     link_child!(parent_id::UInt32, child_id::UInt32,
                 first_children::Vector{UInt32}, next_siblings::Vector{UInt32}) = begin
-        parent_id == 0 && return
-        if first_children[parent_id] == 0
+        iszero(parent_id) && return
+        
+        # If parent has no children yet, set this as first child
+        if iszero(first_children[parent_id])
             first_children[parent_id] = child_id
             return
         end
+        
+        # Find last sibling
         sibling = first_children[parent_id]
-        while next_siblings[sibling] != 0
+        while !iszero(next_siblings[sibling])
             sibling = next_siblings[sibling]
         end
         next_siblings[sibling] = child_id
@@ -238,21 +243,16 @@ function parse_doc(html::AbstractString)::Document
         return new_id
     end
 
+    # Apply inline styles more concisely
     function apply_inline_styles!(
         styles, idx::Integer,
         widths::Vector{Float32}, heights::Vector{Float32},
         bg_colors::Vector{NTuple{4, UInt8}}
     )
-        if !styles.width_auto
-            widths[idx] = styles.width
-        end
-        if !styles.height_auto
-            heights[idx] = styles.height
-        end
-        if styles.has_background
-            bg_colors[idx] = (styles.background_r, styles.background_g,
-                              styles.background_b, styles.background_a)
-        end
+        styles.width_auto || (widths[idx] = styles.width)
+        styles.height_auto || (heights[idx] = styles.height)
+        styles.has_background && (bg_colors[idx] = (styles.background_r, styles.background_g,
+                                                     styles.background_b, styles.background_a))
     end
 
     function parse_attributes!(

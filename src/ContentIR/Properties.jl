@@ -203,6 +203,17 @@ struct Color
     end
 end
 
+# Named colors - module-level constant for reuse
+const NAMED_COLORS = Dict{String, Color}(
+    "black" => Color(0x00, 0x00, 0x00, 0xff),
+    "white" => Color(0xff, 0xff, 0xff, 0xff),
+    "red" => Color(0xff, 0x00, 0x00, 0xff),
+    "green" => Color(0x00, 0x80, 0x00, 0xff),
+    "blue" => Color(0x00, 0x00, 0xff, 0xff),
+    "yellow" => Color(0xff, 0xff, 0x00, 0xff),
+    "transparent" => Color(0x00, 0x00, 0x00, 0x00),
+)
+
 """
     parse_color(value::AbstractString) -> Color
 
@@ -211,38 +222,27 @@ Parse a color from hex (#RGB, #RRGGBB) or named colors.
 function parse_color(value::AbstractString)::Color
     val = strip(lowercase(value))
     
-    # Named colors
-    named = Dict{String, Color}(
-        "black" => Color(0x00, 0x00, 0x00, 0xff),
-        "white" => Color(0xff, 0xff, 0xff, 0xff),
-        "red" => Color(0xff, 0x00, 0x00, 0xff),
-        "green" => Color(0x00, 0x80, 0x00, 0xff),
-        "blue" => Color(0x00, 0x00, 0xff, 0xff),
-        "yellow" => Color(0xff, 0xff, 0x00, 0xff),
-        "transparent" => Color(0x00, 0x00, 0x00, 0x00),
+    haskey(NAMED_COLORS, val) && return NAMED_COLORS[val]
+    
+    # Hex colors - more concise parsing
+    startswith(val, "#") || return Color()  # Default black
+    
+    hex = val[2:end]
+    length(hex) == 3 && return Color(
+        parse(UInt8, hex[1:1] * hex[1:1], base=16),
+        parse(UInt8, hex[2:2] * hex[2:2], base=16),
+        parse(UInt8, hex[3:3] * hex[3:3], base=16),
+        0xff
     )
     
-    if haskey(named, val)
-        return named[val]
-    end
+    length(hex) == 6 && return Color(
+        parse(UInt8, hex[1:2], base=16),
+        parse(UInt8, hex[3:4], base=16),
+        parse(UInt8, hex[5:6], base=16),
+        0xff
+    )
     
-    # Hex colors
-    if startswith(val, "#")
-        hex = val[2:end]
-        if length(hex) == 3
-            r = parse(UInt8, hex[1:1] * hex[1:1], base=16)
-            g = parse(UInt8, hex[2:2] * hex[2:2], base=16)
-            b = parse(UInt8, hex[3:3] * hex[3:3], base=16)
-            return Color(r, g, b, 0xff)
-        elseif length(hex) == 6
-            r = parse(UInt8, hex[1:2], base=16)
-            g = parse(UInt8, hex[3:4], base=16)
-            b = parse(UInt8, hex[5:6], base=16)
-            return Color(r, g, b, 0xff)
-        end
-    end
-    
-    return Color()  # Default black
+    Color()  # Default black
 end
 
 """
@@ -250,14 +250,12 @@ end
 
 Convert Color to RGBA floats (0-1 range).
 """
-function color_to_rgba(c::Color)::NTuple{4, Float32}
-    return (
-        Float32(c.r) / 255.0f0,
-        Float32(c.g) / 255.0f0,
-        Float32(c.b) / 255.0f0,
-        Float32(c.a) / 255.0f0
-    )
-end
+color_to_rgba(c::Color)::NTuple{4, Float32} = (
+    Float32(c.r) / 255.0f0,
+    Float32(c.g) / 255.0f0,
+    Float32(c.b) / 255.0f0,
+    Float32(c.a) / 255.0f0
+)
 
 """
     PropertyValue

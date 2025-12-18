@@ -255,32 +255,27 @@ end
 # Lifecycle Callbacks
 # ============================================================================
 
+# Simplified lifecycle callback setters with more concise syntax
 """
     on_init(app::App, callback::Function)
 
 Register initialization callback.
 """
-function on_init(app::App, callback::Function)
-    app.callbacks.on_init = callback
-end
+on_init(app::App, callback::Function) = (app.callbacks.on_init = callback)
 
 """
     on_update(app::App, callback::Function)
 
 Register update callback (called every frame).
 """
-function on_update(app::App, callback::Function)
-    app.callbacks.on_update = callback
-end
+on_update(app::App, callback::Function) = (app.callbacks.on_update = callback)
 
 """
     on_cleanup(app::App, callback::Function)
 
 Register cleanup callback.
 """
-function on_cleanup(app::App, callback::Function)
-    app.callbacks.on_cleanup = callback
-end
+on_cleanup(app::App, callback::Function) = (app.callbacks.on_cleanup = callback)
 
 # ============================================================================
 # Application Lifecycle

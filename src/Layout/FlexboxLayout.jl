@@ -160,36 +160,33 @@ end
 
 Resolve flexible lengths for flex items using the flex-grow and flex-shrink properties.
 Implements the CSS Flexbox flexible length resolution algorithm.
+
+Note: This is a simplified implementation. Full implementation requires mutable FlexItem
+or returning updated items.
 """
-function resolve_flexible_lengths!(items::Vector{FlexItem}, available_space::Float32)
-    total_flex_basis = sum(item.flex_basis + item.margin_main_start + item.margin_main_end for item in items)
-    free_space = available_space - total_flex_basis
+function resolve_flexible_lengths!(items::Vector{FlexItem}, Δspace::Float32)
+    # Calculate total basis with margins
+    Σbasis = sum(item.flex_basis + item.margin_main_start + item.margin_main_end for item in items)
+    Δfree = Δspace - Σbasis  # free space delta
     
-    if free_space > 0
+    if Δfree > 0
         # Distribute free space using flex-grow
-        total_grow = sum(item.flex_grow for item in items)
+        Σgrow = sum(item.flex_grow for item in items)
         
-        if total_grow > 0
-            for item in items
-                if item.flex_grow > 0
-                    flex_share = free_space * (item.flex_grow / total_grow)
-                    # Update computed_size (in-place modification would require mutable struct)
-                    # This is a simplified implementation
-                end
-            end
-        end
-    elseif free_space < 0
+        # TODO: Update computed_size (requires mutable struct or new vector)
+        # for item in items where item.flex_grow > 0
+        #     flex_share = Δfree * (item.flex_grow / Σgrow)
+        #     item.computed_size += flex_share
+        # end
+    elseif Δfree < 0
         # Shrink items using flex-shrink
-        total_shrink = sum(item.flex_shrink * item.flex_basis for item in items)
+        Σshrink = sum(item.flex_shrink * item.flex_basis for item in items)
         
-        if total_shrink > 0
-            for item in items
-                if item.flex_shrink > 0
-                    shrink_share = -free_space * (item.flex_shrink * item.flex_basis / total_shrink)
-                    # Update computed_size
-                end
-            end
-        end
+        # TODO: Update computed_size (requires mutable struct or new vector)
+        # for item in items where item.flex_shrink > 0
+        #     shrink_share = -Δfree * (item.flex_shrink * item.flex_basis / Σshrink)
+        #     item.computed_size -= shrink_share
+        # end
     end
 end
 

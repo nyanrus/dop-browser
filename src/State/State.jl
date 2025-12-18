@@ -148,14 +148,11 @@ end
 Set the value of a signal and notify observers.
 """
 function Base.setindex!(s::Signal{T}, value::T) where T
-    # Skip if value hasn't changed
-    if s.comparator(s.value, value)
-        return value
-    end
-    
+    # Skip if value hasn't changed, then update and notify
+    s.comparator(s.value, value) && return value
     s.value = value
     notify!(s)
-    return value
+    value
 end
 
 """
@@ -170,7 +167,7 @@ function notify!(s::Signal)
             push!(ctx.pending_notifications, observer)
         end
     else
-        # Notify immediately
+        # Notify immediately with error handling
         for observer in copy(s.observers)
             try
                 run!(observer)
