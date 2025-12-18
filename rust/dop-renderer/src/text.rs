@@ -2,7 +2,9 @@
 //!
 //! Provides font loading and text rasterization for the renderer.
 
+use fontdue::layout::{CoordinateSystem, Layout, LayoutSettings, TextStyle};
 use fontdue::{Font, FontSettings, Metrics};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -61,6 +63,8 @@ pub struct FontManager {
     fonts: HashMap<u32, Arc<Font>>,
     default_font: Option<Arc<Font>>,
     next_id: u32,
+    // Cache glyph metrics to avoid rasterizing when only metrics are needed
+    metrics_cache: RefCell<HashMap<u64, Metrics>>,
 }
 
 impl Default for FontManager {
@@ -75,6 +79,7 @@ impl FontManager {
             fonts: HashMap::new(),
             default_font: None,
             next_id: 1,
+            metrics_cache: RefCell::new(HashMap::new()),
         };
 
         // Load default embedded font
@@ -143,6 +148,34 @@ impl FontManager {
         }
     }
 
+    /// Internal: compute a cache key for a glyph metrics lookup
+    fn metrics_cache_key(ch: char, font_size: f32, font_id: u32) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        ch.hash(&mut hasher);
+        // Quantize font size to avoid floating point hash instability
+        let size_key: u32 = (font_size * 100.0).round() as u32;
+        size_key.hash(&mut hasher);
+        font_id.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Get glyph metrics using a cache to avoid expensive rasterize() calls
+    fn get_glyph_metrics(&self, font: &Font, ch: char, font_size: f32, font_id: u32) -> Metrics {
+        let key = Self::metrics_cache_key(ch, font_size, font_id);
+
+        if let Some(m) = self.metrics_cache.borrow().get(&key) {
+            return *m;
+        }
+
+        // fontdue provides `metrics` that does not produce a bitmap
+        let m = font.metrics(ch, font_size);
+        self.metrics_cache.borrow_mut().insert(key, m);
+        m
+    }
+
     /// Measure text width and height
     pub fn measure_text(&self, text: &str, font_size: f32, font_id: u32) -> (f32, f32) {
         let font = match self.get_font(font_id) {
@@ -150,16 +183,24 @@ impl FontManager {
             None => return (text.len() as f32 * font_size * 0.6, font_size),
         };
 
-        let mut total_width = 0.0f32;
-        let mut max_height = 0.0f32;
+        // Support newlines: measure each line and return max width and total height
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut max_width = 0.0f32;
+        let mut total_height = 0.0f32;
 
-        for c in text.chars() {
-            let (metrics, _) = font.rasterize(c, font_size);
-            total_width += metrics.advance_width;
-            max_height = max_height.max(metrics.height as f32);
+        let line_height = font_size * 1.2;
+
+        for line in lines {
+            let mut line_width = 0.0f32;
+            for c in line.chars() {
+                let metrics = self.get_glyph_metrics(font, c, font_size, font_id);
+                line_width += metrics.advance_width;
+            }
+            max_width = max_width.max(line_width);
+            total_height += line_height;
         }
 
-        (total_width, max_height.max(font_size))
+        (max_width, total_height.max(font_size))
     }
 
     /// Shape and rasterize text
@@ -176,29 +217,64 @@ impl FontManager {
             }
         };
 
+        // Use fontdue's layout module to layout the whole string, which
+        // allows ligatures and proper glyph positioning instead of
+        // rasterizing per-character.
         let mut glyphs = Vec::new();
-        let mut x = 0.0f32;
-        let mut max_height = 0.0f32;
+        let mut max_line_width = 0.0f32;
+        let mut total_height = 0.0f32;
 
-        for c in text.chars() {
-            let (metrics, bitmap) = font.rasterize(c, font_size);
+        let lines: Vec<&str> = text.split('\n').collect();
+        let line_height = font_size * 1.2;
 
-            glyphs.push(ShapedGlyph {
-                x,
-                y: 0.0,
-                width: metrics.width as u32,
-                height: metrics.height as u32,
-                bitmap,
+        let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
+
+        for (li, line) in lines.iter().enumerate() {
+            // Reset layout for each line
+            layout.reset(&LayoutSettings {
+                max_width: None,
+                ..LayoutSettings::default()
             });
 
-            x += metrics.advance_width;
-            max_height = max_height.max(metrics.height as f32);
+            // Append the whole line at once. font_index 0 refers to our single font.
+            layout.append(&[font.as_ref()], &TextStyle::new(line, font_size, 0));
+
+            // Collect glyphs from the layout result
+            let mut line_max_x = 0.0f32;
+            for glyph in layout.glyphs() {
+                // glyph has position and a glyph key referencing the font/glyph index
+                let gx = glyph.x;
+                let gy = glyph.y;
+
+                // Rasterize by glyph index to preserve ligatures and combined glyph shapes.
+                // `glyph.glyph_index` / `glyph.key.glyph_index` depending on fontdue version.
+                // Try common field names; fall back to rasterizing by character if needed.
+                // glyph.key is a field containing the glyph index for the font
+                let (metrics, bitmap) = {
+                    let gindex = glyph.key.glyph_index;
+                    // rasterize by glyph index (fontdue uses rasterize_indexed)
+                    font.rasterize_indexed(gindex, font_size)
+                };
+
+                glyphs.push(ShapedGlyph {
+                    x: gx,
+                    y: (li as f32) * line_height + gy,
+                    width: metrics.width as u32,
+                    height: metrics.height as u32,
+                    bitmap,
+                });
+
+                line_max_x = line_max_x.max(gx + metrics.advance_width);
+            }
+
+            max_line_width = max_line_width.max(line_max_x);
+            total_height += line_height;
         }
 
         ShapedText {
-            width: x,
-            height: max_height.max(font_size),
-            line_count: 1,
+            width: max_line_width,
+            height: total_height.max(font_size),
+            line_count: lines.len() as u32,
             glyphs,
         }
     }
@@ -219,27 +295,76 @@ impl FontManager {
             }
         };
 
-        // First pass: measure total size and collect glyph data
-        let mut total_width = 0.0f32;
-        let mut max_ascent = 0.0f32;
-        let mut max_descent = 0.0f32;
-        let mut glyph_data: Vec<(Metrics, Vec<u8>, f32)> = Vec::new();
+        // Support multi-line text. For each line compute glyph metrics and per-line
+        // ascent/descent so lines can be stacked.
+        let lines: Vec<&str> = text.split('\n').collect();
 
-        for c in text.chars() {
-            let (metrics, bitmap) = font.rasterize(c, font_size);
-
-            let ascent = metrics.ymin as f32 + metrics.height as f32;
-            let descent = -metrics.ymin as f32;
-
-            max_ascent = max_ascent.max(ascent);
-            max_descent = max_descent.max(descent);
-
-            glyph_data.push((metrics, bitmap, total_width));
-            total_width += metrics.advance_width;
+        struct GlyphDatum {
+            metrics: Metrics,
+            bitmap: Vec<u8>,
+            x: f32,
         }
 
-        let width = total_width.ceil() as u32;
-        let height = (max_ascent + max_descent).ceil().max(font_size) as u32;
+        let mut lines_glyphs: Vec<Vec<GlyphDatum>> = Vec::new();
+        let mut line_ascent: Vec<f32> = Vec::new();
+        let mut line_descent: Vec<f32> = Vec::new();
+        let mut max_width = 0.0f32;
+        let mut total_height = 0.0f32;
+        let line_height = font_size * 1.2;
+
+        // Use fontdue's layout per-line so ligatures and proper positioning are preserved.
+        let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
+
+        for line in lines.iter() {
+            layout.reset(&LayoutSettings {
+                max_width: None,
+                ..LayoutSettings::default()
+            });
+
+            layout.append(&[font.as_ref()], &TextStyle::new(line, font_size, 0));
+
+            let mut glyphs_line: Vec<GlyphDatum> = Vec::new();
+            let mut max_ascent = 0.0f32;
+            let mut max_descent = 0.0f32;
+            let mut line_width = 0.0f32;
+
+            for glyph in layout.glyphs() {
+                // Position for this glyph
+                let glyph_x = glyph.x;
+                let _glyph_y = glyph.y;
+
+                // Rasterize by glyph index when available to support ligatures
+                let (metrics, bitmap) = {
+                    let gindex = glyph.key.glyph_index;
+                    font.rasterize_indexed(gindex, font_size)
+                };
+
+                let ascent = metrics.ymin as f32 + metrics.height as f32;
+                let descent = -metrics.ymin as f32;
+
+                max_ascent = max_ascent.max(ascent);
+                max_descent = max_descent.max(descent);
+
+                glyphs_line.push(GlyphDatum {
+                    metrics,
+                    bitmap,
+                    x: glyph_x,
+                });
+
+                line_width = line_width.max(glyph_x + metrics.advance_width);
+            }
+
+            lines_glyphs.push(glyphs_line);
+            line_ascent.push(max_ascent);
+            line_descent.push(max_descent);
+
+            max_width = max_width.max(line_width);
+            let used_height = (max_ascent + max_descent).max(line_height);
+            total_height += used_height;
+        }
+
+        let width = max_width.ceil() as u32;
+        let height = total_height.ceil().max(font_size) as u32;
 
         if width == 0 || height == 0 {
             return (Vec::new(), 0, 0);
@@ -248,46 +373,58 @@ impl FontManager {
         // Create RGBA buffer
         let mut buffer = vec![0u8; (width * height * 4) as usize];
 
-        // Second pass: render glyphs
-        let baseline = max_ascent;
+        // Second pass: render glyphs line by line
+        let mut y_cursor = 0.0f32;
+        for (li, glyphs_line) in lines_glyphs.into_iter().enumerate() {
+            let ascent = line_ascent[li];
+            let descent = line_descent[li];
+            let used_height = (ascent + descent).max(line_height);
+            let baseline = y_cursor + ascent;
 
-        for (metrics, bitmap, glyph_x) in glyph_data {
-            if bitmap.is_empty() {
-                continue;
-            }
+            for g in glyphs_line {
+                let metrics = g.metrics;
+                let bitmap = g.bitmap;
 
-            let glyph_y = baseline - metrics.ymin as f32 - metrics.height as f32;
+                if bitmap.is_empty() {
+                    continue;
+                }
 
-            for gy in 0..metrics.height {
-                for gx in 0..metrics.width {
-                    let src_idx = gy * metrics.width + gx;
-                    let alpha = bitmap[src_idx];
+                let glyph_x = g.x;
+                let glyph_y = baseline - metrics.ymin as f32 - metrics.height as f32;
 
-                    if alpha == 0 {
-                        continue;
-                    }
+                for gy in 0..metrics.height {
+                    for gx in 0..metrics.width {
+                        let src_idx = gy * metrics.width + gx;
+                        let alpha = bitmap[src_idx];
 
-                    let px = (glyph_x + gx as f32) as i32;
-                    let py = (glyph_y + gy as f32) as i32;
+                        if alpha == 0 {
+                            continue;
+                        }
 
-                    if px >= 0 && py >= 0 && (px as u32) < width && (py as u32) < height {
-                        let dst_idx = ((py as u32 * width + px as u32) * 4) as usize;
+                        let px = (glyph_x + gx as f32) as i32;
+                        let py = (glyph_y + gy as f32) as i32;
 
-                        // Alpha blend
-                        let a = (alpha as f32 / 255.0) * (color.3 as f32 / 255.0);
-                        buffer[dst_idx] =
-                            ((color.0 as f32 * a) + (buffer[dst_idx] as f32 * (1.0 - a))) as u8;
-                        buffer[dst_idx + 1] = ((color.1 as f32 * a)
-                            + (buffer[dst_idx + 1] as f32 * (1.0 - a)))
-                            as u8;
-                        buffer[dst_idx + 2] = ((color.2 as f32 * a)
-                            + (buffer[dst_idx + 2] as f32 * (1.0 - a)))
-                            as u8;
-                        buffer[dst_idx + 3] =
-                            ((a * 255.0) + (buffer[dst_idx + 3] as f32 * (1.0 - a))) as u8;
+                        if px >= 0 && py >= 0 && (px as u32) < width && (py as u32) < height {
+                            let dst_idx = ((py as u32 * width + px as u32) * 4) as usize;
+
+                            // Alpha blend
+                            let a = (alpha as f32 / 255.0) * (color.3 as f32 / 255.0);
+                            buffer[dst_idx] =
+                                ((color.0 as f32 * a) + (buffer[dst_idx] as f32 * (1.0 - a))) as u8;
+                            buffer[dst_idx + 1] = ((color.1 as f32 * a)
+                                + (buffer[dst_idx + 1] as f32 * (1.0 - a)))
+                                as u8;
+                            buffer[dst_idx + 2] = ((color.2 as f32 * a)
+                                + (buffer[dst_idx + 2] as f32 * (1.0 - a)))
+                                as u8;
+                            buffer[dst_idx + 3] =
+                                ((a * 255.0) + (buffer[dst_idx + 3] as f32 * (1.0 - a))) as u8;
+                        }
                     }
                 }
             }
+
+            y_cursor += used_height;
         }
 
         (buffer, width, height)

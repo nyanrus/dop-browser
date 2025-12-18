@@ -91,6 +91,9 @@ pub struct WgpuRenderer {
     config: wgpu::SurfaceConfiguration,
     size: (u32, u32),
     render_pipeline: wgpu::RenderPipeline,
+    texture_pipeline: wgpu::RenderPipeline,
+    texture_bind_group_layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
@@ -105,7 +108,8 @@ pub struct WgpuRenderer {
 
 impl WgpuRenderer {
     /// Create a new renderer for the given window
-    pub async fn new(window: Arc<Window>) -> Self {
+    /// Returns Err(String) when initialization fails (no adapter, device, or surface caps)
+    pub async fn new(window: Arc<Window>) -> Result<Self, String> {
         let size = window.inner_size();
         let width = size.width.max(1);
         let height = size.height.max(1);
@@ -117,7 +121,9 @@ impl WgpuRenderer {
         });
 
         // Create surface
-        let surface = instance.create_surface(window).unwrap();
+        let surface = instance
+            .create_surface(window)
+            .map_err(|e| format!("Failed to create surface: {:?}", e))?;
 
         // Request adapter
         let adapter = instance
@@ -127,7 +133,7 @@ impl WgpuRenderer {
                 force_fallback_adapter: false,
             })
             .await
-            .expect("Failed to find a suitable GPU adapter");
+            .ok_or_else(|| "Failed to find a suitable GPU adapter".to_string())?;
 
         // Request device and queue
         let (device, queue) = adapter
@@ -141,10 +147,13 @@ impl WgpuRenderer {
                 None,
             )
             .await
-            .expect("Failed to create device");
+            .map_err(|e| format!("Failed to create device: {:?}", e))?;
 
         // Configure surface
         let surface_caps = surface.get_capabilities(&adapter);
+        if surface_caps.formats.is_empty() {
+            return Err("Surface has no supported formats".to_string());
+        }
         let surface_format = surface_caps
             .formats
             .iter()
@@ -211,7 +220,41 @@ impl WgpuRenderer {
                 push_constant_ranges: &[],
             });
 
-        // Create render pipeline
+        // Create texture bind group layout and sampler for presenting CPU bitmaps
+        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("texture_bind_group_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("present_sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        // Create render pipeline (vertex color)
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
@@ -223,7 +266,7 @@ impl WgpuRenderer {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Some("fs_main"),
+                entry_point: Some("fs_color"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -268,13 +311,63 @@ impl WgpuRenderer {
             mapped_at_creation: false,
         });
 
-        Self {
+        // Create a pipeline that samples a single texture and draws a fullscreen quad
+        let texture_pipeline = {
+            let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Texture Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout, &texture_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Texture Pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[Vertex::desc()],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_texture"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: config.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            })
+        };
+
+        Ok(Self {
             surface,
             device,
             queue,
             config,
             size: (width, height),
             render_pipeline,
+            texture_pipeline,
+            texture_bind_group_layout,
+            sampler,
             vertex_buffer,
             index_buffer,
             uniform_buffer,
@@ -285,7 +378,198 @@ impl WgpuRenderer {
             clear_color: wgpu::Color::WHITE,
             max_vertices,
             max_indices,
+        })
+    }
+
+    /// Present an RGBA8888 CPU buffer to the surface by uploading it as a texture
+    pub fn present_rgba(&mut self, data: &[u8], src_w: u32, src_h: u32) -> Result<(), wgpu::SurfaceError> {
+        // Basic sanity checks and debug logging to help track intermittent crashes
+        log::debug!(
+            "present_rgba: requested present {}x{} (renderer size {}x{}), data_len={}",
+            src_w,
+            src_h,
+            self.size.0,
+            self.size.1,
+            data.len()
+        );
+
+        // Validate input buffer length
+        let expected = (src_w as usize).saturating_mul(src_h as usize).saturating_mul(4);
+        if data.len() < expected || src_w == 0 || src_h == 0 {
+            log::warn!(
+                "present_rgba: invalid buffer size: data_len={} expected={} src_w={} src_h={}",
+                data.len(),
+                expected,
+                src_w,
+                src_h
+            );
+            // Avoid crashing the GPU path on invalid inputs
+            return Ok(());
         }
+
+        // Create texture from data
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Present Texture"),
+            size: wgpu::Extent3d {
+                width: src_w,
+                height: src_h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        // Write data into the texture. Some backends (Vulkan) require the bytes
+        // per row (pitch) used for buffer->texture copies to be aligned to
+        // wgpu::COPY_BYTES_PER_ROW_ALIGNMENT (256). To be robust we pad each
+        // row to that alignment when needed.
+        let bytes_per_row_unpadded = 4u32.checked_mul(src_w).unwrap_or(0);
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u32;
+        let padded_bytes_per_row = if bytes_per_row_unpadded % align == 0 {
+            bytes_per_row_unpadded
+        } else {
+            ((bytes_per_row_unpadded + align - 1) / align) * align
+        };
+        // Log chosen upload path
+        log::debug!(
+            "present_rgba: bytes_per_row_unpadded={} padded_bytes_per_row={}",
+            bytes_per_row_unpadded,
+            padded_bytes_per_row
+        );
+
+        if padded_bytes_per_row == bytes_per_row_unpadded {
+            // Fast path: no padding required
+            log::debug!("present_rgba: using fast path upload");
+            self.queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                data,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row_unpadded),
+                    rows_per_image: Some(src_h),
+                },
+                wgpu::Extent3d {
+                    width: src_w,
+                    height: src_h,
+                    depth_or_array_layers: 1,
+                },
+            );
+        } else {
+            // Create a padded staging buffer and copy rows into it
+            log::debug!("present_rgba: creating padded staging buffer (rows={} padded_row_bytes={})", src_h, padded_bytes_per_row);
+            let mut padded: Vec<u8> = vec![0u8; (padded_bytes_per_row * src_h) as usize];
+            for row in 0..src_h as usize {
+                let src_offset = row * (bytes_per_row_unpadded as usize);
+                let dst_offset = row * (padded_bytes_per_row as usize);
+                padded[dst_offset..dst_offset + (bytes_per_row_unpadded as usize)]
+                    .copy_from_slice(&data[src_offset..src_offset + (bytes_per_row_unpadded as usize)]);
+            }
+
+            self.queue.write_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &padded,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(src_h),
+                },
+                wgpu::Extent3d {
+                    width: src_w,
+                    height: src_h,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Create bind group for this texture
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+            label: Some("present_bind_group"),
+        });
+
+        // Build a fullscreen quad
+        let w = self.size.0 as f32;
+        let h = self.size.1 as f32;
+        let vertices = vec![
+            Vertex { position: [0.0, 0.0], tex_coords: [0.0, 0.0], color: [1.0, 1.0, 1.0, 1.0] },
+            Vertex { position: [w, 0.0], tex_coords: [1.0, 0.0], color: [1.0, 1.0, 1.0, 1.0] },
+            Vertex { position: [w, h], tex_coords: [1.0, 1.0], color: [1.0, 1.0, 1.0, 1.0] },
+            Vertex { position: [0.0, h], tex_coords: [0.0, 1.0], color: [1.0, 1.0, 1.0, 1.0] },
+        ];
+        let indices: Vec<u32> = vec![0, 1, 2, 0, 2, 3];
+
+        // Upload vertex/index data
+        self.queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
+        self.queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(&indices));
+
+        // Acquire surface texture
+        log::debug!("present_rgba: acquiring current surface texture");
+        let output = match self.surface.get_current_texture() {
+            Ok(o) => o,
+            Err(e) => {
+                log::warn!("present_rgba: get_current_texture failed: {:?}", e);
+                return Err(e);
+            }
+        };
+        let view_out = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("Present Encoder") });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Present Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view_out,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.clear_color),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+
+            render_pass.set_pipeline(&self.texture_pipeline);
+            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+            render_pass.set_bind_group(1, &bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..6, 0, 0..1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+        log::debug!("present_rgba: submitted commands, calling present()");
+        output.present();
+        log::debug!("present_rgba: present() completed");
+
+        Ok(())
     }
 
     /// Resize the renderer

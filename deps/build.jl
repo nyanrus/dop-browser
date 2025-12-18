@@ -54,12 +54,14 @@ function build_rust_crate(name::String; release::Bool=true)
     
     @info "Building Rust crate: $name" release=release
     
-    # Run cargo build with error handling
+    # Run cargo build with error handling. `run` will throw on non-zero exit,
+    # so catch exceptions to provide a clearer error message.
     cd(rust_dir) do
         cmd = release ? `cargo build --release` : `cargo build`
-        result = run(cmd; wait=true)
-        if !success(result)
-            error("Failed to build Rust crate: $name. Run 'cargo build' in $rust_dir for details.")
+        try
+            run(cmd)
+        catch e
+            error("Failed to build Rust crate: $name. Run 'cargo build' in $rust_dir for details. Error: $(e)")
         end
     end
     

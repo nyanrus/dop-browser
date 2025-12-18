@@ -8,6 +8,8 @@ use std::ffi::{c_char, c_float, c_int, CStr};
 use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
+use winit::event_loop::EventLoopProxy;
 
 use crate::renderer::RenderCommand;
 #[cfg(feature = "software")]
@@ -93,10 +95,7 @@ pub extern "C" fn dop_window_config_set_decorated(config: *mut WindowConfig, dec
 
 /// Create a window handle (for headless mode without actual window)
 #[no_mangle]
-pub extern "C" fn dop_window_create_headless(
-    width: c_int,
-    height: c_int,
-) -> *mut WindowHandle {
+pub extern "C" fn dop_window_create_headless(width: c_int, height: c_int) -> *mut WindowHandle {
     let config = WindowConfig {
         width: width as u32,
         height: height as u32,
@@ -121,7 +120,13 @@ pub extern "C" fn dop_window_is_open(handle: *const WindowHandle) -> c_int {
     if handle.is_null() {
         return 0;
     }
-    unsafe { if (*handle).is_open() { 1 } else { 0 } }
+    unsafe {
+        if (*handle).is_open() {
+            1
+        } else {
+            0
+        }
+    }
 }
 
 /// Close the window
@@ -211,6 +216,8 @@ pub struct ThreadedWindowHandle {
     events: Arc<Mutex<Vec<DopEvent>>>,
     is_open: Arc<Mutex<bool>>,
     size: Arc<Mutex<(u32, u32)>>,
+    external_framebuffer: Arc<Mutex<Option<(Vec<u8>, u32, u32)>>>,
+    event_proxy: Arc<Mutex<Option<EventLoopProxy<()>>>>,
     thread_handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -229,16 +236,108 @@ impl ThreadedWindowHandle {
     }
 }
 
+/// Request the threaded window to close (sets closed flag and wakes event loop)
+#[no_mangle]
+pub extern "C" fn dop_window_request_close_threaded(handle: *mut ThreadedWindowHandle) {
+    if handle.is_null() {
+        return;
+    }
+
+    unsafe {
+        // Set closed flag
+        if let Ok(mut is_open) = (*handle).is_open.lock() {
+            *is_open = false;
+        }
+
+        // Try to wake the event loop so it can exit promptly
+        if let Ok(proxy_lock) = (*handle).event_proxy.lock() {
+            if let Some(proxy) = &*proxy_lock {
+                let _ = proxy.send_event(());
+            }
+        }
+    }
+}
+
+/// Join the threaded window thread, waiting up to `timeout_ms` milliseconds.
+/// Returns 1 on success (thread joined or already gone), 0 on timeout/failure.
+#[no_mangle]
+pub extern "C" fn dop_window_join_threaded_timeout(
+    handle: *mut ThreadedWindowHandle,
+    timeout_ms: c_int,
+) -> c_int {
+    if handle.is_null() {
+        return 0;
+    }
+
+    // Convert timeout to Duration; negative timeout means wait indefinitely
+    let timeout = if timeout_ms < 0 {
+        None
+    } else {
+        Some(Duration::from_millis(timeout_ms as u64))
+    };
+
+    unsafe {
+        let start = Instant::now();
+
+        // Wait for the thread to observe the closed flag (polling). This
+        // avoids joining while the thread is still in platform code. If the
+        // caller provided a timeout, honor it.
+        loop {
+            if let Ok(is_open_lock) = (*handle).is_open.lock() {
+                if !*is_open_lock {
+                    break;
+                }
+            } else {
+                // Couldn't lock; break and try to join as best-effort
+                break;
+            }
+
+            if let Some(t) = timeout {
+                if start.elapsed() >= t {
+                    return 0;
+                }
+            }
+
+            // Sleep a bit before re-checking
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        // Take the join handle and join it. If it's already None, return success.
+        if let Some(jh) = (*handle).thread_handle.take() {
+            let _ = jh.join();
+            1
+        } else {
+            // Nothing to join; treat as success
+            1
+        }
+    }
+}
+
 impl Drop for ThreadedWindowHandle {
     fn drop(&mut self) {
-        // Mark as closed
+        // Mark as closed so the event loop thread can update its state.
+        //
+        // NOTE: previously we attempted to join the event-loop thread here.
+        // Joining a thread during Drop — particularly across an FFI boundary
+        // where the caller (Julia) may hold runtime locks — can lead to
+        // deadlocks or crashes. Instead of blocking here, signal the event
+        // loop (best-effort) and *detach* the thread by dropping the
+        // JoinHandle. The event-loop thread still holds its own clone(s) of
+        // the shared Arcs and will exit on its own when appropriate.
         *self.is_open.lock().unwrap() = false;
-        
-        // Wait for thread to finish (with timeout)
-        if let Some(handle) = self.thread_handle.take() {
-            // We can't force kill the thread, but we can at least try to join it
-            let _ = handle.join();
+
+        // Try to wake the event loop so it can notice the closed flag and exit.
+        if let Ok(proxy_lock) = self.event_proxy.lock() {
+            if let Some(proxy) = &*proxy_lock {
+                let _ = proxy.send_event(());
+            }
         }
+
+        // Drop the JoinHandle without joining to avoid potential deadlocks
+        // across language runtimes. The spawned thread will continue running
+        // and will eventually terminate; its resources will be cleaned up by
+        // the OS when it exits.
+        let _ = self.thread_handle.take();
     }
 }
 
@@ -271,17 +370,25 @@ pub extern "C" fn dop_window_create_onscreen(
     let events = Arc::new(Mutex::new(Vec::new()));
     let is_open = Arc::new(Mutex::new(true));
     let size = Arc::new(Mutex::new((width as u32, height as u32)));
+    let external_framebuffer = Arc::new(Mutex::new(None));
+    let event_proxy = Arc::new(Mutex::new(None));
 
     let events_clone = events.clone();
     let is_open_clone = is_open.clone();
     let size_clone = size.clone();
+    let external_framebuffer_clone = external_framebuffer.clone();
+    let event_proxy_clone = event_proxy.clone();
 
     // Spawn a thread to run the event loop
+    // We'll send the EventLoop proxy back to the creator thread via a channel
+    let (proxy_tx, proxy_rx) = std::sync::mpsc::channel();
+
     let thread_handle = thread::spawn(move || {
-        use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
         use crate::window::DopApp;
+        use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
 
         // Create event loop - use builder to enable any_thread on Unix platforms
+        // We'll use unit `()` as the user event type so we can receive proxy wakeups.
         let event_loop_result = {
             #[cfg(any(
                 target_os = "linux",
@@ -292,12 +399,13 @@ pub extern "C" fn dop_window_create_onscreen(
             ))]
             {
                 use winit::platform::x11::EventLoopBuilderExtX11;
-                
+
                 let mut builder = EventLoopBuilder::new();
                 // Enable any_thread to allow event loop creation on non-main thread
+                // Build with user event type = () so we can create a proxy
                 builder.with_any_thread(true).build()
             }
-            
+
             #[cfg(not(any(
                 target_os = "linux",
                 target_os = "dragonfly",
@@ -309,7 +417,7 @@ pub extern "C" fn dop_window_create_onscreen(
                 EventLoop::new()
             }
         };
-        
+
         let event_loop = match event_loop_result {
             Ok(el) => el,
             Err(e) => {
@@ -319,10 +427,22 @@ pub extern "C" fn dop_window_create_onscreen(
             }
         };
 
+        // Send the proxy back to the creator thread so it can request redraws
+        let proxy = event_loop.create_proxy();
+        let _ = proxy_tx.send(proxy);
+
         event_loop.set_control_flow(ControlFlow::Poll);
 
-        // Create app with shared event queue
-        let mut app = DopApp::new_with_shared_events(config, events_clone.clone());
+        // Create app with shared event queue and external framebuffer
+        let mut app = crate::window::DopApp::new_with_shared_events(
+            config,
+            events_clone.clone(),
+            Some(external_framebuffer_clone.clone()),
+        );
+
+        // (The event loop host will keep its own copy of the proxy; the creator
+        // thread will receive the proxy from the channel and store it into the
+        // shared `event_proxy` Arc so it can wake the event loop.)
 
         // Run the event loop
         let result = event_loop.run_app(&mut app);
@@ -342,12 +462,79 @@ pub extern "C" fn dop_window_create_onscreen(
         *is_open_clone.lock().unwrap() = false;
     });
 
+    // Receive the EventLoopProxy from the spawned thread (with timeout)
+    use std::time::Duration;
+    if let Ok(proxy) = proxy_rx.recv_timeout(Duration::from_millis(5000)) {
+        if let Ok(mut p) = event_proxy.lock() {
+            *p = Some(proxy);
+        }
+    } else {
+        log::warn!("Failed to receive EventLoopProxy from window thread within timeout");
+    }
+
     Box::into_raw(Box::new(ThreadedWindowHandle {
         events,
         is_open,
         size,
+        external_framebuffer,
+        event_proxy,
         thread_handle: Some(thread_handle),
     }))
+}
+
+/// Update the threaded window external framebuffer with an RGBA buffer (copied).
+#[no_mangle]
+pub extern "C" fn dop_window_update_framebuffer_threaded(
+    handle: *mut ThreadedWindowHandle,
+    data: *const u8,
+    size: c_int,
+    width: c_int,
+    height: c_int,
+) {
+    if handle.is_null() || data.is_null() || size <= 0 || width <= 0 || height <= 0 {
+        return;
+    }
+    unsafe {
+        log::debug!(
+            "ffi: dop_window_update_framebuffer_threaded called (data_len={} width={} height={})",
+            size,
+            width,
+            height
+        );
+
+        // If the window has been closed, skip updating the framebuffer
+        if let Ok(is_open) = (*handle).is_open.lock() {
+            if !*is_open {
+                log::debug!("ffi: window handle not open; skipping framebuffer update");
+                return;
+            }
+        }
+
+        let slice = std::slice::from_raw_parts(data, size as usize);
+        // Copy the provided data into the shared external_framebuffer
+        if let Ok(mut guard) = (*handle).external_framebuffer.lock() {
+            *guard = Some((slice.to_vec(), width as u32, height as u32));
+        } else {
+            log::warn!("ffi: failed to lock external_framebuffer mutex");
+            return;
+        }
+
+        // Notify event loop to present the new framebuffer (best-effort).
+        // Clone the proxy out of the mutex so we don't hold the lock while sending.
+        if let Ok(proxy_lock) = (*handle).event_proxy.lock() {
+            if let Some(proxy) = &*proxy_lock {
+                match proxy.send_event(()) {
+                    Ok(_) => log::debug!("ffi: sent user event to event loop proxy"),
+                    Err(e) => log::debug!("ffi: failed to send user event to proxy: {:?}", e),
+                }
+            } else {
+                log::debug!("ffi: event_proxy is None; cannot wake event loop");
+            }
+        } else {
+            log::warn!("ffi: failed to lock event_proxy mutex");
+        }
+        log::debug!("ffi: dop_window_update_framebuffer_threaded returning");
+    }
 }
 
 /// Free a threaded window handle
@@ -366,7 +553,13 @@ pub extern "C" fn dop_window_is_open_threaded(handle: *const ThreadedWindowHandl
     if handle.is_null() {
         return 0;
     }
-    unsafe { if (*handle).is_open() { 1 } else { 0 } }
+    unsafe {
+        if (*handle).is_open() {
+            1
+        } else {
+            0
+        }
+    }
 }
 
 /// Poll events from threaded window
@@ -537,7 +730,7 @@ pub extern "C" fn dop_renderer_set_clear_color(
         return;
     }
     let handle = unsafe { &mut *handle };
-    
+
     // Fill framebuffer with clear color
     let w = handle.width;
     let h = handle.height;
@@ -643,7 +836,7 @@ pub extern "C" fn dop_renderer_render(handle: *mut RendererHandle) {
         return;
     }
     let handle = unsafe { &mut *handle };
-    
+
     let w = handle.width;
     let h = handle.height;
 
@@ -652,7 +845,7 @@ pub extern "C" fn dop_renderer_render(handle: *mut RendererHandle) {
 
     // Clone commands to iterate over them
     let commands: Vec<RenderCommand> = handle.commands.clone();
-    
+
     // Software rasterize each rectangle command
     for cmd in &commands {
         // Calculate rectangle bounds
@@ -690,7 +883,7 @@ pub extern "C" fn dop_renderer_render(handle: *mut RendererHandle) {
             }
         }
     }
-    
+
     // Render text commands
     let text_commands: Vec<TextCommandFFI> = handle.text_commands.clone();
     for text_cmd in &text_commands {
@@ -700,39 +893,53 @@ pub extern "C" fn dop_renderer_render(handle: *mut RendererHandle) {
             (text_cmd.color_b * 255.0) as u8,
             (text_cmd.color_a * 255.0) as u8,
         );
-        
+
         let (text_buffer, text_w, text_h) = handle.font_manager.rasterize_text(
             &text_cmd.text,
             text_cmd.font_size,
             text_cmd.font_id,
             color,
         );
-        
+
         if text_buffer.is_empty() || text_w == 0 || text_h == 0 {
             continue;
         }
-        
+
         // Blit text to framebuffer
         let tx = text_cmd.x as i32;
         let ty = text_cmd.y as i32;
-        
+
         for ty_off in 0..text_h as i32 {
             for tx_off in 0..text_w as i32 {
                 let px = tx + tx_off;
                 let py = ty + ty_off;
-                
+
                 if px >= 0 && py >= 0 && (px as u32) < w && (py as u32) < h {
                     let src_idx = ((ty_off as u32 * text_w + tx_off as u32) * 4) as usize;
                     let dst_idx = ((py as u32 * w + px as u32) * 4) as usize;
-                    
+
                     if src_idx + 3 < text_buffer.len() && dst_idx + 3 < handle.framebuffer.len() {
                         let src_a = text_buffer[src_idx + 3] as f32 / 255.0;
                         if src_a > 0.0 {
                             let inv_a = 1.0 - src_a;
-                            handle.framebuffer[dst_idx] = ((text_buffer[src_idx] as f32 * src_a + handle.framebuffer[dst_idx] as f32 * inv_a) as u8).min(255);
-                            handle.framebuffer[dst_idx + 1] = ((text_buffer[src_idx + 1] as f32 * src_a + handle.framebuffer[dst_idx + 1] as f32 * inv_a) as u8).min(255);
-                            handle.framebuffer[dst_idx + 2] = ((text_buffer[src_idx + 2] as f32 * src_a + handle.framebuffer[dst_idx + 2] as f32 * inv_a) as u8).min(255);
-                            handle.framebuffer[dst_idx + 3] = ((src_a * 255.0 + handle.framebuffer[dst_idx + 3] as f32 * inv_a) as u8).min(255);
+                            handle.framebuffer[dst_idx] = ((text_buffer[src_idx] as f32 * src_a
+                                + handle.framebuffer[dst_idx] as f32 * inv_a)
+                                as u8)
+                                .min(255);
+                            handle.framebuffer[dst_idx + 1] = ((text_buffer[src_idx + 1] as f32
+                                * src_a
+                                + handle.framebuffer[dst_idx + 1] as f32 * inv_a)
+                                as u8)
+                                .min(255);
+                            handle.framebuffer[dst_idx + 2] = ((text_buffer[src_idx + 2] as f32
+                                * src_a
+                                + handle.framebuffer[dst_idx + 2] as f32 * inv_a)
+                                as u8)
+                                .min(255);
+                            handle.framebuffer[dst_idx + 3] = ((src_a * 255.0
+                                + handle.framebuffer[dst_idx + 3] as f32 * inv_a)
+                                as u8)
+                                .min(255);
                         }
                     }
                 }
@@ -927,14 +1134,14 @@ pub extern "C" fn dop_renderer_add_text(
     if handle.is_null() || text.is_null() {
         return;
     }
-    
+
     let text_str = unsafe {
         match CStr::from_ptr(text).to_str() {
             Ok(s) => s.to_string(),
             Err(_) => return,
         }
     };
-    
+
     unsafe {
         (*handle).renderer.add_text(TextCommand {
             text: text_str,
@@ -968,14 +1175,14 @@ pub extern "C" fn dop_renderer_add_text(
     if handle.is_null() || text.is_null() {
         return;
     }
-    
+
     let text_str = unsafe {
         match CStr::from_ptr(text).to_str() {
             Ok(s) => s.to_string(),
             Err(_) => return,
         }
     };
-    
+
     unsafe {
         (*handle).text_commands.push(TextCommandFFI {
             text: text_str,
@@ -1005,7 +1212,7 @@ pub extern "C" fn dop_renderer_measure_text(
     if handle.is_null() || text.is_null() || out_width.is_null() || out_height.is_null() {
         return;
     }
-    
+
     let text_str = unsafe {
         match CStr::from_ptr(text).to_str() {
             Ok(s) => s,
@@ -1016,9 +1223,13 @@ pub extern "C" fn dop_renderer_measure_text(
             }
         }
     };
-    
+
     unsafe {
-        let (w, h) = (*handle).renderer.font_manager().measure_text(text_str, font_size, font_id as u32);
+        let (w, h) =
+            (*handle)
+                .renderer
+                .font_manager()
+                .measure_text(text_str, font_size, font_id as u32);
         *out_width = w;
         *out_height = h;
     }
@@ -1038,7 +1249,7 @@ pub extern "C" fn dop_renderer_measure_text(
     if handle.is_null() || text.is_null() || out_width.is_null() || out_height.is_null() {
         return;
     }
-    
+
     let text_str = unsafe {
         match CStr::from_ptr(text).to_str() {
             Ok(s) => s,
@@ -1049,9 +1260,11 @@ pub extern "C" fn dop_renderer_measure_text(
             }
         }
     };
-    
+
     unsafe {
-        let (w, h) = (*handle).font_manager.measure_text(text_str, font_size, font_id as u32);
+        let (w, h) = (*handle)
+            .font_manager
+            .measure_text(text_str, font_size, font_id as u32);
         *out_width = w;
         *out_height = h;
     }
@@ -1067,14 +1280,14 @@ pub extern "C" fn dop_renderer_load_font(
     if handle.is_null() || path.is_null() {
         return -1;
     }
-    
+
     let path_str = unsafe {
         match CStr::from_ptr(path).to_str() {
             Ok(s) => s,
             Err(_) => return -1,
         }
     };
-    
+
     unsafe {
         match (*handle).renderer.font_manager_mut().load_font(path_str) {
             Some(id) => id as c_int,
@@ -1093,14 +1306,14 @@ pub extern "C" fn dop_renderer_load_font(
     if handle.is_null() || path.is_null() {
         return -1;
     }
-    
+
     let path_str = unsafe {
         match CStr::from_ptr(path).to_str() {
             Ok(s) => s,
             Err(_) => return -1,
         }
     };
-    
+
     unsafe {
         match (*handle).font_manager.load_font(path_str) {
             Some(id) => id as c_int,
@@ -1117,7 +1330,11 @@ pub extern "C" fn dop_renderer_has_default_font(handle: *const RendererHandle) -
         return 0;
     }
     unsafe {
-        if (*handle).renderer.font_manager().get_font(0).is_some() { 1 } else { 0 }
+        if (*handle).renderer.font_manager().get_font(0).is_some() {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -1129,7 +1346,11 @@ pub extern "C" fn dop_renderer_has_default_font(handle: *const RendererHandle) -
         return 0;
     }
     unsafe {
-        if (*handle).font_manager.get_font(0).is_some() { 1 } else { 0 }
+        if (*handle).font_manager.get_font(0).is_some() {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -1183,20 +1404,24 @@ pub extern "C" fn dop_text_shaper_shape(
             line_count: 0,
         };
     }
-    
+
     let text_str = unsafe {
         match CStr::from_ptr(text).to_str() {
             Ok(s) => s,
-            Err(_) => return ShapedTextFFI {
-                width: 0.0,
-                height: 0.0,
-                line_count: 0,
-            },
+            Err(_) => {
+                return ShapedTextFFI {
+                    width: 0.0,
+                    height: 0.0,
+                    line_count: 0,
+                }
+            }
         }
     };
-    
+
     unsafe {
-        let shaped = (*handle).shaper.shape_paragraph(text_str, max_width, font_size);
+        let shaped = (*handle)
+            .shaper
+            .shape_paragraph(text_str, max_width, font_size);
         ShapedTextFFI {
             width: shaped.width,
             height: shaped.height,
@@ -1214,14 +1439,14 @@ pub extern "C" fn dop_text_shaper_load_font(
     if handle.is_null() || path.is_null() {
         return -1;
     }
-    
+
     let path_str = unsafe {
         match CStr::from_ptr(path).to_str() {
             Ok(s) => s,
             Err(_) => return -1,
         }
     };
-    
+
     unsafe {
         match (*handle).shaper.font_manager_mut().load_font(path_str) {
             Some(id) => id as c_int,
@@ -1237,7 +1462,11 @@ pub extern "C" fn dop_text_shaper_has_font(handle: *const TextShaperHandle) -> c
         return 0;
     }
     unsafe {
-        if (*handle).shaper.font_manager().get_font(0).is_some() { 1 } else { 0 }
+        if (*handle).shaper.font_manager().get_font(0).is_some() {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -1255,14 +1484,14 @@ pub extern "C" fn dop_renderer_export_png(
     if handle.is_null() || path.is_null() {
         return 0;
     }
-    
+
     let path_str = unsafe {
         match CStr::from_ptr(path).to_str() {
             Ok(s) => s,
             Err(_) => return 0,
         }
     };
-    
+
     unsafe {
         match (*handle).renderer.export_png(path_str) {
             Ok(_) => 1,
@@ -1281,37 +1510,37 @@ pub extern "C" fn dop_renderer_export_png(
     if handle.is_null() || path.is_null() {
         return 0;
     }
-    
+
     let path_str = unsafe {
         match CStr::from_ptr(path).to_str() {
             Ok(s) => s,
             Err(_) => return 0,
         }
     };
-    
+
     unsafe {
         let h = &*handle;
-        
+
         // Use the png crate to write the file
         let file = match std::fs::File::create(path_str) {
             Ok(f) => f,
             Err(_) => return 0,
         };
-        
+
         let w = std::io::BufWriter::new(file);
         let mut encoder = png::Encoder::new(w, h.width, h.height);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
-        
+
         let mut writer = match encoder.write_header() {
             Ok(w) => w,
             Err(_) => return 0,
         };
-        
+
         if writer.write_image_data(&h.framebuffer).is_err() {
             return 0;
         }
-        
+
         1
     }
 }

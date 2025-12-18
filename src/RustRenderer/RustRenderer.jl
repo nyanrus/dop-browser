@@ -363,7 +363,35 @@ Destroy a threaded window and release resources.
 """
 function destroy_threaded!(handle::RustThreadedWindowHandle)
     if handle.is_valid && handle.ptr != C_NULL
-        ccall(get_func(:dop_window_free_threaded), Cvoid, (Ptr{Nothing},), handle.ptr)
+        # Request a clean shutdown of the threaded window: ask the thread to
+        # close and wait up to 5 seconds for it to exit, then free the handle.
+        try
+            ccall(get_func(:dop_window_request_close_threaded), Cvoid, (Ptr{Nothing},), handle.ptr)
+        catch e
+            @warn "Failed to request threaded window close" exception=e
+        end
+
+        # Wait up to 5000 ms for the thread to join. If it times out, log a
+        # warning but proceed to free the handle to avoid leaking the Julia
+        # side resource.
+        joined = 0
+        try
+            joined = ccall(get_func(:dop_window_join_threaded_timeout), Cint, (Ptr{Nothing}, Cint), handle.ptr, Int32(5000))
+        catch e
+            @warn "Failed to join threaded window" exception=e
+        end
+
+        if joined == 0
+            @warn "Timeout or failure waiting for threaded window to join; freeing handle anyway"
+        end
+
+        # Finally, free the underlying handle (non-blocking on Rust side).
+        try
+            ccall(get_func(:dop_window_free_threaded), Cvoid, (Ptr{Nothing},), handle.ptr)
+        catch e
+            @warn "Failed to free threaded window handle" exception=e
+        end
+
         handle.ptr = C_NULL
         handle.is_valid = false
     end
@@ -423,6 +451,22 @@ function get_size_threaded(handle::RustThreadedWindowHandle)::Tuple{Int, Int}
 end
 
 export get_size_threaded
+
+"""
+    update_framebuffer_threaded(handle::RustThreadedWindowHandle, buf::Vector{UInt8}, width::Integer, height::Integer)
+
+Copy an RGBA framebuffer into the threaded window for presentation. The data is copied.
+"""
+function update_framebuffer_threaded(handle::RustThreadedWindowHandle, buf::Vector{UInt8}, width::Integer, height::Integer)
+    if !handle.is_valid || handle.ptr == C_NULL || isempty(buf)
+        return
+    end
+    ccall(get_func(:dop_window_update_framebuffer_threaded),
+          Cvoid, (Ptr{Nothing}, Ptr{UInt8}, Cint, Cint, Cint),
+          handle.ptr, pointer(buf), Int32(length(buf)), Int32(width), Int32(height))
+end
+
+export update_framebuffer_threaded
 
 # ============================================================================
 # Renderer Handle

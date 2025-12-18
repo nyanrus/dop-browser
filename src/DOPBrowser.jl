@@ -135,6 +135,8 @@ include("Widgets/Widgets.jl")
 
 # Application lifecycle management
 include("Application/Application.jl")
+# Utilities for example applications
+include("Application/Utils.jl")
 
 # =============================================================================
 # Re-exports from ContentIR (NEW - Clean Architecture)

@@ -3,6 +3,7 @@
 //! Provides cross-platform window creation and event handling.
 
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -392,6 +393,18 @@ pub struct DopApp {
     handle: Option<WindowHandle>,
     renderer: Option<crate::renderer::WgpuRenderer>,
     event_queue: Option<Arc<Mutex<Vec<DopEvent>>>>,
+    external_framebuffer: Option<Arc<Mutex<Option<(Vec<u8>, u32, u32)>>>>,
+    // When resizing, some platforms emit a rapid stream of `Resized` events.
+    // To avoid reconfiguring the GPU surface on every single event (which
+    // causes stutters), we store a pending resize and apply it once during
+    // the next `RedrawRequested` handling. This effectively debounces the
+    // expensive `renderer.resize(...)` calls while still notifying the host
+    // (via `DopEvent::resize`) about the size changes so layout can occur.
+    pending_resize: Option<(u32, u32)>,
+    // Timestamp of the last applied resize to the GPU surface. Used to
+    // throttle repeated reconfigurations when the platform issues many
+    // resize events in quick succession (e.g. during interactive drags).
+    last_resize_time: Option<Instant>,
 }
 
 impl DopApp {
@@ -400,14 +413,24 @@ impl DopApp {
             handle: Some(WindowHandle::new(config)),
             renderer: None,
             event_queue: None,
+            external_framebuffer: None,
+            pending_resize: None,
+            last_resize_time: None,
         }
     }
 
-    pub fn new_with_shared_events(config: WindowConfig, event_queue: Arc<Mutex<Vec<DopEvent>>>) -> Self {
+    pub fn new_with_shared_events(
+        config: WindowConfig,
+        event_queue: Arc<Mutex<Vec<DopEvent>>>,
+        external_framebuffer: Option<Arc<Mutex<Option<(Vec<u8>, u32, u32)>>>>,
+    ) -> Self {
         Self {
             handle: Some(WindowHandle::new(config)),
             renderer: None,
             event_queue: Some(event_queue),
+            external_framebuffer,
+            pending_resize: None,
+            last_resize_time: None,
         }
     }
 
@@ -453,20 +476,34 @@ impl ApplicationHandler for DopApp {
                 let window = Arc::new(window);
                 let size = window.inner_size();
 
-                // Create renderer
+                // Create renderer (handle initialization failures safely)
                 let renderer =
-                    pollster::block_on(crate::renderer::WgpuRenderer::new(window.clone()));
-
+                    match pollster::block_on(crate::renderer::WgpuRenderer::new(window.clone())) {
+                        Ok(r) => Some(r),
+                        Err(e) => {
+                            log::error!("WgpuRenderer initialization failed: {}", e);
+                            None
+                        }
+                    };
                 if let Some(handle) = &mut self.handle {
                     handle.window = Some(window);
                 }
                 self.push_event(DopEvent::resize(size.width, size.height));
-                self.renderer = Some(renderer);
+                self.renderer = renderer;
             }
             Err(e) => {
                 log::error!("Failed to create window: {:?}", e);
                 event_loop.exit();
             }
+        }
+    }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        // Received a user event (sent via EventLoopProxy from another thread).
+        // Wake up the window to request a redraw so that any external framebuffer
+        // provided by the host can be presented.
+        if let Some(handle) = &self.handle {
+            handle.request_redraw();
         }
     }
 
@@ -492,30 +529,135 @@ impl ApplicationHandler for DopApp {
                 event_loop.exit();
             }
             WinitWindowEvent::Resized(size) => {
-                self.push_event(DopEvent::resize(size.width, size.height));
-                if let Some(renderer) = &mut self.renderer {
-                    renderer.resize(size.width, size.height);
-                }
+                // Coalesce frequent Resized events. We do NOT immediately notify
+                // the host here (to avoid forcing layout on every tiny change).
+                // Instead we store the pending size and notify/apply it once
+                // when a RedrawRequested arrives below.
+                self.pending_resize = Some((size.width, size.height));
+                log::debug!(
+                    "window: queued pending resize {}x{}",
+                    size.width,
+                    size.height
+                );
             }
             WinitWindowEvent::RedrawRequested => {
                 self.push_event(DopEvent::redraw());
-                if let Some(renderer) = &mut self.renderer {
-                    let (width, height) = if let Some(handle) = &self.handle {
-                        handle.get_size()
-                    } else {
-                        (0, 0)
+
+                // Query current logical size from the handle (no borrow of renderer yet)
+                let (width, height) = if let Some(handle) = &self.handle {
+                    handle.get_size()
+                } else {
+                    (0, 0)
+                };
+
+                // If there is a pending resize, decide whether to apply it now.
+                if let Some((w, h)) = self.pending_resize {
+                    let now = Instant::now();
+                    let should_apply = match self.last_resize_time {
+                        Some(t) => now.duration_since(t) >= Duration::from_millis(32),
+                        None => true,
                     };
-                    
-                    match renderer.render() {
-                        Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost) => {
-                            renderer.resize(width, height);
+
+                    let already_same = self
+                        .renderer
+                        .as_ref()
+                        .map(|r| r.size() == (w, h))
+                        .unwrap_or(false);
+
+                    if should_apply && !already_same {
+                        log::debug!("window: applying pending resize {}x{}", w, h);
+                        // Notify host about the resize so layout can run.
+                        self.push_event(DopEvent::resize(w, h));
+                        // Clear pending and perform the GPU resize if we have a renderer.
+                        self.pending_resize = None;
+                        if let Some(renderer) = &mut self.renderer {
+                            renderer.resize(w, h);
+                            self.last_resize_time = Some(now);
                         }
-                        Err(wgpu::SurfaceError::OutOfMemory) => {
-                            log::error!("Out of GPU memory");
-                            event_loop.exit();
+                    } else if already_same {
+                        log::debug!(
+                            "window: pending resize matches renderer {}; notifying host only",
+                            format!("{}x{}", w, h)
+                        );
+                        // Surface already configured; just notify host and clear.
+                        self.pending_resize = None;
+                        self.push_event(DopEvent::resize(w, h));
+                    } else {
+                        log::debug!("window: deferring pending resize {}x{} (throttled)", w, h);
+                    }
+                    // If we deferred (too soon), keep pending_resize for next redraw.
+                }
+
+                // Now do presenting/rendering with a mutable borrow of renderer.
+                if let Some(renderer) = &mut self.renderer {
+                    // If an external CPU framebuffer was provided, present it
+                    let mut presented = false;
+                    if let Some(ext) = &self.external_framebuffer {
+                        log::debug!("window: attempting to lock external_framebuffer");
+                        if let Ok(mut guard) = ext.lock() {
+                            if let Some((buf, w, h)) = guard.take() {
+                                log::debug!(
+                                    "window: received external framebuffer {}x{} (data_len={})",
+                                    w,
+                                    h,
+                                    buf.len()
+                                );
+                                match renderer.present_rgba(&buf, w, h) {
+                                    Ok(_) => presented = true,
+                                    Err(wgpu::SurfaceError::Lost) => {
+                                        // Try to recover the surface but avoid repeated
+                                        // immediate reconfiguration if we've just done one.
+                                        if renderer.size() != (width, height) {
+                                            log::debug!("window: recover resize due to SurfaceError::Lost -> {}x{}", width, height);
+                                            let now = Instant::now();
+                                            if self.last_resize_time.map_or(true, |t| {
+                                                now.duration_since(t) >= Duration::from_millis(16)
+                                            }) {
+                                                renderer.resize(width, height);
+                                                self.last_resize_time = Some(now);
+                                            } else {
+                                                log::debug!("window: skipping immediate recover resize (throttled)");
+                                            }
+                                        }
+                                    }
+                                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                                        log::error!("Out of GPU memory");
+                                        event_loop.exit();
+                                    }
+                                    Err(e) => log::warn!("Surface error: {:?}", e),
+                                }
+                            }
                         }
-                        Err(e) => log::warn!("Surface error: {:?}", e),
+                    }
+
+                    // If no external framebuffer was presented, fall back to regular render
+                    if !presented {
+                        match renderer.render() {
+                            Ok(_) => {}
+                            Err(wgpu::SurfaceError::Lost) => {
+                                if renderer.size() != (width, height) {
+                                    log::debug!(
+                                        "window: recover resize after render lost -> {}x{}",
+                                        width,
+                                        height
+                                    );
+                                    let now = Instant::now();
+                                    if self.last_resize_time.map_or(true, |t| {
+                                        now.duration_since(t) >= Duration::from_millis(16)
+                                    }) {
+                                        renderer.resize(width, height);
+                                        self.last_resize_time = Some(now);
+                                    } else {
+                                        log::debug!("window: skipping immediate render-recover resize (throttled)");
+                                    }
+                                }
+                            }
+                            Err(wgpu::SurfaceError::OutOfMemory) => {
+                                log::error!("Out of GPU memory");
+                                event_loop.exit();
+                            }
+                            Err(e) => log::warn!("Surface error: {:?}", e),
+                        }
                     }
                 }
             }

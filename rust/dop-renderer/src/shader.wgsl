@@ -28,11 +28,23 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     return output;
 }
 
-// Fragment shader
+// Fragment shader (color)
 
 @fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // For now, just output the vertex color
-    // In the future, this can be extended to support textures
+fn fs_color(input: VertexOutput) -> @location(0) vec4<f32> {
+    // Output the vertex color
     return input.color;
+}
+
+// Fragment shader (texture sampling)
+@group(1) @binding(0)
+var tex: texture_2d<f32>;
+@group(1) @binding(1)
+var samp: sampler;
+
+@fragment
+fn fs_texture(input: VertexOutput) -> @location(0) vec4<f32> {
+    // Sample the provided texture using the vertex tex_coords
+    let c = textureSample(tex, samp, input.tex_coords);
+    return c;
 }

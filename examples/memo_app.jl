@@ -21,8 +21,13 @@ using DOPBrowser.RustContent: node_count as content_node_count
 using DOPBrowser.RustRenderer: RustRendererHandle, create_renderer, destroy!,
     set_clear_color!, add_rect!, add_text!, render!, export_png!, get_framebuffer,
     create_onscreen_window, is_open_threaded, poll_events_threaded!, 
-    destroy_threaded!, is_available, EVENT_MOUSE_DOWN
+    destroy_threaded!, is_available, EVENT_MOUSE_DOWN, EVENT_RESIZE, update_framebuffer_threaded
 using DOPBrowser.State: Signal, signal
+using Logging
+using DOPBrowser.ApplicationUtils: CountingLogger, parse_hex_color, point_in_rect, get_button_rect
+
+# (General utilities such as a counting logger, color parsing and simple
+# hit-testing live in `DOPBrowser.ApplicationUtils` and are imported above.)
 
 # ============================================================================
 # Memo Data Types
@@ -208,19 +213,6 @@ function render_memo_ui(memos::Vector{Memo}; width::Int=400, height::Int=600)
     return renderer
 end
 
-"""
-Parse a hex color string to RGB floats.
-"""
-function parse_hex_color(hex::String)::Tuple{Float64, Float64, Float64}
-    hex = lstrip(hex, '#')
-    if length(hex) >= 6
-        r = parse(Int, hex[1:2], base=16) / 255.0
-        g = parse(Int, hex[3:4], base=16) / 255.0
-        b = parse(Int, hex[5:6], base=16) / 255.0
-        return (r, g, b)
-    end
-    return (0.0, 0.0, 0.0)
-end
 
 """
 Export the memo app to a PNG file.
@@ -237,30 +229,8 @@ end
 # Interactive Application
 # ============================================================================
 
-"""
-Hit test to check if a click is within a rectangular region.
-"""
-function hit_test(x::Float64, y::Float64, 
-                  rect_x::Float64, rect_y::Float64, 
-                  rect_w::Float64, rect_h::Float64)::Bool
-    return x >= rect_x && x <= rect_x + rect_w && 
-           y >= rect_y && y <= rect_y + rect_h
-end
-
-"""
-Calculate button position based on number of memos.
-"""
-function get_button_rect(num_memos::Int; x_margin::Float64=20.0, width::Int=400)
-    content_width = Float64(width - 2 * x_margin)
-    y_pos = 55.0  # After title
-    
-    for i in 1:num_memos
-        # Approximate card height (60 + 20 per content line, assuming 3 lines average)
-        y_pos += 120.0 + 10.0  # card height + gap
-    end
-    
-    return (x_margin, y_pos, content_width, 40.0)
-end
+# parse_hex_color, point_in_rect and get_button_rect are provided by
+# DOPBrowser.ApplicationUtils and imported above.
 
 """
 Run the memo application in interactive mode.
@@ -358,6 +328,10 @@ function run_onscreen_demo(memos_signal::Signal, next_id::Signal,
         
         frame_count = 0
         last_render_time = time()
+        # Throttle presenting to the onscreen window to avoid hammering the
+        # GPU surface during interactive resizes. We'll allow rendering at 60Hz
+        # but present at most at 30Hz.
+        last_present_time = time()
         
         while is_open_threaded(window)
             # Poll events
@@ -367,16 +341,26 @@ function run_onscreen_demo(memos_signal::Signal, next_id::Signal,
                 # Handle mouse click
                 if event.event_type == EVENT_MOUSE_DOWN
                     x, y = event.x, event.y
-                    
+
                     # Check if "Add New Note" button was clicked
-                    btn_x, btn_y, btn_w, btn_h = get_button_rect(length(memos_signal[]))
-                    
-                    if hit_test(x, y, btn_x, btn_y, btn_w, btn_h)
+                    btn_x, btn_y, btn_w, btn_h = get_button_rect(length(memos_signal[]); width=width)
+
+                    if point_in_rect(x, y, btn_x, btn_y, btn_w, btn_h)
                         println("Button clicked! Adding new memo...")
                         new_memo = Memo(id=next_id[], title="Note $(next_id[])", 
                                        content=["New content item"])
                         next_id[] += 1
                         memos_signal[] = [memos_signal[]..., new_memo]
+                    end
+                elseif event.event_type == EVENT_RESIZE
+                    # Update local width/height so layout reflows to the new window size.
+                    # The renderer will be recreated each frame using these values.
+                    new_w = Int(event.width)
+                    new_h = Int(event.height)
+                    if new_w > 0 && new_h > 0
+                        println("Window resized -> $(new_w)x$(new_h)")
+                        width = new_w
+                        height = new_h
                     end
                 end
             end
@@ -385,9 +369,32 @@ function run_onscreen_demo(memos_signal::Signal, next_id::Signal,
             current_time = time()
             if current_time - last_render_time >= 1.0/60.0
                 renderer = render_memo_ui(memos_signal[]; width=width, height=height)
-                
-                # Note: Full onscreen rendering would need GPU buffer transfer
-                # For this demo, we just update the internal state
+
+                # Present the headless renderer framebuffer into the onscreen window.
+                # We render into a headless renderer, read back the RGBA buffer and
+                # push it to the threaded window which will present it.
+                buf = get_framebuffer(renderer)
+                # Debug: log framebuffer size before presenting to threaded window
+                try
+                    # Present at most 30Hz to avoid repeated surface reconfigures
+                    current_present_time = time()
+                    present_interval = 1.0 / 30.0
+                    if current_present_time - last_present_time >= present_interval
+                        @debug "Presenting framebuffer" length=length(buf) width=width height=height
+                        # Sanity check: buffer length should be width * height * 4 (RGBA)
+                        expected_len = Int(width) * Int(height) * 4
+                        if length(buf) != expected_len
+                            @warn "Framebuffer length mismatch before presenting" length=length(buf) expected=expected_len width=width height=height
+                        end
+                        update_framebuffer_threaded(window, buf, width, height)
+                        last_present_time = current_present_time
+                    else
+                        @debug "Skipping present (throttled)" since=current_present_time - last_present_time
+                    end
+                catch e
+                    @warn "Failed to update threaded window framebuffer" exception=(e, catch_backtrace())
+                end
+
                 destroy!(renderer)
                 
                 frame_count += 1
@@ -469,5 +476,38 @@ end
 
 # Run if executed as script
 if abspath(PROGRAM_FILE) == @__FILE__
-    main()
+    # Wrap execution with a counting logger. If any warning is emitted, the
+    # example will print a message and then hang (sleep loop) so that CI or a
+    # developer can inspect logs and attached debuggers. The logger forwards
+    # all messages to stderr via a SimpleLogger configured at Debug level.
+    warning_count = Ref(0)
+    base_logger = Logging.SimpleLogger(stderr, Logging.Debug)
+    counting_logger = CountingLogger(base_logger, warning_count)
+
+    Logging.with_logger(counting_logger) do
+        # Monitor warnings in a background task. If a warning is observed,
+        # hang the process (sleep forever) after printing a message.
+        monitor = @async begin
+            while warning_count[] == 0
+                sleep(0.1)
+            end
+            println("Warning detected; hanging to allow inspection (press Ctrl-C to exit)...")
+            while true
+                sleep(1.0)
+            end
+        end
+
+        try
+            main()
+        finally
+            # If main returns normally (no warnings), cancel the monitor task.
+            # Use `isa(..., Task)` and `isdone` which are defined in Base.
+            # Best-effort cancel: try canceling the monitor task, ignore errors.
+            try
+                Base.cancel(monitor)
+            catch
+                # ignore - monitor might have finished or cancellation unsupported
+            end
+        end
+    end
 end
