@@ -220,43 +220,60 @@ export node_position, node_size, node_bounds
 """
     StaticNodeTable{N}
 
-Fixed-capacity node table for StaticCompiler contexts.
+Fixed-capacity, immutable node table for StaticCompiler contexts.
 N is the maximum number of nodes (compile-time constant).
 
-Use this for applications with known, bounded node counts.
-For unbounded trees, use Rust FFI with dynamic allocation.
+**Design Note**: This struct is intentionally immutable (uses regular `struct`).
+For mutable node tables in StaticCompiler contexts, use one of:
+1. `StaticTools.MallocArray{StaticNode}` with manual memory management
+2. Rust FFI with dynamic allocation (recommended for complex trees)
+
+For simple read-only trees, construct with `create_static_table`.
 
 # Example
 ```julia
 const MAX_NODES = 64
-table = StaticNodeTable{MAX_NODES}()
+
+# For read-only trees: construct all at once
+nodes = MVector{MAX_NODES, StaticNode}(...)
+table = StaticNodeTable{MAX_NODES}(nodes, Int32(5))  # 5 nodes
+
+# For mutable trees in StaticCompiler: use Rust FFI
+tree_ptr = rust_create_tree()
+rust_add_node(tree_ptr, NODE_STACK, 0)
 ```
 """
 struct StaticNodeTable{N}
-    nodes::MVector{N, StaticNode}
+    nodes::SVector{N, StaticNode}  # Immutable for StaticCompiler safety
     count::Int32
     
     function StaticNodeTable{N}() where N
-        nodes = MVector{N, StaticNode}(ntuple(_ -> NULL_NODE, N))
+        nodes = SVector{N, StaticNode}(ntuple(_ -> NULL_NODE, N))
         new{N}(nodes, Int32(0))
+    end
+    
+    function StaticNodeTable{N}(nodes::SVector{N, StaticNode}, count::Int32) where N
+        new{N}(nodes, count)
     end
 end
 
 """
-    add_node!(table::StaticNodeTable, node_type::UInt8, parent::UInt32) -> UInt32
+    create_static_table(nodes::NTuple{N, StaticNode}) -> StaticNodeTable{N}
 
-Add a node to the table. Returns node ID (1-indexed) or 0 if table is full.
+Create a StaticNodeTable from a tuple of nodes.
+Use this for compile-time known trees.
+
+# Example
+```julia
+nodes = (
+    StaticNode(0x01, 0x00, 0x02, 0x00, 0.0f0, 0.0f0, 400.0f0, 600.0f0),
+    StaticNode(0x04, 0x01, 0x00, 0x00, 10.0f0, 10.0f0, 100.0f0, 50.0f0)
+)
+table = create_static_table(nodes)
+```
 """
-@inline function add_node!(table::StaticNodeTable{N}, node_type::UInt8, parent::UInt32)::UInt32 where N
-    if table.count >= N
-        return UInt32(0)  # Table full
-    end
-    
-    new_id = UInt32(table.count + 1)
-    # Create new node (immutable, so we replace)
-    # Note: In static contexts, we work with the MVector directly
-    # For actual mutation in StaticCompiler, use MallocArray from StaticTools
-    new_id
+@inline function create_static_table(nodes::NTuple{N, StaticNode})::StaticNodeTable{N} where N
+    StaticNodeTable{N}(SVector{N, StaticNode}(nodes), Int32(N))
 end
 
 """
@@ -278,7 +295,7 @@ Get the number of nodes in the table.
 """
 @inline node_count(table::StaticNodeTable)::Int32 = table.count
 
-export StaticNodeTable, add_node!, get_node, node_count
+export StaticNodeTable, create_static_table, get_node, node_count
 
 # =============================================================================
 # Layout Computation Types (for algorithm expression)
