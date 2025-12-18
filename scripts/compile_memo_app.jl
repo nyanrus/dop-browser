@@ -87,7 +87,11 @@ try
             println(io, "===========================")
             println(io, "Build date: $(Dates.now())")
             println(io, "Julia version: $(VERSION)")
-            println(io, "JuliaC version: $(pkgversion(JuliaC))")
+            try
+                println(io, "JuliaC version: $(pkgversion(JuliaC))")
+            catch
+                println(io, "JuliaC version: (unable to determine)")
+            end
             println(io, "")
             println(io, "Executable size: $size_mb MB ($size_bytes bytes)")
             println(io, "Total application size: $total_mb MB ($total_size bytes)")

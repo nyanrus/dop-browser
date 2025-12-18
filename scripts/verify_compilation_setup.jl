@@ -40,9 +40,7 @@ try
     if isempty(compiler)
         # Try common compilers
         for cc in ["clang", "gcc", "cc"]
-            result = run(pipeline(`which $cc`, stdout=devnull, stderr=devnull); wait=false)
-            wait(result)
-            if success(result)
+            if success(pipeline(`which $cc`, stdout=devnull, stderr=devnull))
                 compiler = cc
                 break
             end
