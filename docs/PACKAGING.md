@@ -1,12 +1,22 @@
-# Packaging the Memo Application with PackageCompiler
+# Packaging the Memo Application
 
-This guide explains how to create a standalone executable of the memo application using PackageCompiler.
+This guide explains how to create standalone executables of the memo application using two different approaches: PackageCompiler (includes full Julia runtime) and StaticCompiler (standalone without runtime).
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Building Rust Libraries](#building-rust-libraries)
+3. [Option 1: PackageCompiler](#option-1-packagecompiler)
+4. [Option 2: StaticCompiler](#option-2-staticcompiler)
+5. [Comparison](#comparison)
+6. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
 1. **Julia 1.10+**: The minimum required Julia version
 2. **Rust toolchain**: Required to build the native libraries
 3. **Built Rust libraries**: All three Rust crates must be built before compilation
+4. **Clang compiler** (for StaticCompiler): Required for static compilation
 
 ## Building Rust Libraries
 
@@ -29,9 +39,15 @@ The build script will:
 
 ## Compiling the Memo Application
 
-Once the Rust libraries are built, you can compile the memo application:
+### Option 1: PackageCompiler
+
+Once the Rust libraries are built, you can compile the memo application with PackageCompiler:
 
 ```bash
+# Verify setup
+julia --project=. scripts/verify_compilation_setup.jl
+
+# Compile
 julia --project=. scripts/compile_memo_app.jl
 ```
 
@@ -43,9 +59,37 @@ This will:
 
 The compilation process may take **10-20 minutes** depending on your system.
 
-## Running the Compiled Application
+**Binary size**: ~350-400 MB (includes full Julia runtime)
 
-After compilation, you can run the standalone executable:
+### Option 2: StaticCompiler
+
+For a smaller standalone executable without the Julia runtime:
+
+```bash
+# Verify setup
+julia --project=. scripts/verify_static_compilation_setup.jl
+
+# Compile
+julia --project=. scripts/static_compile_memo_app.jl
+```
+
+This will:
+1. Create a `build/` directory in the project root
+2. Compile a simplified version of the memo app to native code
+3. Create a standalone executable at `build/static_memo_app`
+4. Generate a size report at `build/static_size_report.txt`
+
+The compilation process takes **a few minutes** (much faster than PackageCompiler).
+
+**Binary size**: ~5-20 MB (no Julia runtime)
+
+**Note**: The StaticCompiler version is a simplified memo app due to limitations in what Julia features can be statically compiled. It demonstrates the rendering capabilities but has fewer features than the full PackageCompiler version.
+
+## Running the Compiled Applications
+
+### PackageCompiler Version
+
+After compilation, you can run the full-featured executable:
 
 ```bash
 # Run in interactive mode (default)
@@ -64,18 +108,51 @@ The compiled application includes:
 - All required Rust libraries
 - Font files and other resources
 
-## Binary Size
+### StaticCompiler Version
 
-The compiled application typically includes:
+After static compilation, run the lightweight executable:
 
-| Component | Size (approximate) |
-|-----------|-------------------|
-| Executable | 10-20 MB |
-| Julia runtime | 100-150 MB |
-| Dependencies | 50-100 MB |
-| **Total** | **160-270 MB** |
+```bash
+# Run in headless mode (default - generates PNG)
+./build/static_memo_app
 
-A detailed size report is generated at `build/size_report.txt` after compilation.
+# Run in interactive onscreen mode
+./build/static_memo_app --onscreen
+```
+
+The static executable:
+- **Headless mode**: Generates a PNG file `static_memo_output.png`
+- **Onscreen mode**: Opens an interactive window with event handling via Rust FFI
+- Is a standalone binary with minimal external dependencies (only Rust libraries)
+- Does not include the Julia runtime
+- Supports real-time rendering and mouse interaction through C-compatible Rust FFI
+
+## Comparison
+
+| Feature | PackageCompiler | StaticCompiler |
+|---------|----------------|----------------|
+| Binary size | 350-400 MB | 5-20 MB |
+| Compilation time | 10-20 minutes | Few minutes |
+| Startup time | Fast (precompiled) | Very fast (native) |
+| Julia features | Full support | Limited subset |
+| Interactive mode | ✓ | **✓ (via Rust FFI)** |
+| Headless mode | ✓ | ✓ |
+| Event handling | ✓ | **✓ (via Rust FFI)** |
+| External deps | Julia runtime + libs | Rust libs only |
+| Distribution | Need full bundle | Single executable |
+
+**When to use PackageCompiler:**
+- Full application with all features
+- Complex Julia code patterns
+- Maximum Julia language support
+- Development and testing
+
+**When to use StaticCompiler:**
+- Minimal binary size critical
+- Fast startup required
+- **Interactive apps with Rust backend**
+- Embedded systems or containers
+- Simple to moderate complexity
 
 ## Size Reduction Techniques
 

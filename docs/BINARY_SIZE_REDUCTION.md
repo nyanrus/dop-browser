@@ -162,10 +162,61 @@ For **minimal size** (with trade-offs):
 
 1. All the above, plus:
 2. **Aggressive Julia optimization flags**: -50 MB
-3. **Static compilation** (experimental): -100 MB
-4. **Remove unused stdlib**: -30 MB
+3. **Remove unused stdlib**: -30 MB
 
 **Expected final size**: 60-100 MB (highly optimized, less portable)
+
+### 9. StaticCompiler (Experimental - Best Size Reduction)
+
+For the smallest possible binaries, use StaticCompiler instead of PackageCompiler. This creates a truly standalone executable without the Julia runtime. **Now supports interactive onscreen mode via Rust FFI!**
+
+```bash
+# Install StaticCompiler (already in Project.toml)
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+
+# Verify setup
+julia --project=. scripts/verify_static_compilation_setup.jl
+
+# Compile with StaticCompiler
+julia --project=. scripts/static_compile_memo_app.jl
+
+# Run headless mode
+./build/static_memo_app
+
+# Run interactive onscreen mode
+./build/static_memo_app --onscreen
+```
+
+**Expected savings**: -330 MB (from ~350 MB to ~5-20 MB)
+
+**Trade-offs**: 
+- Limited Julia feature support (but Rust FFI provides rich functionality)
+- Requires C-compatible entry points and calling conventions
+- No dynamic dispatch or runtime compilation
+
+**Capabilities**:
+- ✓ Headless rendering to PNG
+- ✓ **Interactive window with mouse/keyboard events via Rust FFI**
+- ✓ Real-time rendering loop
+- ✓ Full event handling (clicks, resize, close)
+- ✓ **Natural Julia code (just type-stable and allocation-aware)**
+
+**When to use**:
+- Minimal binary size is critical
+- **Interactive applications with Rust backend support**
+- Embedded systems or containers
+- Fast startup time required  
+- Batch processing and rendering
+
+**How it works**:
+StaticCompiler compiles Julia code to native machine code without the Julia runtime. You can write natural Julia code as long as it's type-stable and avoids GC allocations. For system operations like window management, we use C-compatible FFI to call Rust functions directly. This gives us clean Julia code with tiny binaries and full interactivity!
+
+**Key principles**:
+- Write type-stable Julia code (checked by the compiler)
+- Use stack allocation (StaticArrays, NamedTuples, Tuples)
+- Use manual memory management when needed (StaticTools.MallocArray)
+- Leverage Rust FFI for system-level operations (windowing, file I/O)
+- Use `@device_override` to replace incompatible standard library methods
 
 ## Benchmarking
 
