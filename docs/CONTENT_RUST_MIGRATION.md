@@ -141,7 +141,7 @@ julia --project=. examples/memo_app.jl
                │ dlopen/dlsym
                ▼
 ┌─────────────────────────────────────┐
-│  dop-content (Rust Crate)           │
+│  dop-content-ir (Rust Crate)           │
 │  - NodeTable (SoA)                  │
 │  - PropertyTable (SoA)              │
 │  - Builder (fluent API)             │
@@ -168,14 +168,14 @@ julia --project=. examples/memo_app.jl
 ## Files Changed
 
 ### Added:
-- `rust/dop-content/` - New Rust crate (5 modules)
+- `rust/dop-content-ir/` - New Rust crate (5 modules)
 - `src/RustContent/RustContent.jl` - Julia wrapper
 - `examples/memo_app.jl` - Memo application example
 - `test/test_rust_content.jl` - FFI tests
 
 ### Modified:
 - `src/DOPBrowser.jl` - Added RustContent module
-- `deps/build.jl` - Added dop-content to build list
+- `deps/build.jl` - Added dop-content-ir to build list
 - `Project.toml` - Added Libdl dependency
 
 ## Testing Status

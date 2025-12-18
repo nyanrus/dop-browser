@@ -44,7 +44,7 @@ module DOPBrowser
 # 3. Layout - SIMD-friendly layout calculation
 # 4. DOMCSSOM - Virtual DOM/CSSOM representation
 # 5. Compiler - HTML+CSS to Content-- compilation
-# 6. ContentMM - Content-- IR and runtime
+# 6. ContentMM - Content IR and runtime
 # 7. Network - HTTP/HTTPS networking layer
 # 8. EventLoop - Browser main event loop
 #
@@ -53,10 +53,10 @@ module DOPBrowser
 # - CSSParserModule (use RustParser instead)
 # - Renderer (use RustRenderer instead)
 
-# Rust-based Content-- builder (REQUIRED)
+# Rust-based Content IR builder (REQUIRED)
 include("RustContent/RustContent.jl")
 
-# Rust-based HTML/CSS parser and Content-- compiler (REQUIRED)
+# Rust-based HTML/CSS parser and Content IR compiler (REQUIRED)
 include("RustParser/RustParser.jl")
 
 # Rust-based rendering engine (winit + wgpu) (REQUIRED)
@@ -78,7 +78,7 @@ include("Compiler/Compiler.jl")
 # Event Loop module
 include("EventLoop/EventLoop.jl")
 
-# Content-- IR modules (DEPRECATED - use RustContent instead)
+# Content IR modules (DEPRECATED - use RustContent instead)
 include("ContentMM/ContentMM.jl")
 
 # Network layer

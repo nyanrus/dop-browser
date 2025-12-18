@@ -1,18 +1,18 @@
 """
     Compiler
 
-Content-- compiler module that transforms HTML+CSS to Content-- IR.
+Content-- compiler module that transforms HTML+CSS to Content IR.
 
 This module performs the compilation pipeline:
 1. HTML parsing → Token tape
 2. CSS parsing → Style rules
 3. DOM construction → Node table
 4. Style application → Archetype resolution
-5. Pre-evaluation → Optimized Content-- IR
+5. Pre-evaluation → Optimized Content IR
 
 ## Architecture
 
-HTML + CSS → (Lowering) → Content-- IR → (Pre-evaluation) → Optimized IR
+HTML + CSS → (Lowering) → Content IR → (Pre-evaluation) → Optimized IR
 
 The compiler performs AOT (Ahead of Time) operations:
 - Layout structure generation
@@ -39,7 +39,7 @@ export CompilerContext, compile_document!, compile_html!
 """
     CompilerContext
 
-Context for compiling HTML+CSS to Content-- IR.
+Context for compiling HTML+CSS to Content IR.
 
 Holds the compilation state and intermediate results.
 """
@@ -96,7 +96,7 @@ export register_source!
 """
     compile_document!(html::AbstractString, css::AbstractString = "") -> CompilationResult
 
-Compile an HTML document with optional external CSS to Content-- IR.
+Compile an HTML document with optional external CSS to Content IR.
 
 This is the main entry point for the compilation pipeline:
 1. Parse HTML to tokens
@@ -134,7 +134,7 @@ end
 """
     compile_html!(html::AbstractString) -> CompilationResult
 
-Compile HTML with embedded styles to Content-- IR.
+Compile HTML with embedded styles to Content IR.
 
 Extracts <style> blocks from the HTML and processes them as CSS.
 """
