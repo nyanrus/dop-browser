@@ -1,0 +1,167 @@
+name: Test Memo App with Screenshots
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  test-memo-app:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # Needed for committing screenshots
+      actions: read    # Needed for workflow execution
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            x11-utils \
+            imagemagick \
+            scrot \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libexpat1-dev \
+            pkg-config \
+            build-essential
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v1
+        with:
+          version: '1.10'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            rust/dop-parser/target/
+            rust/dop-renderer/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/dop-parser/Cargo.lock', 'rust/dop-renderer/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build Rust parser library
+        run: |
+          cd rust/dop-parser
+          cargo build --release
+          ls -la target/release/
+
+      - name: Build Rust renderer library
+        run: |
+          cd rust/dop-renderer
+          cargo build --release
+          ls -la target/release/
+
+      - name: Cache Julia packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia
+          key: ${{ runner.os }}-julia-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-
+
+      - name: Install Julia dependencies
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run Julia tests
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.test()'
+
+      - name: Run memo app with Xvfb (onscreen mode)
+        run: |
+          # Start Xvfb (X virtual framebuffer) on display :99
+          Xvfb :99 -screen 0 800x600x24 &
+          XVFB_PID=$!
+          export DISPLAY=:99
+
+          # Give Xvfb time to start
+          sleep 2
+
+          # Verify X server is running
+          xdpyinfo -display :99 || echo "Warning: X display info not available"
+
+          # First, run simple mode to generate base screenshots
+          echo "=== Running in simple mode (PNG generation) ==="
+          julia --project=. examples/memo_app.jl --simple
+
+          # Then, test onscreen mode by explicitly setting CI=false
+          # This ensures the app tries onscreen mode with X server
+          echo ""
+          echo "=== Testing onscreen mode with X server ==="
+          # Using timeout from coreutils (standard on Ubuntu)
+          if command -v timeout &> /dev/null; then
+            (CI=false timeout 10 julia --project=. examples/memo_app.jl --interactive) || \
+              echo "Onscreen mode completed or timed out (expected for automated testing)"
+          else
+            echo "Warning: timeout command not found, running without timeout"
+            (CI=false julia --project=. examples/memo_app.jl --interactive) &
+            APP_PID=$!
+            sleep 10
+            kill $APP_PID 2>/dev/null || true
+          fi
+
+          # Try to capture the X display before stopping Xvfb
+          echo ""
+          echo "=== Capturing X server display ==="
+          scrot -D :99 xserver_display.png 2>/dev/null || \
+            echo "Note: Could not capture X display (no window may have been created)"
+
+          # Stop Xvfb
+          kill $XVFB_PID || true
+
+      - name: List generated screenshots
+        run: |
+          echo "=== Generated PNG files ==="
+          find . -maxdepth 1 -name "*.png" -type f -exec ls -lh {} \;
+
+          echo ""
+          echo "=== Screenshots in current directory ==="
+          ls -lh *.png 2>/dev/null || echo "No PNG files in root directory"
+
+      - name: Upload screenshots as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: memo-app-screenshots
+          path: |
+            memo_app_*.png
+            *.png
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Commit screenshots to repository (optional)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # Configure git
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # Create screenshots directory if it doesn't exist
+          mkdir -p screenshots
+
+          # Copy generated screenshots
+          cp memo_app_*.png screenshots/ 2>/dev/null || true
+
+          # Add and commit if there are changes
+          git add screenshots/*.png
+          if git diff --staged --quiet; then
+            echo "No screenshot changes to commit"
+          else
+            git commit -m "Update memo app screenshots [skip ci]"
+            git push
+          fi
