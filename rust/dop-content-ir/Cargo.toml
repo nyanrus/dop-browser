@@ -16,3 +16,13 @@ log = "0.4"
 [profile.release]
 lto = true
 opt-level = 3
+
+# Size-optimized release profile for minimal binary size
+# Use with: cargo build --profile release-small
+[profile.release-small]
+inherits = "release"
+opt-level = "z"      # Optimize for size
+lto = "fat"          # Full link-time optimization
+codegen-units = 1    # Better optimization (slower compile)
+panic = "abort"      # No unwinding code
+strip = "symbols"    # Strip debug symbols
