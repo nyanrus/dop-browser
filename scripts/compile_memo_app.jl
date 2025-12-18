@@ -29,7 +29,7 @@ try
         PROJECT_DIR,                    # Project to compile
         joinpath(OUTPUT_DIR, APP_NAME), # Output directory
         precompile_execution_file=PRECOMPILE_FILE,
-        executables=["memo_app" => "MemoAppMain"],
+        executables=["memo_app" => "julia_main"],
         force=true,                     # Overwrite existing build
         include_lazy_artifacts=true,    # Include artifacts
         filter_stdlibs=true,           # Reduce size by filtering standard libraries

@@ -19,14 +19,15 @@ catch e
     exit(1)
 end
 
-# Test 2: Check if MemoAppMain module exists
-println("\nTest 2: Checking MemoAppMain entry point...")
+# Test 2: Check if MemoAppMain entry point exists
+println("\nTest 2: Checking julia_main entry point...")
 try
-    @eval using DOPBrowser.MemoAppMain
-    println("✓ MemoAppMain module found")
+    # Load the MemoAppMain file to define julia_main
+    include(joinpath(dirname(dirname(@__FILE__)), "src", "MemoAppMain.jl"))
+    println("✓ MemoAppMain file loaded")
     
     # Check if julia_main function exists
-    if isdefined(DOPBrowser.MemoAppMain, :julia_main)
+    if isdefined(Main, :julia_main)
         println("✓ julia_main function exists")
     else
         println("✗ julia_main function not found")

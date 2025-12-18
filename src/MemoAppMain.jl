@@ -1,8 +1,10 @@
 """
-Entry point module for the compiled memo application.
-This provides the julia_main function required by PackageCompiler.
+Entry point for the compiled memo application.
+This file provides the julia_main function required by PackageCompiler.
 """
-module MemoAppMain
+
+# Load DOPBrowser and the memo app
+using DOPBrowser
 
 # Load the memo app example
 include(joinpath(dirname(dirname(@__FILE__)), "examples", "memo_app.jl"))
@@ -22,5 +24,3 @@ function julia_main()::Cint
         return 1  # Failure
     end
 end
-
-end # module

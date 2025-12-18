@@ -77,9 +77,9 @@ create_app(
     PROJECT_DIR,
     joinpath(OUTPUT_DIR, APP_NAME),
     precompile_execution_file=PRECOMPILE_FILE,
-    executables=["memo_app" => "MemoAppMain"],
+    executables=["memo_app" => "julia_main"],
     force=true,
-    include_lazy_artifacts=false,  # Don't include unused artifacts
+    include_lazy_artifacts=false,  # Don't include unused artifacts (WARNING: may break Rust library loading)
     filter_stdlibs=true,
     cpu_target="native",           # Optimize for local CPU
     sysimage_build_args=`--optimize=3 --check-bounds=no`  # Aggressive optimization
@@ -88,25 +88,14 @@ create_app(
 
 **Expected savings**: 20-50 MB
 **Trade-off**: Less portable, no runtime bounds checking
+**Warning**: Setting `include_lazy_artifacts=false` may prevent Rust libraries from loading if they are stored as artifacts. Test thoroughly after applying this option.
 
-### 5. Use Static Compilation (Experimental)
+### 5. Minimize Precompilation Scope
 
-Julia's static compilation is still experimental but can significantly reduce size by removing the JIT compiler:
+To reduce compilation time and potentially size, you can modify the precompile execution file to include only the most common code paths. Edit `scripts/precompile_memo_app.jl` to reduce the amount of code being precompiled.
 
-```julia
-# Requires Julia 1.9+ with static compilation support
-create_app(
-    PROJECT_DIR,
-    joinpath(OUTPUT_DIR, APP_NAME),
-    precompile_execution_file=PRECOMPILE_FILE,
-    executables=["memo_app" => "MemoAppMain"],
-    force=true,
-    sysimage_build_args=`--compiled-modules=no`
-)
-```
-
-**Expected savings**: 100-150 MB (removes LLVM and codegen)
-**Trade-off**: Significant limitations, may not work with all features
+**Expected savings**: 10-30 MB
+**Trade-off**: Slower startup for non-precompiled code paths
 
 ### 6. Optimize Rust Libraries
 
