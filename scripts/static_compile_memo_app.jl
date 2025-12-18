@@ -43,15 +43,11 @@ try
     println("Compiling c_main function to executable...")
     
     # Compile using StaticCompiler
-    # The compile_executable function takes:
-    # - The function to compile (c_main in this case)
-    # - The output path for the executable
-    # - Optional compiler flags for optimization
-    
+    # c_main accepts (argc::Int32, argv::Ptr{Ptr{UInt8}})
     compile_executable(
-        c_main,           # Function marked with @ccallable
-        output_path,      # Output executable path
-        ()                # Function arguments (none for c_main)
+        c_main,
+        (Int32, Ptr{Ptr{UInt8}}),  # Function signature
+        output_path                 # Output executable path
     )
     
     println()

@@ -200,9 +200,9 @@ julia --project=. scripts/static_compile_memo_app.jl
 - ✓ **NEW: Interactive onscreen window with event handling**
 - ✓ Mouse click detection via Rust FFI
 - ✓ Real-time rendering using Rust backend
-- ✗ Limited to features compatible with StaticCompiler
+- ✓ **Natural Julia code (StaticCompiler-compatible)**
 
-**Note**: StaticCompiler has limitations on Julia features, but by leveraging Rust FFI for window management and event handling, we can still create fully interactive applications!
+**Note**: StaticCompiler allows writing natural Julia code as long as it's type-stable and avoids GC allocations. By using Rust FFI for system operations (windowing, events) and StaticTools for utilities, we get the best of both worlds: clean Julia code in a tiny standalone binary!
 
 See [`docs/PACKAGING.md`](docs/PACKAGING.md) for detailed packaging instructions and [`docs/BINARY_SIZE_REDUCTION.md`](docs/BINARY_SIZE_REDUCTION.md) for size optimization strategies.
 

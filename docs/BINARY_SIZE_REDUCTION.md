@@ -199,16 +199,24 @@ julia --project=. scripts/static_compile_memo_app.jl
 - ✓ **Interactive window with mouse/keyboard events via Rust FFI**
 - ✓ Real-time rendering loop
 - ✓ Full event handling (clicks, resize, close)
+- ✓ **Natural Julia code (just type-stable and allocation-aware)**
 
 **When to use**:
 - Minimal binary size is critical
 - **Interactive applications with Rust backend support**
 - Embedded systems or containers
-- Fast startup time required
+- Fast startup time required  
 - Batch processing and rendering
 
 **How it works**:
-StaticCompiler compiles Julia code to native machine code without the Julia runtime. For features not supported by StaticCompiler (like window management), we use C-compatible FFI to call Rust functions directly, giving us the best of both worlds: tiny binaries with full interactivity!
+StaticCompiler compiles Julia code to native machine code without the Julia runtime. You can write natural Julia code as long as it's type-stable and avoids GC allocations. For system operations like window management, we use C-compatible FFI to call Rust functions directly. This gives us clean Julia code with tiny binaries and full interactivity!
+
+**Key principles**:
+- Write type-stable Julia code (checked by the compiler)
+- Use stack allocation (StaticArrays, NamedTuples, Tuples)
+- Use manual memory management when needed (StaticTools.MallocArray)
+- Leverage Rust FFI for system-level operations (windowing, file I/O)
+- Use `@device_override` to replace incompatible standard library methods
 
 ## Benchmarking
 
