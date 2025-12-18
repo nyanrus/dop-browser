@@ -76,6 +76,7 @@ using ..Window: WindowHandle, WindowConfig, WindowEvent, EventType,
                 EVENT_FOCUS, EVENT_BLUR
 using ..Widgets: Widget, WidgetTree, build_ui, render_widgets!,
                  ContainerWidget, ButtonWidget, TextInputWidget
+# UIContext still comes from ContentMM.NativeUI for backward compatibility
 using ..ContentMM.NativeUI: UIContext
 
 export App, create_app, run!, stop!
