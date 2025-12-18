@@ -2,19 +2,19 @@ name: Test Memo App with Screenshots
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   workflow_dispatch:
 
 jobs:
   test-memo-app:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -27,18 +27,18 @@ jobs:
             libexpat1-dev \
             pkg-config \
             build-essential
-      
+
       - name: Setup Julia
         uses: julia-actions/setup-julia@v1
         with:
           version: '1.10'
-      
+
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-      
+
       - name: Cache Rust dependencies
         uses: actions/cache@v3
         with:
@@ -52,19 +52,19 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-      
+
       - name: Build Rust parser library
         run: |
           cd rust/dop-parser
           cargo build --release
           ls -la target/release/
-      
+
       - name: Build Rust renderer library
         run: |
           cd rust/dop-renderer
           cargo build --release
           ls -la target/release/
-      
+
       - name: Cache Julia packages
         uses: actions/cache@v3
         with:
@@ -72,44 +72,44 @@ jobs:
           key: ${{ runner.os }}-julia-${{ hashFiles('**/Project.toml', '**/Manifest.toml') }}
           restore-keys: |
             ${{ runner.os }}-julia-
-      
+
       - name: Install Julia dependencies
         run: |
           julia --project=. -e 'using Pkg; Pkg.instantiate()'
-      
+
       - name: Run Julia tests
         run: |
           julia --project=. -e 'using Pkg; Pkg.test()'
-      
+
       - name: Run memo app in headless mode with Xvfb
         run: |
           # Start Xvfb (X virtual framebuffer) on display :99
           Xvfb :99 -screen 0 800x600x24 &
           XVFB_PID=$!
           export DISPLAY=:99
-          
+
           # Give Xvfb time to start
           sleep 2
-          
+
           # Verify X server is running
           xdpyinfo -display :99 || echo "Warning: X display info not available"
-          
+
           # Run the memo app in headless mode
           # The app will generate PNG files
           HEADLESS=1 julia --project=. examples/memo_app.jl --simple
-          
+
           # Stop Xvfb
           kill $XVFB_PID || true
-      
+
       - name: List generated screenshots
         run: |
           echo "=== Generated PNG files ==="
           find . -name "*.png" -type f -newer .git -exec ls -lh {} \;
-          
+
           echo ""
           echo "=== Screenshots in current directory ==="
           ls -lh *.png 2>/dev/null || echo "No PNG files in root directory"
-      
+
       - name: Upload screenshots as artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -119,20 +119,20 @@ jobs:
             *.png
           if-no-files-found: warn
           retention-days: 30
-      
+
       - name: Commit screenshots to repository (optional)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           # Configure git
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
+
           # Create screenshots directory if it doesn't exist
           mkdir -p screenshots
-          
+
           # Copy generated screenshots
           cp memo_app_*.png screenshots/ 2>/dev/null || true
-          
+
           # Add and commit if there are changes
           git add screenshots/*.png
           if git diff --staged --quiet; then
