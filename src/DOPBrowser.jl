@@ -59,10 +59,11 @@ module DOPBrowser
 # - Window: Window abstraction
 # - EventLoop: Browser event loop
 #
-# INTERNAL/LEGACY (Backward Compatibility):
+# INTERNAL/LEGACY (Backward Compatibility - accessible but not exported):
 # - HTMLParser, CSSParserModule: Used internally by legacy pipeline
 # - DOMCSSOM, Core: Legacy virtual DOM/CSSOM and browser context
 # - ContentMM: Legacy Content IR (use ContentIR for new code)
+#   Note: ContentMM is included but not exported, access via DOPBrowser.ContentMM if needed
 
 # =============================================================================
 # Core Content IR Module (NEW - Clean Architecture)

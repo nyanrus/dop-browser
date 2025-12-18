@@ -438,7 +438,9 @@ Layout semantics: Direction, Pack, Align, Size, Inset, Offset, Gap, Color. Integ
 Style system with AOT inheritance flattening. All inheritance resolved at compile time.
 
 ### ContentMM.Compiler
-AOT compiler generating specialized binary files per environment. (Note: This is a submodule of ContentMM, distinct from the top-level Compiler module which has been removed.)
+AOT compiler generating specialized binary files per environment.
+
+**Note on Compiler Modules**: ContentMM.Compiler is a submodule within the legacy ContentMM package, providing AOT compilation functionality for Content-- IR. This is distinct from the top-level Compiler module that was previously deprecated and has now been removed from the codebase.
 
 ### ContentMM.TextJIT
 JIT text shaping for Paragraph nodes with caching.
