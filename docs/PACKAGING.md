@@ -113,15 +113,19 @@ The compiled application includes:
 After static compilation, run the lightweight executable:
 
 ```bash
-# Run the static executable (always runs in headless mode)
+# Run in headless mode (default - generates PNG)
 ./build/static_memo_app
+
+# Run in interactive onscreen mode
+./build/static_memo_app --onscreen
 ```
 
 The static executable:
-- Generates a PNG file: `static_memo_output.png`
-- Is a standalone binary with no external dependencies (except Rust libraries)
+- **Headless mode**: Generates a PNG file `static_memo_output.png`
+- **Onscreen mode**: Opens an interactive window with event handling via Rust FFI
+- Is a standalone binary with minimal external dependencies (only Rust libraries)
 - Does not include the Julia runtime
-- Has a simplified feature set compared to the PackageCompiler version
+- Supports real-time rendering and mouse interaction through C-compatible Rust FFI
 
 ## Comparison
 
@@ -131,22 +135,24 @@ The static executable:
 | Compilation time | 10-20 minutes | Few minutes |
 | Startup time | Fast (precompiled) | Very fast (native) |
 | Julia features | Full support | Limited subset |
-| Interactive mode | ✓ | ✗ |
+| Interactive mode | ✓ | **✓ (via Rust FFI)** |
 | Headless mode | ✓ | ✓ |
+| Event handling | ✓ | **✓ (via Rust FFI)** |
 | External deps | Julia runtime + libs | Rust libs only |
 | Distribution | Need full bundle | Single executable |
 
 **When to use PackageCompiler:**
 - Full application with all features
-- Interactive UI required
 - Complex Julia code patterns
+- Maximum Julia language support
 - Development and testing
 
 **When to use StaticCompiler:**
 - Minimal binary size critical
-- Headless/batch rendering only
-- Simple rendering tasks
+- Fast startup required
+- **Interactive apps with Rust backend**
 - Embedded systems or containers
+- Simple to moderate complexity
 
 ## Size Reduction Techniques
 

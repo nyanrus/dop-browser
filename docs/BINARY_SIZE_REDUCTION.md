@@ -168,7 +168,7 @@ For **minimal size** (with trade-offs):
 
 ### 9. StaticCompiler (Experimental - Best Size Reduction)
 
-For the smallest possible binaries, use StaticCompiler instead of PackageCompiler. This creates a truly standalone executable without the Julia runtime.
+For the smallest possible binaries, use StaticCompiler instead of PackageCompiler. This creates a truly standalone executable without the Julia runtime. **Now supports interactive onscreen mode via Rust FFI!**
 
 ```bash
 # Install StaticCompiler (already in Project.toml)
@@ -180,23 +180,35 @@ julia --project=. scripts/verify_static_compilation_setup.jl
 # Compile with StaticCompiler
 julia --project=. scripts/static_compile_memo_app.jl
 
-# Run the compiled binary
+# Run headless mode
 ./build/static_memo_app
+
+# Run interactive onscreen mode
+./build/static_memo_app --onscreen
 ```
 
 **Expected savings**: -330 MB (from ~350 MB to ~5-20 MB)
+
 **Trade-offs**: 
-- Significantly limited Julia feature support
-- Simplified application (headless rendering only)
-- No interactive mode
-- Requires C-compatible entry points
-- May require code refactoring for compatibility
+- Limited Julia feature support (but Rust FFI provides rich functionality)
+- Requires C-compatible entry points and calling conventions
+- No dynamic dispatch or runtime compilation
+
+**Capabilities**:
+- ✓ Headless rendering to PNG
+- ✓ **Interactive window with mouse/keyboard events via Rust FFI**
+- ✓ Real-time rendering loop
+- ✓ Full event handling (clicks, resize, close)
 
 **When to use**:
 - Minimal binary size is critical
-- Application is simple and headless
+- **Interactive applications with Rust backend support**
 - Embedded systems or containers
-- Batch processing scenarios
+- Fast startup time required
+- Batch processing and rendering
+
+**How it works**:
+StaticCompiler compiles Julia code to native machine code without the Julia runtime. For features not supported by StaticCompiler (like window management), we use C-compatible FFI to call Rust functions directly, giving us the best of both worlds: tiny binaries with full interactivity!
 
 ## Benchmarking
 

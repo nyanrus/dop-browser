@@ -177,7 +177,7 @@ julia --project=. scripts/compile_memo_app.jl
 
 #### Option 2: StaticCompiler (Standalone Binary)
 
-StaticCompiler creates a truly standalone executable without the Julia runtime, resulting in much smaller binaries.
+StaticCompiler creates a truly standalone executable without the Julia runtime, resulting in much smaller binaries. **Now supports both headless and interactive onscreen modes using Rust FFI!**
 
 ```bash
 # Verify setup
@@ -186,13 +186,23 @@ julia --project=. scripts/verify_static_compilation_setup.jl
 # Compile (takes a few minutes)
 julia --project=. scripts/static_compile_memo_app.jl
 
-# Run the compiled binary
+# Run in headless mode (default - generates PNG)
 ./build/static_memo_app
+
+# Run in interactive onscreen mode
+./build/static_memo_app --onscreen
 ```
 
 **Binary size**: 5-20 MB (no Julia runtime included)
 
-**Note**: StaticCompiler has limitations and only supports a subset of Julia features. The static memo app is a simplified version suitable for static compilation.
+**Features**:
+- ✓ Headless rendering to PNG
+- ✓ **NEW: Interactive onscreen window with event handling**
+- ✓ Mouse click detection via Rust FFI
+- ✓ Real-time rendering using Rust backend
+- ✗ Limited to features compatible with StaticCompiler
+
+**Note**: StaticCompiler has limitations on Julia features, but by leveraging Rust FFI for window management and event handling, we can still create fully interactive applications!
 
 See [`docs/PACKAGING.md`](docs/PACKAGING.md) for detailed packaging instructions and [`docs/BINARY_SIZE_REDUCTION.md`](docs/BINARY_SIZE_REDUCTION.md) for size optimization strategies.
 
