@@ -282,21 +282,21 @@ Base.eltype(::Type{Box4{T}}) where T = T
 
 Sum of left and right values.
 """
-horizontal(b::Box4) = b.left + b.right
+@inline horizontal(b::Box4) = b.left + b.right
 
 """
     vertical(b::Box4) -> Number
 
 Sum of top and bottom values.
 """
-vertical(b::Box4) = b.top + b.bottom
+@inline vertical(b::Box4) = b.top + b.bottom
 
 """
     total(b::Box4) -> Vec2
 
 Total size contribution as Vec2(horizontal, vertical).
 """
-total(b::Box4) = Vec2(horizontal(b), vertical(b))
+@inline total(b::Box4) = Vec2(horizontal(b), vertical(b))
 
 """
     Rect{T}
@@ -362,7 +362,7 @@ Base.:-(r::Rect, offset::Vec2) = Rect(r.origin - offset, r.size)
 
 Check if a point is inside the rectangle.
 """
-contains(r::Rect, point::Vec2) = 
+@inline contains(r::Rect, point::Vec2) = 
     point.x >= r.left && point.x <= r.right && 
     point.y >= r.top && point.y <= r.bottom
 
@@ -371,7 +371,7 @@ contains(r::Rect, point::Vec2) =
 
 Check if two rectangles overlap.
 """
-function intersects(a::Rect, b::Rect)
+@inline function intersects(a::Rect, b::Rect)
     a.left < b.right && a.right > b.left &&
     a.top < b.bottom && a.bottom > b.top
 end
@@ -382,7 +382,7 @@ end
 Compute the intersection of two rectangles.
 Returns ZERO_RECT if the rectangles don't overlap.
 """
-function intersection(a::Rect, b::Rect)
+@inline function intersection(a::Rect, b::Rect)
     left = max(a.left, b.left)
     top = max(a.top, b.top)
     right = min(a.right, b.right)
@@ -400,7 +400,7 @@ end
 
 Shrink a rectangle by a box amount (apply padding).
 """
-function inset_rect(r::Rect, box::Box4)
+@inline function inset_rect(r::Rect, box::Box4)
     Rect(
         r.x + box.left,
         r.y + box.top,
@@ -414,7 +414,7 @@ end
 
 Expand a rectangle by a box amount (apply margin).
 """
-function outset_rect(r::Rect, box::Box4)
+@inline function outset_rect(r::Rect, box::Box4)
     Rect(
         r.x - box.left,
         r.y - box.top,
@@ -523,15 +523,15 @@ Linear interpolation between a and b.
 lerp(0.0, 100.0, 0.5)  # 50.0
 ```
 """
-lerp(a::Number, b::Number, t::Number) = a + (b - a) * t
-lerp(a::Vec2, b::Vec2, t::Number) = Vec2(lerp(a.x, b.x, t), lerp(a.y, b.y, t))
+@inline lerp(a::Number, b::Number, t::Number) = a + (b - a) * t
+@inline lerp(a::Vec2, b::Vec2, t::Number) = Vec2(lerp(a.x, b.x, t), lerp(a.y, b.y, t))
 
 """
     clamp01(x) -> Number
 
 Clamp value to [0, 1] range.
 """
-clamp01(x::Number) = clamp(x, zero(x), one(x))
+@inline clamp01(x::Number) = clamp(x, zero(x), one(x))
 
 """
     remap(value, from_low, from_high, to_low, to_high) -> Number
@@ -543,7 +543,7 @@ Remap a value from one range to another.
 remap(50, 0, 100, 0, 1)  # 0.5
 ```
 """
-function remap(value::Number, from_low::Number, from_high::Number, to_low::Number, to_high::Number)
+@inline function remap(value::Number, from_low::Number, from_high::Number, to_low::Number, to_high::Number)
     t = (value - from_low) / (from_high - from_low)
     lerp(to_low, to_high, t)
 end
@@ -554,7 +554,7 @@ end
 Hermite interpolation between 0 and 1 when edge0 < x < edge1.
 Useful for smooth transitions in animations.
 """
-function smoothstep(edge0::Number, edge1::Number, x::Number)
+@inline function smoothstep(edge0::Number, edge1::Number, x::Number)
     t = clamp01((x - edge0) / (edge1 - edge0))
     t * t * (3 - 2 * t)
 end
@@ -629,7 +629,7 @@ Layout equation:
 content_box = bounds - inset
 ```
 """
-compute_content_box(bounds::Rect, inset::Box4) = inset_rect(bounds, inset)
+@inline compute_content_box(bounds::Rect, inset::Box4) = inset_rect(bounds, inset)
 
 """
     compute_total_size(content_size::Vec2, inset::Box4, offset::Box4) -> Vec2
@@ -641,7 +641,7 @@ Layout equation:
 total_size = content_size + inset_total + offset_total
 ```
 """
-function compute_total_size(content_size::Vec2, inset::Box4, offset::Box4)
+@inline function compute_total_size(content_size::Vec2, inset::Box4, offset::Box4)
     content_size + total(inset) + total(offset)
 end
 
@@ -658,21 +658,16 @@ Layout equation (for :down direction):
 child.pos = parent.content_origin + (0, preceding_height) + child.offset
 ```
 """
-function compute_child_position(parent_content_origin::Vec2,
+@inline function compute_child_position(parent_content_origin::Vec2,
                                 preceding_size::Vec2,
                                 child_offset::Box4,
                                 direction::Symbol)
-    offset = Vec2(child_offset.left, child_offset.top)
+    δ = Vec2(child_offset.left, child_offset.top)  # offset delta (unicode for clarity)
     
-    if direction == :down
-        parent_content_origin + Vec2(0.0f0, preceding_size.y) + offset
-    elseif direction == :up
-        parent_content_origin + Vec2(0.0f0, -preceding_size.y) + offset
-    elseif direction == :right
-        parent_content_origin + Vec2(preceding_size.x, 0.0f0) + offset
-    else  # :left
-        parent_content_origin + Vec2(-preceding_size.x, 0.0f0) + offset
-    end
+    direction == :down  ? parent_content_origin + Vec2(0.0f0, preceding_size.y) + δ :
+    direction == :up    ? parent_content_origin + Vec2(0.0f0, -preceding_size.y) + δ :
+    direction == :right ? parent_content_origin + Vec2(preceding_size.x, 0.0f0) + δ :
+                          parent_content_origin + Vec2(-preceding_size.x, 0.0f0) + δ  # :left
 end
 
 end # module MathOps

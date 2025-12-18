@@ -250,7 +250,7 @@ end
 
 Convert Color to RGBA floats (0-1 range).
 """
-color_to_rgba(c::Color)::NTuple{4, Float32} = (
+@inline color_to_rgba(c::Color)::NTuple{4, Float32} = (
     Float32(c.r) / 255.0f0,
     Float32(c.g) / 255.0f0,
     Float32(c.b) / 255.0f0,
@@ -384,7 +384,7 @@ flow = direction_to_vec2(dir)  # Vec2(0.0, 1.0)
 position += flow * child_height  # Move down by child height
 ```
 """
-function direction_to_vec2(dir::Direction)::Vec2{Float32}
+@inline function direction_to_vec2(dir::Direction)::Vec2{Float32}
     if dir == DIRECTION_DOWN
         Vec2(0.0f0, 1.0f0)
     elseif dir == DIRECTION_UP
@@ -413,7 +413,7 @@ start_offset = to_vec2(inset, :start)  # Vec2(40.0, 10.0) - (left, top)
 total_inset = to_vec2(inset, :total)   # Vec2(60.0, 40.0) - (horizontal, vertical)
 ```
 """
-function to_vec2(box::Inset, axis::Symbol)::Vec2{Float32}
+@inline function to_vec2(box::Inset, axis::Symbol)::Vec2{Float32}
     if axis == :start
         Vec2(box.left, box.top)
     elseif axis == :end
@@ -423,7 +423,7 @@ function to_vec2(box::Inset, axis::Symbol)::Vec2{Float32}
     end
 end
 
-function to_vec2(box::Offset, axis::Symbol)::Vec2{Float32}
+@inline function to_vec2(box::Offset, axis::Symbol)::Vec2{Float32}
     if axis == :start
         Vec2(box.left, box.top)
     elseif axis == :end
@@ -446,7 +446,7 @@ box = to_box4(inset)  # Box4(10.0, 10.0, 10.0, 10.0)
 doubled = box * 2     # Box4(20.0, 20.0, 20.0, 20.0)
 ```
 """
-to_box4(i::Inset)::Box4{Float32} = Box4(i.top, i.right, i.bottom, i.left)
-to_box4(o::Offset)::Box4{Float32} = Box4(o.top, o.right, o.bottom, o.left)
+@inline to_box4(i::Inset)::Box4{Float32} = Box4(i.top, i.right, i.bottom, i.left)
+@inline to_box4(o::Offset)::Box4{Float32} = Box4(o.top, o.right, o.bottom, o.left)
 
 end # module Properties
