@@ -158,19 +158,19 @@ save_app_screenshot(app, "output.png")
 
 Applications built with DOPBrowser can be compiled into standalone executables using two approaches:
 
-#### Option 1: PackageCompiler (Full Runtime)
+#### Option 1: JuliaC (Full Runtime with Modern Features)
 
-PackageCompiler creates a self-contained binary that includes the full Julia runtime.
+JuliaC creates a self-contained binary bundle that includes the full Julia runtime with code trimming for smaller size.
 
 ```bash
 # Verify setup
 julia --project=. scripts/verify_compilation_setup.jl
 
-# Compile (takes 10-20 minutes)
+# Compile (takes several minutes)
 julia --project=. scripts/compile_memo_app.jl
 
 # Run the compiled binary
-./build/memo_app/bin/memo_app
+./build/bin/memo_app
 ```
 
 **Binary size**: 350-400 MB (can be reduced to 140-250 MB with optimizations)

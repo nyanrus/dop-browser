@@ -1,6 +1,6 @@
 """
 Entry point for the compiled memo application.
-This file provides the julia_main function required by PackageCompiler.
+This file provides the @main function required by JuliaC.
 """
 
 # Load DOPBrowser and the memo app
@@ -10,12 +10,12 @@ using DOPBrowser
 include(joinpath(dirname(dirname(@__FILE__)), "examples", "memo_app.jl"))
 
 """
-    julia_main()::Cint
+    @main(args::Vector{String})
 
 Entry point for the compiled application.
 Returns 0 on success, non-zero on failure.
 """
-function julia_main()::Cint
+function @main(args::Vector{String})
     try
         main()
         return 0  # Success

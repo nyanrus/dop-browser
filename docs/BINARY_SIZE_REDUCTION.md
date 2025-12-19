@@ -4,51 +4,55 @@ This document outlines strategies to reduce the size of the compiled memo applic
 
 ## Current Size Estimates
 
-Based on PackageCompiler bundling, the compiled application includes:
+With JuliaC and code trimming enabled, the compiled application size is significantly reduced compared to older PackageCompiler approaches.
 
-### Base Julia Libraries (~285 MB)
-- **libLLVM.so**: 105.5 MB - LLVM compiler infrastructure
-- **libjulia-codegen.so**: 77.4 MB - Julia code generation
-- **OpenBLAS**: 34.2 MB - Linear algebra library
-- **libstdc++**: 20.4 MB - C++ standard library
-- **libjulia-internal.so**: 14.1 MB - Julia internals
-- **libgfortran.so**: 9.6 MB - Fortran runtime
-- **OpenSSL**: 7.6 MB - Cryptography
-- **Other libraries**: ~16 MB
-
-### Application Code (~50-100 MB estimated)
-- Julia stdlib modules
-- DOPBrowser package and dependencies
-- Precompiled functions
+### JuliaC with Trimming
+- **Code trimming** (`--trim=safe`) removes unreachable code and unused IR
+- Bundled Julia runtime and libraries
+- Executable plus bundled libraries
+- Total size varies based on trimming effectiveness
 
 ### Rust Libraries (~15 MB)
 - **dop-renderer**: 11.74 MB
 - **dop-parser**: 2.73 MB
 - **dop-content-ir**: 0.41 MB
 
-### **Total Estimated Size: 350-400 MB**
-
 ## Size Reduction Techniques
 
-### 1. Strip Debug Symbols (30-50% reduction)
+### 1. Code Trimming (Recommended - Already Enabled)
+
+JuliaC's built-in code trimming is the most effective size reduction technique:
+
+```julia
+# In scripts/compile_memo_app.jl
+img = ImageRecipe(
+    trim_mode = "safe",  # Removes unreachable code
+    # ...
+)
+```
+
+This removes:
+- Unreachable code paths
+- Unused IR (intermediate representation)
+- Unused metadata
+
+**Expected savings**: Significant reduction compared to non-trimmed builds
+**Trade-off**: None - "safe" mode is conservative and stable
+
+### 2. Strip Debug Symbols (30-50% reduction)
 
 After compilation, strip debug symbols from the executable and libraries:
 
 ```bash
 # Strip the main executable
-strip build/memo_app/bin/memo_app
+strip build/bin/memo_app
 
 # Strip all shared libraries
-find build/memo_app/lib -name "*.so" -exec strip {} \;
+find build/lib -name "*.so" -exec strip {} \;
 ```
 
-**Expected savings**: 100-150 MB
-
-### 2. Filter Standard Libraries (Already Enabled)
-
-The compilation script uses `filter_stdlibs=true`, which excludes unused Julia standard library modules.
-
-**Current savings**: ~50 MB (already applied)
+**Expected savings**: 30-50% of binary size
+**Trade-off**: Loss of debug information
 
 ### 3. Compress with UPX
 
@@ -59,45 +63,29 @@ Use UPX (Ultimate Packer for eXecutables) to compress the binary:
 sudo apt-get install upx
 
 # Compress the executable
-upx --best --lzma build/memo_app/bin/memo_app
+upx --best --lzma build/bin/memo_app
 
 # Compress libraries (optional, may affect load time)
-find build/memo_app/lib -name "*.so" -exec upx --best {} \;
+find build/lib -name "*.so" -exec upx --best {} \;
 ```
 
 **Expected savings**: 40-60% compression ratio
 **Trade-off**: Slower startup time, higher memory usage during startup
 
-### 4. Remove Unused Julia Features
+### 4. CPU Target Optimization
 
-PackageCompiler allows creating a minimal system image. Modify the compilation script to exclude features:
+By default, JuliaC uses `cpu_target="generic"` for portability. For a specific CPU:
 
 ```julia
-create_app(
-    PROJECT_DIR,
-    joinpath(OUTPUT_DIR, APP_NAME),
-    precompile_execution_file=PRECOMPILE_FILE,
-    executables=["memo_app" => "julia_main"],
-    force=true,
-    include_lazy_artifacts=false,  # Don't include unused artifacts (WARNING: may break Rust library loading)
-    filter_stdlibs=true,
-    cpu_target="native",           # Optimize for local CPU
-    sysimage_build_args=`--optimize=3 --check-bounds=no`  # Aggressive optimization
+# In scripts/compile_memo_app.jl
+img = ImageRecipe(
+    cpu_target = "native",  # Optimize for current CPU
+    # ...
 )
 ```
 
-**Expected savings**: 20-50 MB
-**Trade-off**: Less portable, no runtime bounds checking
-**Warning**: Setting `include_lazy_artifacts=false` may prevent Rust libraries from loading if they are stored as artifacts. Test thoroughly after applying this option.
-
-### 5. Minimize Precompilation Scope
-
-To reduce compilation time and potentially size, you can modify the precompile execution file to include only the most common code paths. Edit `scripts/precompile_memo_app.jl` to reduce the amount of code being precompiled.
-
-**Expected savings**: 10-30 MB
-**Trade-off**: Slower startup for non-precompiled code paths
-
-### 6. Optimize Rust Libraries
+**Expected savings**: Minimal size impact, but better performance
+**Trade-off**: Less portable across different CPUs
 
 Build Rust libraries with size optimization:
 
@@ -149,26 +137,20 @@ Users can download the Julia runtime separately (shared across applications).
 
 ## Recommended Approach
 
-For **maximum size reduction** while maintaining functionality:
+For **maximum size reduction** with JuliaC:
 
-1. **Strip debug symbols** (easy, safe): -100 MB
-2. **Use `filter_stdlibs=true`** (already done): -50 MB
+1. **Code trimming** (already enabled): Significant reduction
+2. **Strip debug symbols** (easy, safe): Additional 30-50%
 3. **Optimize Rust libraries** (easy): -5 MB
 4. **Compress with UPX** (optional): Additional 40-60% compression
 
-**Expected final size**: 140-180 MB (compressed) or 200-250 MB (uncompressed)
-
 For **minimal size** (with trade-offs):
 
-1. All the above, plus:
-2. **Aggressive Julia optimization flags**: -50 MB
-3. **Remove unused stdlib**: -30 MB
+Use StaticCompiler instead of JuliaC for ~5-20 MB binaries (see below).
 
-**Expected final size**: 60-100 MB (highly optimized, less portable)
+### 8. StaticCompiler (Best Size Reduction)
 
-### 9. StaticCompiler (Experimental - Best Size Reduction)
-
-For the smallest possible binaries, use StaticCompiler instead of PackageCompiler. This creates a truly standalone executable without the Julia runtime. **Now supports interactive onscreen mode via Rust FFI!**
+For the smallest possible binaries, use StaticCompiler instead of JuliaC. This creates a truly standalone executable without the Julia runtime. **Now supports interactive onscreen mode via Rust FFI!**
 
 ```bash
 # Install StaticCompiler (already in Project.toml)
@@ -187,7 +169,7 @@ julia --project=. scripts/static_compile_memo_app.jl
 ./build/static_memo_app --onscreen
 ```
 
-**Expected savings**: -330 MB (from ~350 MB to ~5-20 MB)
+**Binary size**: ~5-20 MB (vs. larger JuliaC builds)
 
 **Trade-offs**: 
 - Limited Julia feature support (but Rust FFI provides rich functionality)

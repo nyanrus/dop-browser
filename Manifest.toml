@@ -2,7 +2,7 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "03ea003cb1c64fef0a6410b9369e4f5b93b54e74"
+project_hash = "3a3ff88e0730e0a179e4d2d8028292573e9c82dc"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -137,7 +137,7 @@ uuid = "adafc99b-e345-5852-983c-f28acb93d879"
 version = "0.3.1"
 
 [[deps.DOPBrowser]]
-deps = ["Blobs", "Libdl", "LinearAlgebra", "Logging", "PackageCompiler", "StaticArrays", "StaticCompiler"]
+deps = ["Blobs", "JuliaC", "Libdl", "LinearAlgebra", "Logging", "StaticArrays", "StaticCompiler", "StaticTools"]
 path = "."
 uuid = "a1b2c3d4-5678-90ab-cdef-1234567890ab"
 version = "0.1.0"
@@ -198,6 +198,12 @@ deps = ["Artifacts", "Preferences"]
 git-tree-sha1 = "0533e564aae234aff59ab625543145446d8b6ec2"
 uuid = "692b3bcd-3c85-4b1f-b108-f13ce0eb3210"
 version = "1.7.1"
+
+[[deps.JuliaC]]
+deps = ["LazyArtifacts", "Libdl", "Mmap", "ObjectFile", "PackageCompiler", "Patchelf_jll", "Pkg", "StructIO"]
+git-tree-sha1 = "d08b26a295d0e4817c0da323b38cb09c00d7d0c8"
+uuid = "acedd4c2-ced6-4a15-accc-2607eb759ba2"
+version = "0.1.0"
 
 [[deps.JuliaSyntaxHighlighting]]
 deps = ["StyledStrings"]
@@ -314,6 +320,10 @@ deps = ["Base64", "JuliaSyntaxHighlighting", "StyledStrings"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 version = "1.11.0"
 
+[[deps.Mmap]]
+uuid = "a63ad114-7e13-5084-954f-fe012c677804"
+version = "1.11.0"
+
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2025.5.20"
@@ -321,6 +331,12 @@ version = "2025.5.20"
 [[deps.NetworkOptions]]
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
 version = "1.3.0"
+
+[[deps.ObjectFile]]
+deps = ["Reexport", "StructIO"]
+git-tree-sha1 = "22faba70c22d2f03e60fbc61da99c4ebfc3eb9ba"
+uuid = "d8793406-e978-5875-9003-1fc021f44a92"
+version = "0.5.0"
 
 [[deps.OffsetArrays]]
 git-tree-sha1 = "117432e406b5c023f665fa73dc26e79ec3630151"
@@ -346,6 +362,12 @@ deps = ["Artifacts", "Glob", "LazyArtifacts", "Libdl", "Pkg", "Printf", "Relocat
 git-tree-sha1 = "92a5702bc1b7f2c0d3a395d5553fa8ec7342ce09"
 uuid = "9b87118b-4619-50d2-8e1e-99f35a4d4d9d"
 version = "2.2.4"
+
+[[deps.Patchelf_jll]]
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "ad1cab3e8273c912f722f40779e20f3e29d58f1f"
+uuid = "f2cf89d6-2bfd-5c44-bd2c-068eea195c0c"
+version = "0.18.0+0"
 
 [[deps.Pkg]]
 deps = ["Artifacts", "Dates", "Downloads", "FileWatching", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "Random", "SHA", "TOML", "Tar", "UUIDs", "p7zip_jll"]
@@ -385,6 +407,11 @@ version = "1.11.0"
 deps = ["SHA"]
 uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 version = "1.11.0"
+
+[[deps.Reexport]]
+git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
+uuid = "189a3867-3050-52da-a836-e630ba90ab69"
+version = "1.2.2"
 
 [[deps.RelocatableFolders]]
 deps = ["SHA", "Scratch"]
@@ -475,6 +502,11 @@ deps = ["Bumper", "LinearAlgebra", "LoopVectorization", "ManualMemory", "Random"
 git-tree-sha1 = "c806f86d329f76139e952e95ef7aa2a2499620aa"
 uuid = "86c06d3c-3f03-46de-9781-57580aa96d0a"
 version = "0.8.12"
+
+[[deps.StructIO]]
+git-tree-sha1 = "c581be48ae1cbf83e899b14c07a807e1787512cc"
+uuid = "53d494c1-5632-5724-8f4c-31dff12d585f"
+version = "0.3.1"
 
 [[deps.StyledStrings]]
 uuid = "f489334b-da3d-4c2e-b8f0-e476e12c162b"

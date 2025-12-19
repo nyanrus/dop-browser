@@ -35,7 +35,7 @@ This implementation adds comprehensive StaticCompiler support to DOPBrowser, ena
 - Compiles memo app with StaticCompiler
 - Generates size reports
 - Provides helpful error messages
-- Takes a few minutes (vs 10-20 for PackageCompiler)
+- Takes a few minutes (vs several minutes for JuliaC)
 
 **`scripts/verify_static_compilation_setup.jl`:**
 - Checks all prerequisites
@@ -47,7 +47,7 @@ This implementation adds comprehensive StaticCompiler support to DOPBrowser, ena
 
 **README.md:**
 - Added StaticCompiler section under "Standalone Executables"
-- Comparison table between PackageCompiler and StaticCompiler
+- Comparison table between JuliaC and StaticCompiler
 - Usage examples for both modes
 
 **docs/PACKAGING.md:**
@@ -135,10 +135,10 @@ Potential improvements for follow-up work:
 
 ## Comparison Summary
 
-| Aspect | PackageCompiler | StaticCompiler |
-|--------|----------------|----------------|
-| **Size** | 350-400 MB | 5-20 MB |
-| **Build Time** | 10-20 min | 2-5 min |
+| Aspect | JuliaC | StaticCompiler |
+|--------|--------|----------------|
+| **Size** | Smaller with trimming | 5-20 MB |
+| **Build Time** | Several min | 2-5 min |
 | **Startup** | Fast | Very Fast |
 | **Features** | Full Julia | Type-stable subset |
 | **Interactive** | ✓ Full | ✓ Via Rust FFI |
