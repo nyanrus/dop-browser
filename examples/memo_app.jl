@@ -12,6 +12,9 @@
 #
 # To run in headless mode (for testing/CI):
 #   HEADLESS=1 julia --project=. examples/memo_app.jl
+#
+# To force onscreen mode (override CI detection):
+#   FORCE_ONSCREEN=1 julia --project=. examples/memo_app.jl
 
 using DOPBrowser
 using DOPBrowser.RustContent: ContentBuilder, begin_stack!, end_container!, 
@@ -248,9 +251,12 @@ function run_interactive_memo_app(; width::Int=400, height::Int=600)
     next_id = signal(4)  # Next memo ID
     
     # Check if we should run in headless mode
-    is_headless_mode = get(ENV, "HEADLESS", "") == "1" || 
-                       get(ENV, "CI", "") == "true" ||
-                       !is_available()
+    # FORCE_ONSCREEN=1 allows testing GUI mode even in CI environments
+    force_onscreen = get(ENV, "FORCE_ONSCREEN", "") == "1"
+    headless_env = get(ENV, "HEADLESS", "") == "1"
+    ci_env = get(ENV, "CI", "") == "true"
+    
+    is_headless_mode = headless_env || (!force_onscreen && (ci_env || !is_available()))
     
     if is_headless_mode
         println("Running in headless mode...")
@@ -470,7 +476,8 @@ function main()
         println("  julia --project=. examples/memo_app.jl --help      # Show this help")
         println("")
         println("Environment variables:")
-        println("  HEADLESS=1    Force headless mode (no window)")
+        println("  HEADLESS=1        Force headless mode (no window)")
+        println("  FORCE_ONSCREEN=1  Force onscreen mode (even in CI environments)")
     end
 end
 

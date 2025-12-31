@@ -30,6 +30,8 @@ jobs:
             libfontconfig1-dev \
             libfreetype6-dev \
             libexpat1-dev \
+            libxkbcommon-x11-0 \
+            libxkbcommon-dev \
             pkg-config \
             build-essential
 
@@ -100,17 +102,17 @@ jobs:
           echo "=== Running in simple mode (PNG generation) ==="
           julia --project=. examples/memo_app.jl --simple
 
-          # Then, test onscreen mode by explicitly setting CI=false
+          # Then, test onscreen mode by explicitly setting FORCE_ONSCREEN=1
           # This ensures the app tries onscreen mode with X server
           echo ""
           echo "=== Testing onscreen mode with X server ==="
           # Using timeout from coreutils (standard on Ubuntu)
           if command -v timeout &> /dev/null; then
-            (CI=false timeout 10 julia --project=. examples/memo_app.jl --interactive) || \
+            (FORCE_ONSCREEN=1 timeout 10 julia --project=. examples/memo_app.jl --interactive) || \
               echo "Onscreen mode completed or timed out (expected for automated testing)"
           else
             echo "Warning: timeout command not found, running without timeout"
-            (CI=false julia --project=. examples/memo_app.jl --interactive) &
+            (FORCE_ONSCREEN=1 julia --project=. examples/memo_app.jl --interactive) &
             APP_PID=$!
             sleep 10
             kill $APP_PID 2>/dev/null || true
