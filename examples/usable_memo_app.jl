@@ -104,11 +104,11 @@ function format_time(dt::DateTime)::String
     memo_date = Date(dt)
     
     if memo_date == today
-        return "Today, " * Dates.format(dt, "HH:MM")
+        return "Today, " * Dates.format(dt, "HH:mm")
     elseif memo_date == today - Day(1)
-        return "Yesterday, " * Dates.format(dt, "HH:MM")
+        return "Yesterday, " * Dates.format(dt, "HH:mm")
     else
-        return Dates.format(dt, "d u, HH:MM")
+        return Dates.format(dt, "d u, HH:mm")
     end
 end
 
@@ -171,6 +171,14 @@ end
 # UI Rendering with Modern Design
 # ============================================================================
 
+# UI Constants for consistent styling
+const SHADOW_OFFSET = 2.0f0
+const SHADOW_ALPHA = 0.08
+const TITLE_HEIGHT = 40.0f0
+const SUBTITLE_HEIGHT = 28.0f0
+const HEADER_MARGIN = 16.0f0
+const HEADER_TOTAL_HEIGHT = TITLE_HEIGHT + SUBTITLE_HEIGHT + HEADER_MARGIN
+
 """
 Render a single memo card with enhanced styling.
 """
@@ -180,9 +188,8 @@ function render_memo_card!(renderer::RustRendererHandle, memo::Memo,
     corner_radius = 12.0f0
     
     # Card shadow (subtle)
-    shadow_offset = 2.0f0
-    add_rect!(renderer, x + shadow_offset, y + shadow_offset, 
-              width, card_height, 0.0, 0.0, 0.0, 0.08)
+    add_rect!(renderer, x + SHADOW_OFFSET, y + SHADOW_OFFSET, 
+              width, card_height, 0.0, 0.0, 0.0, SHADOW_ALPHA)
     
     # Card background with category accent
     bg_color = parse_hex_color(category_bg_color(memo.category))
@@ -231,6 +238,7 @@ Render the floating action button (FAB) for adding new memos.
 """
 function render_fab!(renderer::RustRendererHandle, x::Float32, y::Float32)
     fab_size = 56.0f0
+    fab_color = parse_hex_color("#1B8BED")
     
     # Shadow
     add_rect!(renderer, x + 3.0f0, y + 3.0f0, fab_size, fab_size,
@@ -238,7 +246,7 @@ function render_fab!(renderer::RustRendererHandle, x::Float32, y::Float32)
     
     # Button background
     add_rect!(renderer, x, y, fab_size, fab_size,
-              0.094, 0.545, 0.929, 1.0)  # #1B8BED
+              fab_color[1], fab_color[2], fab_color[3], 1.0)
     
     # Plus icon
     add_text!(renderer, "+", x + 18.0f0, y + 12.0f0;
@@ -311,7 +319,7 @@ Get the bounding box for a memo card at the given index.
 function get_memo_card_rect(memos::Vector{Memo}, index::Int; 
                             margin::Float32=16.0f0, width::Int=420)
     content_width = Float32(width) - 2.0f0 * margin
-    current_y = 84.0f0  # After title and subtitle
+    current_y = HEADER_TOTAL_HEIGHT  # After title and subtitle
     
     sorted_memos = sort(memos, by = m -> (!m.is_pinned, -datetime2unix(m.updated_at)))
     
@@ -520,7 +528,7 @@ function run_windowed_app(memos_signal::Signal, next_id::Signal,
                             id=next_id[],
                             title="Note #$(next_id[])",
                             content=["New note created", "Click to edit"],
-                            category=categories[mod1(next_id[], 4)]
+                            category=categories[mod1(next_id[], length(categories))]
                         )
                         next_id[] += 1
                         memos_signal[] = [memos_signal[]..., new_memo]
